@@ -27,6 +27,7 @@ experiments/runs/**
 
 third_party/**
 !third_party/README.md
+!third_party/ava_vla
 
 *.log
 *.ckpt

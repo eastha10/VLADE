@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "teacher_name": "ava_vla",
+  "integration_stage": "source_imported",
+  "source": {
+    "path": "third_party/ava_vla",
+    "repository": "https://github.com/eastha10/AVA-VLA.git",
+    "upstream_repository": "https://github.com/LiAuto-DSR/AVA-VLA.git",
+    "commit": "69ae5dfb90f4eb714259693bd2c222e0b3de6456"
+  },
+  "runtime": {
+    "installed": false,
+    "upstream_requirements": "third_party/ava_vla/pyproject.toml",
+    "torch_version": "2.2.0",
+    "transformers_repository": "https://github.com/LiAuto-DSR/transformers-avavla.git",
+    "transformers_commit_to_validate": "a03eee5da1794c45f5a911b60a9a4545e6e0ed1f"
+  },
+  "checkpoints": {
+    "download_status": "deferred",
+    "libero": {
+      "hub_repository": "LiAuto-DSR/avavla-libero-4in1",
+      "local_directory": "checkpoints/teacher/avavla-libero-4in1",
+      "revision": null
+    },
+    "calvin": {
+      "hub_repository": "LiAuto-DSR/avavla-calvin-abc2d",
+      "local_directory": "checkpoints/teacher/avavla-calvin-abc2d",
+      "revision": null
+    },
+    "component_patterns_to_review": [
+      "action_head--*_checkpoint.pt",
+      "proprio_projector--*_checkpoint.pt",
+      "vision_attn_weight_generator--*_checkpoint.pt"
+    ]
+  },
+  "first_benchmark": "libero",
+  "libero_contract": {
+    "action_chunk_length": 8,
+    "action_dimension": 7,
+    "proprio_dimension": 8,
+    "episode_state": "preserve_temporal_context_and_reset_between_episodes"
+  },
+  "verification": {
+    "source_reviewed": true,
+    "model_loaded": false,
+    "baseline_reproduced": false,
+    "distillation_implemented": false
+  }
+}

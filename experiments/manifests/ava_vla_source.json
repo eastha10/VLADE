@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "record_type": "source_import",
+  "recorded_on": "2026-09-17",
+  "teacher_configuration": "configs/models/teacher/ava_vla.json",
+  "source": {
+    "submodule_path": "third_party/ava_vla",
+    "fork_repository": "https://github.com/eastha10/AVA-VLA.git",
+    "upstream_repository": "https://github.com/LiAuto-DSR/AVA-VLA.git",
+    "commit": "69ae5dfb90f4eb714259693bd2c222e0b3de6456",
+    "fork_and_upstream_main_match_at_review": true,
+    "modified": false
+  },
+  "verification": {
+    "git_remote_heads_checked": true,
+    "prediction_contract_reviewed": true,
+    "checkpoint_loader_contract_reviewed": true,
+    "runtime_dependencies_installed": false,
+    "checkpoint_downloaded": false,
+    "dataset_downloaded": false,
+    "gpu_runtime_tested": false,
+    "benchmark_measured": false
+  },
+  "next_stage": "review_complete_hugging_face_checkpoint_bundle_and_pt_components"
+}

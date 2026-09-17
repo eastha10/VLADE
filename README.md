@@ -6,8 +6,30 @@ VLADE는 대규모 Vision-Language-Action(VLA) 로봇 제어 정책의 시각·�
 
 핵심 연구 범위는 action distillation, representation distillation, task supervision이며, LIBERO 계열과 CALVIN을 초기 벤치마크로 사용하고 Jetson Orin Nano급 환경에서 모델 크기, VRAM, 추론 지연시간과 제어 주기를 평가할 계획입니다.
 
-VLADE 연구 코드를 나중에 다른 저장소로 이양하기 위한 프레임워크 비종속 스캐폴드입니다.
-현재는 기반 VLA 저장소를 확정하지 않았으므로 실행 코드는 넣지 않고 책임 경계만 고정합니다.
+기반 Teacher 및 baseline으로 AVA-VLA를 연결했습니다. 사용자 포크
+`eastha10/AVA-VLA`의 원본 소스는 `third_party/ava_vla/` Git submodule로 관리하고,
+VLADE 자체 구현은 `src/vlade/`에 분리합니다.
+
+현재 단계는 원본 소스 이양과 설정 기록입니다. Teacher 어댑터, Student 및 증류 학습
+코드는 아직 구현하지 않았으며, Hugging Face 가중치 다운로드와 실행 검증은 다음
+단계에서 진행합니다. 연결 방법과 검토할 가중치는
+[`docs/environment/ava_vla.md`](docs/environment/ava_vla.md)에 정리했습니다.
+
+## 소스 받기
+
+```bash
+git clone --recurse-submodules https://github.com/eastha10/VLADE.git
+cd VLADE
+```
+
+이미 clone한 저장소는 아래 명령으로 기록된 AVA-VLA 커밋을 받습니다.
+
+```bash
+git submodule update --init --recursive
+```
+
+Teacher 연결 설정은 `configs/models/teacher/ava_vla.json`, 원본·의존성 커밋과
+검증 상태는 `experiments/manifests/ava_vla_source.json`에서 관리합니다.
 
 ## 이양 원칙
 

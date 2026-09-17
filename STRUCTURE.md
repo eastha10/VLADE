@@ -17,7 +17,8 @@ vlade/
 ├─ tests/                   # unit, integration, smoke test
 ├─ docs/                    # 의사결정·프로토콜·환경·논문 메모
 ├─ notebooks/               # 탐색 전용 분석
-├─ third_party/             # 향후 fork/원본 저장소 연결 지점
+├─ third_party/             # AVA-VLA 원본 소스 연결
+│  └─ ava_vla/              # eastha10/AVA-VLA Git submodule (커밋 고정)
 ├─ data/                    # 로컬 데이터와 Teacher cache (Git 제외)
 ├─ checkpoints/             # Teacher/Student 가중치 (Git 제외)
 └─ artifacts/               # 로그·수치·그림·영상·프로파일 (Git 제외)

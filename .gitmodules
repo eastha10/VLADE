@@ -1,0 +1,3 @@
+[submodule "third_party/ava_vla"]
+	path = third_party/ava_vla
+	url = https://github.com/eastha10/AVA-VLA.git
