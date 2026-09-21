@@ -49,4 +49,21 @@ Teacher 연결 설정은 `configs/models/teacher/ava_vla.json`, 원본·의존�
 5. LIBERO 계열과 CALVIN 평가는 `benchmarks/`와 `src/vlade/evaluation/`을 통해 수행합니다.
 6. 최종 후보를 Jetson/TensorRT 경로로 옮겨 지연시간과 메모리를 측정합니다.
 
+## 폴더 안내
+
+- `.harness/`: Codex가 작업하면서 만든 결과물과 중간 산출물을 보관합니다.
+- `.obsidian/`: Obsidian 작업 공간 설정을 보관합니다.
+- `artifacts/`: 실험 로그, 지표, 그림, 영상과 프로파일 결과를 보관합니다.
+- `benchmarks/`: LIBERO, LIBERO+, CALVIN 벤치마크 연결 코드를 관리합니다.
+- `checkpoints/`: Teacher와 Student 모델 가중치를 보관합니다.
+- `configs/`: 데이터, 모델, 증류, 실험과 배포 설정을 관리합니다.
+- `data/`: 원본·전처리 데이터, 분할 정보와 Teacher cache를 보관합니다.
+- `docs/`: 설계 결정, 환경, 평가 프로토콜과 논문 메모를 기록합니다.
+- `experiments/`: baseline, ablation, 실행 기록과 manifest를 관리합니다.
+- `notebooks/`: 탐색과 분석용 노트북을 보관합니다.
+- `scripts/`: 학습, 평가, 배포와 데이터 처리 실행 스크립트를 둡니다.
+- `src/`: VLADE의 핵심 구현 코드를 관리합니다.
+- `tests/`: 단위, 통합과 smoke test를 관리합니다.
+- `third_party/`: AVA-VLA 등 외부 원본 코드를 별도로 관리합니다.
+
 자세한 디렉터리 역할은 `STRUCTURE.md`를 참고하십시오.
