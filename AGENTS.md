@@ -52,7 +52,7 @@
 
 ## 외부 소스 규칙
 
-- `third_party/ava_vla/`는 고정된 외부 Git submodule이며 기본적으로 읽기 전용으로 취급합니다.
+- `third_party/ava_vla/`와 `third_party/openvla_oft/`는 고정된 외부 Git submodule이며 기본적으로 읽기 전용으로 취급합니다.
 - 외부 코드를 직접 수정하지 않고 VLADE 측 어댑터와 확장 로직을 `src/vlade/`에 구현합니다.
 - 명시적인 요청 없이 submodule URL, 브랜치 또는 고정 커밋을 변경하지 않습니다.
 - 외부 코드를 인용하거나 가져올 때 원본 출처, 라이선스와 변경 내역을 보존합니다.

@@ -7,7 +7,8 @@ VLADE는 대규모 Vision-Language-Action(VLA) 로봇 제어 정책의 시각·�
 핵심 연구 범위는 action distillation, representation distillation, task supervision이며, LIBERO 계열과 CALVIN을 초기 벤치마크로 사용하고 Jetson Orin Nano급 환경에서 모델 크기, VRAM, 추론 지연시간과 제어 주기를 평가할 계획입니다.
 
 기반 Teacher 및 baseline으로 AVA-VLA를 연결했습니다. 사용자 포크
-`eastha10/AVA-VLA`의 원본 소스는 `third_party/ava_vla/` Git submodule로 관리하고,
+`eastha10/AVA-VLA`의 원본 소스는 `third_party/ava_vla/`, 비교 및 구현 참조용
+OpenVLA-OFT 원본 소스는 `third_party/openvla_oft/` Git submodule로 관리합니다.
 VLADE 자체 구현은 `src/vlade/`에 분리합니다.
 
 현재 단계는 원본 소스 이양과 설정 기록입니다. Teacher 어댑터, Student 및 증류 학습
@@ -22,7 +23,7 @@ git clone --recurse-submodules https://github.com/eastha10/VLADE.git
 cd VLADE
 ```
 
-이미 clone한 저장소는 아래 명령으로 기록된 AVA-VLA 커밋을 받습니다.
+이미 clone한 저장소는 아래 명령으로 기록된 외부 소스 커밋을 받습니다.
 
 ```bash
 git submodule update --init --recursive
@@ -64,6 +65,6 @@ Teacher 연결 설정은 `configs/models/teacher/ava_vla.json`, 원본·의존�
 - `scripts/`: 학습, 평가, 배포와 데이터 처리 실행 스크립트를 둡니다.
 - `src/`: VLADE의 핵심 구현 코드를 관리합니다.
 - `tests/`: 단위, 통합과 smoke test를 관리합니다.
-- `third_party/`: AVA-VLA 등 외부 원본 코드를 별도로 관리합니다.
+- `third_party/`: AVA-VLA, OpenVLA-OFT 등 외부 원본 코드를 별도로 관리합니다.
 
 자세한 디렉터리 역할은 `STRUCTURE.md`를 참고하십시오.
