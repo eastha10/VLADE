@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "baseline_id": "ava_vla",
+  "display_name": "AVA-VLA",
+  "status": "registered_not_reproduced",
+  "source": {
+    "path": "third_party/ava_vla",
+    "repository": "https://github.com/eastha10/AVA-VLA.git",
+    "upstream_repository": "https://github.com/LiAuto-DSR/AVA-VLA.git",
+    "commit": "69ae5dfb90f4eb714259693bd2c222e0b3de6456",
+    "modified": false
+  },
+  "runtime": {
+    "environment_name": "vlade-ava-vla",
+    "dependency_manifest": "third_party/ava_vla/pyproject.toml",
+    "torch_version": "2.2.0",
+    "transformers_repository": "https://github.com/LiAuto-DSR/transformers-avavla.git",
+    "isolated_environment_required": true,
+    "installed": false
+  },
+  "benchmark": {
+    "name": "libero",
+    "task_suites": [
+      "libero_spatial",
+      "libero_object",
+      "libero_goal",
+      "libero_10"
+    ],
+    "default_task_suite": "libero_10",
+    "num_trials_per_task": 50,
+    "seed": 7,
+    "action_chunk_length": 8,
+    "action_dimension": 7,
+    "proprio_dimension": 8
+  },
+  "checkpoints": {
+    "libero_spatial": {
+      "hub_repository": "LiAuto-DSR/avavla-libero-4in1",
+      "local_directory": "checkpoints/teacher/avavla-libero-4in1",
+      "revision": null
+    },
+    "libero_object": {
+      "hub_repository": "LiAuto-DSR/avavla-libero-4in1",
+      "local_directory": "checkpoints/teacher/avavla-libero-4in1",
+      "revision": null
+    },
+    "libero_goal": {
+      "hub_repository": "LiAuto-DSR/avavla-libero-4in1",
+      "local_directory": "checkpoints/teacher/avavla-libero-4in1",
+      "revision": null
+    },
+    "libero_10": {
+      "hub_repository": "LiAuto-DSR/avavla-libero-4in1",
+      "local_directory": "checkpoints/teacher/avavla-libero-4in1",
+      "revision": null
+    }
+  },
+  "evaluation": {
+    "working_directory": "third_party/ava_vla",
+    "entrypoint": "experiments/robot/libero/run_libero_eval.py",
+    "environment": {
+      "TOKENIZERS_PARALLELISM": "false",
+      "PYOPENGL_PLATFORM": "egl",
+      "MUJOCO_GL": "egl"
+    },
+    "arguments": {
+      "use_l1_regression": true,
+      "use_diffusion": false,
+      "use_film": false,
+      "num_images_in_input": 2,
+      "use_proprio": true,
+      "center_crop": true,
+      "num_open_loop_steps": 8,
+      "local_log_dir": "artifacts/logs/baselines/ava_vla",
+      "multi_frame.temporal_strategy": "attn_weight",
+      "multi_frame.temporal_feature_source": "action",
+      "multi_frame.temporal_feature_layer": -2,
+      "multi_frame.attn_weight_force_eager_attn": true,
+      "multi_frame.attn_weight_extra_layer_ids": "(i for i in range(0, 32))",
+      "multi_frame.attn_weight_head_type": "softmaxscore",
+      "multi_frame.attn_weight_score_config": "(1.9, 0.1, 0.0)",
+      "multi_frame.attn_weight_sink_ids": "[68,75,180,187,324,331,436,443]",
+      "multi_frame.attn_weight_sink_weight": 1.0
+    }
+  },
+  "verification": {
+    "configuration_validated": true,
+    "checkpoint_downloaded": true,
+    "model_loaded": false,
+    "smoke_tested": false,
+    "baseline_reproduced": false
+  }
+}

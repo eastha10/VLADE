@@ -3,6 +3,7 @@
   "record_type": "source_import",
   "recorded_on": "2026-09-17",
   "teacher_configuration": "configs/models/teacher/ava_vla.json",
+  "baseline_configuration": "experiments/baselines/ava_vla/libero.json",
   "source": {
     "submodule_path": "third_party/ava_vla",
     "fork_repository": "https://github.com/eastha10/AVA-VLA.git",
@@ -15,8 +16,11 @@
     "git_remote_heads_checked": true,
     "prediction_contract_reviewed": true,
     "checkpoint_loader_contract_reviewed": true,
+    "baseline_registered": true,
+    "baseline_configuration_validated": true,
     "runtime_dependencies_installed": false,
-    "checkpoint_downloaded": false,
+    "checkpoint_downloaded": true,
+    "checkpoint_sha256_verified_locally": true,
     "dataset_downloaded": false,
     "gpu_runtime_tested": false,
     "benchmark_measured": false

@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "experiment_id": "libero_plus_fft",
+  "status": "planned_dependencies_not_prepared",
+  "purpose": "Compare AVA-VLA, OpenVLA-OFT, and later VLADE students after full fine-tuning on LIBERO+.",
+  "benchmark": {
+    "name": "libero_plus",
+    "repository": "https://github.com/sylvestf/LIBERO-plus.git",
+    "revision": null,
+    "assets_repository": "Sylvest/LIBERO-plus",
+    "assets_revision": "dd2bd61b7d9a6fef1abc52d606e983b41886a149",
+    "assets_archive": "data/raw/libero_plus_assets/assets.zip",
+    "local_adapter_path": "benchmarks/libero_plus",
+    "evaluation_task_count": 10030,
+    "perturbation_dimensions": [
+      "camera",
+      "robot",
+      "language",
+      "light",
+      "background",
+      "noise",
+      "layout"
+    ],
+    "num_trials_per_task": 1
+  },
+  "training": {
+    "method": "full_fine_tuning",
+    "abbreviation": "FFT",
+    "dataset_repository": "Sylvest/libero_plus_rlds",
+    "dataset_revision": "fb0c7029b076030d5d57227229e4f7460def1f7c",
+    "dataset_archive_directory": "data/raw/libero_plus_rlds",
+    "trainable_scope": "all_model_parameters",
+    "hyperparameters_status": "provisional_smoke_defaults_not_validated",
+    "upstream_training_support": "lora_only",
+    "requires_vlade_fft_trainer": true,
+    "vlade_fft_entrypoint": "scripts/train/run_fft.py"
+  },
+  "fft_defaults": {
+    "data_root": "data/processed/libero_plus_rlds",
+    "output_dir": "artifacts/training/libero_plus_fft",
+    "dataset_name": "libero_plus_mixdata",
+    "max_steps": 1000,
+    "batch_size": 1,
+    "grad_accumulation_steps": 8,
+    "learning_rate": 2e-5,
+    "weight_decay": 0.01,
+    "save_steps": 500,
+    "seed": 42,
+    "shuffle_buffer_size": 1000,
+    "num_images_in_input": 2,
+    "optimizer": "paged_adamw_8bit",
+    "gradient_checkpointing": true,
+    "image_aug": true,
+    "save_optimizer_state": false
+  },
+  "fft_runs": {
+    "ava_vla": {
+      "checkpoint": "checkpoints/teacher/avavla-libero-4in1",
+      "output_dir": "artifacts/training/libero_plus_fft/ava_vla"
+    },
+    "openvla_oft": {
+      "checkpoint": "checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-spatial-object-goal-10",
+      "output_dir": "artifacts/training/libero_plus_fft/openvla_oft"
+    }
+  },
+  "execution": {
+    "local_stage": "weights_sha256_verified; libero_plus_assets_and_rlds_removed_by_user_request",
+    "training_stage": "google_colab_a100",
+    "gpu_memory_gb": null,
+    "drive_folder_id": null
+  },
+  "initial_checkpoints": {
+    "ava_vla": {
+      "repository": "LiAuto-DSR/avavla-libero-4in1",
+      "revision": "090bf68d234ea13bc78476236f82458b25b797b8",
+      "local_directory": "checkpoints/teacher/avavla-libero-4in1"
+    },
+    "openvla_oft": {
+      "repository": "moojink/openvla-7b-oft-finetuned-libero-spatial-object-goal-10",
+      "revision": "638918f3d1c2e43a39a8a20772bdb8b91835e4b7",
+      "local_directory": "checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-spatial-object-goal-10"
+    }
+  },
+  "baseline_inputs": [
+    "experiments/baselines/ava_vla/libero.json",
+    "experiments/baselines/openvla_oft/libero.json"
+  ],
+  "reporting": {
+    "primary_metric": "success_rate",
+    "aggregate": "macro_average_across_perturbation_dimensions",
+    "keep_original_libero_reproduction_separate": true
+  },
+  "verification": {
+    "benchmark_source_imported": false,
+    "assets_downloaded": false,
+    "training_dataset_downloaded": false,
+    "fft_code_implemented": true,
+    "fft_pipeline_implemented": false,
+    "evaluation_smoke_tested": false,
+    "experiment_run": false
+  }
+}

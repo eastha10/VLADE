@@ -4,17 +4,35 @@
 
 VLADE는 대규모 Vision-Language-Action(VLA) 로봇 제어 정책의 시각·언어 이해와 조작 능력을 경량 Student 모델에 전달하여, 제한된 연산 자원을 가진 엣지 디바이스에서도 높은 작업 성공률과 낮은 제어 지연시간을 함께 달성하는 것을 목표로 하는 연구 프로젝트입니다.
 
-핵심 연구 범위는 action distillation, representation distillation, task supervision이며, LIBERO 계열과 CALVIN을 초기 벤치마크로 사용하고 Jetson Orin Nano급 환경에서 모델 크기, VRAM, 추론 지연시간과 제어 주기를 평가할 계획입니다.
+핵심 연구 범위는 action distillation, representation distillation, task supervision이며,
+주 비교 실험은 LIBERO+에서 Full Fine-Tuning(FFT)으로 수행합니다. 원본 LIBERO는
+baseline 재현용으로 분리하고 CALVIN은 후속 일반화 벤치마크로 사용합니다. 최종
+후보는 Jetson Orin Nano급 환경에서 모델 크기, VRAM, 추론 지연시간과 제어 주기를
+평가할 계획입니다.
 
-기반 Teacher 및 baseline으로 AVA-VLA를 연결했습니다. 사용자 포크
-`eastha10/AVA-VLA`의 원본 소스는 `third_party/ava_vla/`, 비교 및 구현 참조용
-OpenVLA-OFT 원본 소스는 `third_party/openvla_oft/` Git submodule로 관리합니다.
-VLADE 자체 구현은 `src/vlade/`에 분리합니다.
+기반 Teacher로 AVA-VLA를 연결하고, AVA-VLA와 OpenVLA-OFT를 서로 독립된
+baseline으로 등록했습니다. 사용자 포크 `eastha10/AVA-VLA`의 원본 소스는
+`third_party/ava_vla/`, OpenVLA-OFT 원본 소스는 `third_party/openvla_oft/` Git
+submodule로 관리합니다. VLADE 자체 구현은 `src/vlade/`에 분리합니다.
 
-현재 단계는 원본 소스 이양과 설정 기록입니다. Teacher 어댑터, Student 및 증류 학습
-코드는 아직 구현하지 않았으며, Hugging Face 가중치 다운로드와 실행 검증은 다음
-단계에서 진행합니다. 연결 방법과 검토할 가중치는
-[`docs/environment/ava_vla.md`](docs/environment/ava_vla.md)에 정리했습니다.
+현재 단계는 원본 소스 이양과 baseline 실행 설정 등록입니다. 실험용 FFT 학습
+경로는 추가했지만 아직 실제 Colab GPU 학습은 검증하지 않았습니다. Teacher 어댑터,
+Student 및 증류 학습 코드는 아직 구현하지 않았으며, 모델 가중치 로딩과 실제 평가
+결과는 아직 검증하지 않았습니다. baseline 사용법은
+[`experiments/baselines/README.md`](experiments/baselines/README.md), AVA-VLA 연결
+방법과 검토할 가중치는 [`docs/environment/ava_vla.md`](docs/environment/ava_vla.md)에
+정리했습니다. 로컬 가중치 보관 상태와 Colab A100 이관 조건은
+[`docs/environment/local_stage_to_colab.md`](docs/environment/local_stage_to_colab.md)에
+기록했습니다.
+
+FFT 실행 방법과 AVA temporal 학습의 제한은
+[`docs/environment/libero_plus_fft_colab.md`](docs/environment/libero_plus_fft_colab.md)에
+정리했습니다.
+
+Colab A100에서 데이터셋 없이 두 공개 체크포인트의 단일 액션 추론을 점검할
+노트북은 [`experiments/colab_inference_smoke.ipynb`](experiments/colab_inference_smoke.ipynb)에
+보관합니다. 현재는 로컬에서 노트북 코드와 파일 경로만 검증했으며, Colab GPU에서
+실제 모델 로드·액션 생성은 아직 실행하지 않았습니다.
 
 ## 소스 받기
 
@@ -29,8 +47,9 @@ cd VLADE
 git submodule update --init --recursive
 ```
 
-Teacher 연결 설정은 `configs/models/teacher/ava_vla.json`, 원본·의존성 커밋과
-검증 상태는 `experiments/manifests/ava_vla_source.json`에서 관리합니다.
+Teacher 연결 설정은 `configs/models/teacher/ava_vla.json`, baseline 설정은
+`experiments/baselines/`, 원본·의존성 커밋과 검증 상태는
+`experiments/manifests/`에서 관리합니다.
 
 ## 이양 원칙
 
@@ -45,10 +64,25 @@ Teacher 연결 설정은 `configs/models/teacher/ava_vla.json`, 원본·의존�
 
 1. `third_party/`에 선정한 VLA 코드를 연결합니다.
 2. `src/vlade/models/teachers/`와 `students/`에 공통 인터페이스 어댑터를 둡니다.
-3. 공식 baseline을 재현해 `experiments/baselines/`에 조건을 고정합니다.
-4. action KD와 representation KD를 `src/vlade/distillation/`에서 한 요소씩 추가합니다.
-5. LIBERO 계열과 CALVIN 평가는 `benchmarks/`와 `src/vlade/evaluation/`을 통해 수행합니다.
-6. 최종 후보를 Jetson/TensorRT 경로로 옮겨 지연시간과 메모리를 측정합니다.
+3. 공식 LIBERO baseline을 재현해 `experiments/baselines/`에 원본 조건을 고정합니다.
+4. 두 baseline의 LIBERO+ FFT 조건을 맞춰 주 비교점을 생성합니다.
+5. action KD와 representation KD를 `src/vlade/distillation/`에서 한 요소씩 추가합니다.
+6. LIBERO+와 CALVIN 평가는 `benchmarks/`와 `src/vlade/evaluation/`을 통해 수행합니다.
+7. 최종 후보를 Jetson/TensorRT 경로로 옮겨 지연시간과 메모리를 측정합니다.
+
+등록된 LIBERO baseline 명령은 실제 모델을 로드하지 않고 먼저 확인할 수 있습니다.
+
+```bash
+python scripts/evaluate/run_baseline.py ava_vla --task-suite libero_10 --dry-run
+python scripts/evaluate/run_baseline.py openvla_oft --task-suite libero_10 --dry-run
+```
+
+LIBERO+ FFT를 실행하기 전 파일 준비 상태는 아래처럼 확인합니다.
+
+```bash
+python scripts/train/run_fft.py --model ava_vla --preflight
+python scripts/train/run_fft.py --model openvla_oft --preflight
+```
 
 ## 폴더 안내
 
@@ -60,7 +94,7 @@ Teacher 연결 설정은 `configs/models/teacher/ava_vla.json`, 원본·의존�
 - `configs/`: 데이터, 모델, 증류, 실험과 배포 설정을 관리합니다.
 - `data/`: 원본·전처리 데이터, 분할 정보와 Teacher cache를 보관합니다.
 - `docs/`: 설계 결정, 환경, 평가 프로토콜과 논문 메모를 기록합니다.
-- `experiments/`: baseline, ablation, 실행 기록과 manifest를 관리합니다.
+- `experiments/`: 모델별 baseline 설정, ablation, 실행 기록과 manifest를 관리합니다.
 - `notebooks/`: 탐색과 분석용 노트북을 보관합니다.
 - `scripts/`: 학습, 평가, 배포와 데이터 처리 실행 스크립트를 둡니다.
 - `src/`: VLADE의 핵심 구현 코드를 관리합니다.

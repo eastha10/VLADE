@@ -1,8 +1,9 @@
 # AVA-VLA source integration
 
-AVA-VLA를 VLADE의 Teacher 및 baseline 후보로 연결했습니다. 이 단계에서 가져오는
-것은 원본 소스입니다. 모델 가중치, 벤치마크 데이터와 실행 의존성은 아직 준비하지
-않았습니다. 실행 성공과 증류 성능은 검증하지 않았습니다.
+AVA-VLA를 VLADE의 Teacher 및 baseline 후보로 연결했습니다. 원본 소스와 LIBERO
+4-in-1 가중치를 로컬에 준비하고 가중치 파일의 SHA-256을 검증했습니다. LIBERO+
+자료는 사용자 요청에 따라 로컬에서 삭제했습니다. 실행 의존성 설치와 실제 GPU 추론,
+평가 및 증류 성능은 아직 검증하지 않았습니다.
 
 ## 원본 소스
 
@@ -18,15 +19,17 @@ git submodule update --init --recursive
 위 명령은 VLADE에 기록된 커밋을 checkout합니다. `--remote`로 자동 갱신하지
 않습니다. 원본 LICENSE와 OpenVLA-OFT에서 유래한 고지를 submodule 안에 보존합니다.
 
-## Hugging Face 가중치: 다음 단계에서 검토
+## Hugging Face 가중치
 
-| 벤치마크 | 공식 모델 | 예정 로컬 경로 |
+| 벤치마크 | 공식 모델 | 로컬 경로·상태 |
 | --- | --- | --- |
-| LIBERO | [LiAuto-DSR/avavla-libero-4in1](https://huggingface.co/LiAuto-DSR/avavla-libero-4in1) | `checkpoints/teacher/avavla-libero-4in1/` |
-| CALVIN | [LiAuto-DSR/avavla-calvin-abc2d](https://huggingface.co/LiAuto-DSR/avavla-calvin-abc2d) | `checkpoints/teacher/avavla-calvin-abc2d/` |
+| LIBERO | [LiAuto-DSR/avavla-libero-4in1](https://huggingface.co/LiAuto-DSR/avavla-libero-4in1) | `checkpoints/teacher/avavla-libero-4in1/` 검증 완료 |
+| CALVIN | [LiAuto-DSR/avavla-calvin-abc2d](https://huggingface.co/LiAuto-DSR/avavla-calvin-abc2d) | 아직 받지 않음 |
 
-가중치는 현재 다운로드하지 않습니다. 받을 때 모델 revision과 파일 해시를 기록하고,
-`.pt` 파일별 state dict 키·shape·dtype 및 대응 모듈을 확인합니다.
+LIBERO 모델은 고정 revision에서 내려받아 전체 파일의 해시 검증을 끝냈습니다.
+보조 `.pt`는 로컬에서 `weights_only=True`로 읽고 각 state dict의 키 수를 확인했습니다.
+다만 GPU에서 실제 모델 로드와 액션 생성은 아직 수행하지 않았습니다. CALVIN 가중치는
+이번 LIBERO+ 실험 범위에 포함하지 않습니다.
 
 검토할 부속 모듈 패턴은 `action_head--*_checkpoint.pt`,
 `proprio_projector--*_checkpoint.pt`, `vision_attn_weight_generator--*_checkpoint.pt`

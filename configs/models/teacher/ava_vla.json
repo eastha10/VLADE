@@ -16,11 +16,11 @@
     "transformers_commit_to_validate": "a03eee5da1794c45f5a911b60a9a4545e6e0ed1f"
   },
   "checkpoints": {
-    "download_status": "deferred",
+    "download_status": "local_sha256_verified_not_in_git",
     "libero": {
       "hub_repository": "LiAuto-DSR/avavla-libero-4in1",
       "local_directory": "checkpoints/teacher/avavla-libero-4in1",
-      "revision": null
+      "revision": "090bf68d234ea13bc78476236f82458b25b797b8"
     },
     "calvin": {
       "hub_repository": "LiAuto-DSR/avavla-calvin-abc2d",

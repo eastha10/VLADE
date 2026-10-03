@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "record_type": "source_import",
+  "recorded_on": "2026-10-03",
+  "baseline_configuration": "experiments/baselines/openvla_oft/libero.json",
+  "source": {
+    "submodule_path": "third_party/openvla_oft",
+    "repository": "https://github.com/moojink/openvla-oft.git",
+    "upstream_repository": "https://github.com/moojink/openvla-oft.git",
+    "commit": "e4287e94541f459edc4feabc4e181f537cd569a8",
+    "modified": false
+  },
+  "verification": {
+    "source_reviewed": true,
+    "evaluation_contract_reviewed": true,
+    "checkpoint_mapping_reviewed": true,
+    "baseline_registered": true,
+    "baseline_configuration_validated": true,
+    "runtime_dependencies_installed": false,
+    "checkpoint_downloaded": true,
+    "checkpoint_sha256_verified_locally": true,
+    "dataset_downloaded": false,
+    "gpu_runtime_tested": false,
+    "benchmark_measured": false
+  },
+  "next_stage": "prepare_libero_long_checkpoint_and_run_model_load_smoke_test"
+}

@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "baseline_id": "openvla_oft",
+  "display_name": "OpenVLA-OFT",
+  "status": "registered_not_reproduced",
+  "source": {
+    "path": "third_party/openvla_oft",
+    "repository": "https://github.com/moojink/openvla-oft.git",
+    "upstream_repository": "https://github.com/moojink/openvla-oft.git",
+    "commit": "e4287e94541f459edc4feabc4e181f537cd569a8",
+    "modified": false
+  },
+  "runtime": {
+    "environment_name": "vlade-openvla-oft",
+    "dependency_manifest": "third_party/openvla_oft/pyproject.toml",
+    "python_version": "3.10.14",
+    "torch_version": "2.2.0",
+    "transformers_repository": "https://github.com/moojink/transformers-openvla-oft.git",
+    "isolated_environment_required": true,
+    "installed": false
+  },
+  "benchmark": {
+    "name": "libero",
+    "task_suites": [
+      "libero_spatial",
+      "libero_object",
+      "libero_goal",
+      "libero_10"
+    ],
+    "default_task_suite": "libero_10",
+    "num_trials_per_task": 50,
+    "seed": 7,
+    "action_chunk_length": 8,
+    "action_dimension": 7,
+    "proprio_dimension": 8
+  },
+  "checkpoints": {
+    "libero_spatial": {
+      "hub_repository": "moojink/openvla-7b-oft-finetuned-libero-spatial",
+      "local_directory": "checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-spatial",
+      "revision": null
+    },
+    "libero_object": {
+      "hub_repository": "moojink/openvla-7b-oft-finetuned-libero-object",
+      "local_directory": "checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-object",
+      "revision": null
+    },
+    "libero_goal": {
+      "hub_repository": "moojink/openvla-7b-oft-finetuned-libero-goal",
+      "local_directory": "checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-goal",
+      "revision": null
+    },
+    "libero_10": {
+      "hub_repository": "moojink/openvla-7b-oft-finetuned-libero-10",
+      "local_directory": "checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-10",
+      "revision": null
+    }
+  },
+  "evaluation": {
+    "working_directory": "third_party/openvla_oft",
+    "entrypoint": "experiments/robot/libero/run_libero_eval.py",
+    "environment": {
+      "TOKENIZERS_PARALLELISM": "false",
+      "PYOPENGL_PLATFORM": "egl",
+      "MUJOCO_GL": "egl"
+    },
+    "arguments": {
+      "use_l1_regression": true,
+      "use_diffusion": false,
+      "use_film": false,
+      "num_images_in_input": 2,
+      "use_proprio": true,
+      "center_crop": true,
+      "num_open_loop_steps": 8,
+      "local_log_dir": "artifacts/logs/baselines/openvla_oft"
+    }
+  },
+  "verification": {
+    "configuration_validated": true,
+    "checkpoint_downloaded": false,
+    "model_loaded": false,
+    "smoke_tested": false,
+    "baseline_reproduced": false
+  }
+}

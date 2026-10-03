@@ -15,9 +15,12 @@ OpenVLA-OFT는 https://github.com/openvla/openvla 에서 파생된 저장소입�
 git submodule update --init --recursive
 ```
 
-소스만 받는 명령입니다. 모델 가중치, 벤치마크 데이터와 실행 의존성은 별도로
-준비해야 합니다. 가중치는 다음 단계에서 다운로드하고 검토합니다.
+소스만 받는 명령입니다. 두 LIBERO 공개 가중치는 이 로컬 작업 공간에 별도로
+준비했지만 Git에 포함되지 않습니다. LIBERO+ 데이터·평가 assets는 로컬에서 삭제했고,
+실행 의존성과 GPU 추론은 아직 준비·검증하지 않았습니다.
 
-AVA-VLA 연결 설정과 검증 상태는 `configs/models/teacher/ava_vla.json` 및
-`experiments/manifests/ava_vla_source.json`에 기록합니다. OpenVLA-OFT는 현재
-원본 소스만 이양했으며 의존성 설치, 가중치 다운로드와 실행 검증은 수행하지 않았습니다.
+AVA-VLA Teacher 연결 설정은 `configs/models/teacher/ava_vla.json`에 기록합니다.
+두 원본의 baseline 설정은 각각 `experiments/baselines/ava_vla/libero.json`과
+`experiments/baselines/openvla_oft/libero.json`, 소스 검증 상태는
+`experiments/manifests/`에서 관리합니다. 의존성 설치, 가중치 다운로드와 실행 검증은
+baseline 등록과 구분해 기록합니다.

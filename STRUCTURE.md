@@ -11,9 +11,14 @@ vlade/
 │  ├─ evaluation/           # 성공률·일반화·효율 평가
 │  ├─ deployment/           # Jetson 및 TensorRT 경로
 │  └─ utils/                # 로깅, seed, 공통 유틸리티
-├─ scripts/                 # 사용자가 실행하는 진입점
+├─ scripts/                 # 사용자가 실행하는 얇은 진입점
+│  └─ train/run_fft.py      # LIBERO+ 전체 파라미터 학습
 ├─ benchmarks/              # LIBERO, LIBERO+, CALVIN 연결 계층
 ├─ experiments/             # baseline, ablation, run manifest
+│  ├─ baselines/            # 외부 원본별 실행 설정(원본 코드는 복제하지 않음)
+│  ├─ ablations/            # 구성요소별 제거·교체 실험
+│  ├─ manifests/            # 소스 이양과 실행 재현 정보
+│  └─ runs/                 # 실제 실행별 기록
 ├─ tests/                   # unit, integration, smoke test
 ├─ docs/                    # 의사결정·프로토콜·환경·논문 메모
 ├─ notebooks/               # 탐색 전용 분석
@@ -28,6 +33,8 @@ vlade/
 ## 경계 규칙
 
 - `third_party/` 내부 로직을 VLADE 핵심 구현으로 간주하지 않습니다.
+- 외부 baseline 코드는 `experiments/baselines/`에 복제하지 않고, 고정된
+  `third_party/` 원본과 실행 설정을 연결합니다.
 - benchmark별 observation/action 차이는 `benchmarks/` 또는 `data/adapters/`에서만 흡수합니다.
 - Teacher와 Student가 달라도 학습 코드는 공통 인터페이스만 보도록 구성합니다.
 - quantization, pruning 등의 압축 확장은 증류 baseline이 고정된 뒤 별도 설정으로 추가합니다.
