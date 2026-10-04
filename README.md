@@ -17,8 +17,8 @@ submodule로 관리합니다. VLADE 자체 구현은 `src/vlade/`에 분리합�
 
 현재 단계는 원본 소스 이양과 baseline 실행 설정 등록입니다. 실험용 FFT 학습
 경로는 추가했지만 아직 실제 Colab GPU 학습은 검증하지 않았습니다. Teacher 어댑터,
-Student 및 증류 학습 코드는 아직 구현하지 않았으며, 모델 가중치 로딩과 실제 평가
-결과는 아직 검증하지 않았습니다. baseline 사용법은
+Student 및 증류 학습 코드는 아직 구현하지 않았습니다. 두 공개 체크포인트의
+A100 단일 추론은 통과했으며, 실제 benchmark 평가 결과는 아직 검증하지 않았습니다. baseline 사용법은
 [`experiments/baselines/README.md`](experiments/baselines/README.md), AVA-VLA 연결
 방법과 검토할 가중치는 [`docs/environment/ava_vla.md`](docs/environment/ava_vla.md)에
 정리했습니다. 로컬 가중치 보관 상태와 Colab A100 이관 조건은
@@ -31,8 +31,10 @@ FFT 실행 방법과 AVA temporal 학습의 제한은
 
 Colab A100에서 데이터셋 없이 두 공개 체크포인트의 단일 액션 추론을 점검할
 노트북은 [`experiments/colab_inference_smoke.ipynb`](experiments/colab_inference_smoke.ipynb)에
-보관합니다. 현재는 로컬에서 노트북 코드와 파일 경로만 검증했으며, Colab GPU에서
-실제 모델 로드·액션 생성은 아직 실행하지 않았습니다.
+보관합니다. 2026-10-04에 A100에서 두 모델 모두 유한한 8×7 액션 생성을
+통과했습니다. 실행 조건과 결과 JSON은 `experiments/runs/inference_smoke/`에
+보관했으며, Colab 런타임 종료와 활성 세션 없음까지 확인했습니다. 이 검사는
+LIBERO(+) 성공률이나 FFT 학습 검증을 포함하지 않습니다.
 
 ## 소스 받기
 

@@ -1,0 +1,50 @@
+2026-10-04 05:58:27.976883: I tensorflow/core/util/port.cc:113] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+2026-10-04 05:58:28.025734: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:9261] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2026-10-04 05:58:28.025786: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:607] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2026-10-04 05:58:28.027113: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1515] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2026-10-04 05:58:28.034336: I tensorflow/core/platform/cpu_feature_guard.cc:182] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+2026-10-04 05:58:28.957175: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
+Using LIBERO constants:
+  NUM_ACTIONS_CHUNK = 8
+  ACTION_DIM = 7
+  PROPRIO_DIM = 8
+  ACTION_PROPRIO_NORMALIZATION_TYPE = NormalizationType.BOUNDS_Q99
+If needed, manually set the correct constants in `prismatic/vla/constants.py`!
+Instantiating pretrained VLA policy...
+Created backup of original config at: /content/vlade_ava_vla_33rhzy1h/checkpoint/config.json.back.20261004_055844
+Updated config.json at: /content/vlade_ava_vla_33rhzy1h/checkpoint/config.json
+Changes made:
+  - Set AutoConfig to "configuration_prismatic.OpenVLAConfig"
+  - Set AutoModelForVision2Seq to "modeling_prismatic.OpenVLAForActionPrediction"
+
+------------------------------------------------------------------------------------------------
+Found mismatch between:
+Current:   ./prismatic/extern/hf/modeling_prismatic.py
+Checkpoint: /content/vlade_ava_vla_33rhzy1h/checkpoint/modeling_prismatic.py
+
+Created backup of original checkpoint file at: /content/vlade_ava_vla_33rhzy1h/checkpoint/modeling_prismatic.py.back.20261004_055844
+Copied current version to checkpoint at: /content/vlade_ava_vla_33rhzy1h/checkpoint/modeling_prismatic.py
+Changes complete. The checkpoint will now use the current version of modeling_prismatic.py
+------------------------------------------------------------------------------------------------
+
+
+------------------------------------------------------------------------------------------------
+Found mismatch between:
+Current:   ./prismatic/extern/hf/configuration_prismatic.py
+Checkpoint: /content/vlade_ava_vla_33rhzy1h/checkpoint/configuration_prismatic.py
+
+Created backup of original checkpoint file at: /content/vlade_ava_vla_33rhzy1h/checkpoint/configuration_prismatic.py.back.20261004_055844
+Copied current version to checkpoint at: /content/vlade_ava_vla_33rhzy1h/checkpoint/configuration_prismatic.py
+Changes complete. The checkpoint will now use the current version of configuration_prismatic.py
+------------------------------------------------------------------------------------------------
+
+
+Loading checkpoint shards:   0%|          | 0/4 [00:00<?, ?it/s]
+Loading checkpoint shards:  25%|██▌       | 1/4 [00:59<02:59, 59.81s/it]
+Loading checkpoint shards:  50%|█████     | 2/4 [01:57<01:57, 58.55s/it]
+Loading checkpoint shards:  75%|███████▌  | 3/4 [02:46<00:54, 54.10s/it]
+Loading checkpoint shards: 100%|██████████| 4/4 [02:47<00:00, 33.24s/it]
+Loading checkpoint shards: 100%|██████████| 4/4 [02:47<00:00, 41.89s/it]
+VLADE_SMOKE_RESULT={"model": "ava_vla", "status": "passed", "shape": [8, 7], "actions": [[-0.0038309593219310045, -0.015977248549461365, 0.116912841796875, -0.01809709332883358, 0.008036765269935131, -0.02609357237815857, 0.003143310546875], [0.02451990731060505, 0.06679100543260574, 0.24380755424499512, -0.02376551553606987, -0.005401345435529947, -0.02891339734196663, 0.36328125], [-0.007118016481399536, 0.09564728289842606, 0.2547625005245209, -0.01953996531665325, -0.01660367287695408, -0.0329819992184639, 1.0], [-0.01656830497086048, 0.10943026095628738, 0.33327287435531616, -0.017787907272577286, -0.016978254541754723, -0.033223699778318405, 0.99609375], [-0.01574654132127762, 0.12788185477256775, 0.4373447895050049, -0.017684845253825188, -0.01404598355293274, -0.03072614036500454, 0.99609375], [-0.018211834132671356, 0.15462669730186462, 0.4629063308238983, -0.013923073187470436, -0.008163883350789547, -0.02871198020875454, 1.0], [-0.04450828954577446, 0.15518975257873535, 0.43917062878608704, -0.00476341787725687, 0.018337754532694817, -0.023515447974205017, 0.9609375], [-0.04779534786939621, 0.1897234320640564, 0.4829903841018677, -0.005265846382826567, 0.05542132258415222, -0.014210027642548084, 0.9609375]], "load_and_inference_seconds": 254.64, "gpu": "NVIDIA A100-SXM4-40GB", "max_cuda_memory_gib": 14.82, "torch": "2.2.0+cu121", "transformers": "4.40.1", "python": "3.11.16", "seed": 7, "cuda": "12.1", "dtype": "bfloat16", "tensorflow_preprocessing_device": "CPU", "batch_size": 1, "inference_calls": 1, "warmup_calls": 0, "timing_kind": "cold_load_plus_inference_wall_time_not_latency_benchmark"}
+단일 액션 예측 통과: ava_vla [8, 7]

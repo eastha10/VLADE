@@ -2,8 +2,9 @@
 
 AVA-VLA를 VLADE의 Teacher 및 baseline 후보로 연결했습니다. 원본 소스와 LIBERO
 4-in-1 가중치를 로컬에 준비하고 가중치 파일의 SHA-256을 검증했습니다. LIBERO+
-자료는 사용자 요청에 따라 로컬에서 삭제했습니다. 실행 의존성 설치와 실제 GPU 추론,
-평가 및 증류 성능은 아직 검증하지 않았습니다.
+자료는 사용자 요청에 따라 로컬에서 삭제했습니다. 2026-10-04에 Colab A100에서
+AVA-VLA 단일 추론이 유한한 8×7 액션을 생성해 통과했습니다. benchmark 평가와
+증류 성능은 아직 검증하지 않았습니다.
 
 ## 원본 소스
 
@@ -28,7 +29,7 @@ git submodule update --init --recursive
 
 LIBERO 모델은 고정 revision에서 내려받아 전체 파일의 해시 검증을 끝냈습니다.
 보조 `.pt`는 로컬에서 `weights_only=True`로 읽고 각 state dict의 키 수를 확인했습니다.
-다만 GPU에서 실제 모델 로드와 액션 생성은 아직 수행하지 않았습니다. CALVIN 가중치는
+Colab A100에서 모델·보조 모듈 로드와 단일 액션 생성까지 확인했습니다. CALVIN 가중치는
 이번 LIBERO+ 실험 범위에 포함하지 않습니다.
 
 검토할 부속 모듈 패턴은 `action_head--*_checkpoint.pt`,
@@ -42,7 +43,10 @@ LIBERO 모델은 고정 revision에서 내려받아 전체 파일의 해시 검�
 원본 설치 안내와 `third_party/ava_vla/pyproject.toml`을 기준으로 독립 실행 환경을
 준비합니다. 원본 요구사항에는 PyTorch 2.2.0과 커스텀 Transformers가 포함됩니다.
 커스텀 fork의 검토 시 HEAD는 `a03eee5da1794c45f5a911b60a9a4545e6e0ed1f`입니다.
-이 커밋의 실행 호환성은 아직 검증하지 않았습니다.
+이 커밋으로 A100 단일 추론을 통과했습니다. 실행 결과와 136개 패키지의
+버전 기록은 `experiments/runs/inference_smoke/ava_vla_20261004T060317Z.json`에
+보관했습니다. TensorFlow Metadata는 1.15.0으로 고정했고 TensorFlow 전처리는
+CPU에서 수행했습니다. 이전 행동 문맥을 전달하는 다음 시점 동작은 미검증입니다.
 
 실행 설정에는 AVA-VLA checkpoint의 Hub ID보다 완전한 로컬 다운로드 경로를 우선
 사용합니다. 현재 원본의 Hub 부속 모듈 매핑에는 AVA-VLA ID가 없고, attention
