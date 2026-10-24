@@ -50,9 +50,86 @@ Drive 용량도 확인해야 합니다.
 
 기본 체크포인트는 `artifacts/training/libero_plus_fft/<model>/step-XXXXXXX/`에
 저장합니다. `COMPLETE` 파일이 있는 디렉터리만 완료된 저장으로 취급합니다.
-기본값 `save_optimizer_state=false`에서는 **정확한 optimizer 상태 재개를
-지원하지 않습니다**. 설정을 켜면 optimizer 상태도 저장하지만 재개 로더는
-아직 없습니다. FFT 결과를 원본 LIBERO 재현이나 논문 결과와 혼동하지 마십시오.
+기본값 `save_optimizer_state=false`에서는 가중치만 저장합니다. 재개가 필요하면
+`--save-training-state`를 사용하십시오. `trainer_state.pt`에 optimizer, scheduler,
+Python/NumPy/PyTorch/CUDA RNG, 완료된 optimizer step과 microstep을 저장합니다.
+이전 버전의 `optimizer.pt`만 있는 checkpoint는 자동 재개하지 않습니다.
+
+## 보완한 Training loop (2026-10-24)
+
+`src/vlade/training/loop.py`는 모델 종류와 독립적인 단일 디바이스 루프입니다.
+FFT 어댑터가 모델·구성요소·데이터·loss·checkpoint callback을 제공합니다.
+Student/KD에도 같은 루프를 사용할 수 있지만 실제 Student와 KD loss는 아직
+연결하지 않았습니다. DDP/FSDP 및 FP16 GradScaler는 구현 범위에 포함하지 않았습니다.
+기존 모델 어댑터는 BF16 CUDA를 사용하며 `device`로 GPU를 지정합니다.
+
+- optimizer step 기준 gradient accumulation, LR schedule, 로그·평가·저장 주기를 사용합니다.
+- 기존 constant LR를 기본으로 유지하고 선택적으로 warmup/cosine을 제공합니다.
+- optimizer 업데이트 전에 유한한 scalar loss와 gradient를 확인하고 global norm을 clip합니다.
+- 로그 loss는 전체 accumulation window의 평균이며 마지막 microbatch 값만 출력하지 않습니다.
+- 데이터가 window 도중 끝나면 부분 gradient를 폐기하고 실패 처리합니다.
+- 액션 target은 `[B,8,7]`, 각 샘플의 action token은 56개인지 검사합니다.
+- upstream이 squeeze한 batch=1 proprio를 `[B,8]`로 복원하고 L1은 FP32로 계산합니다.
+- 모든 모델 파라미터의 requires_grad를 확인합니다. L1에서 사용되지 않는 언어 출력
+  head 등에는 gradient가 없을 수 있으며, 모든 파라미터가 매번 갱신된다는 뜻은 아닙니다.
+- TensorFlow의 GPU 사용을 끄고 전처리를 CPU에 두어 Torch와 GPU 메모리 점유를 분리합니다.
+
+`metrics-<run_id>.jsonl`에는 step, microsteps, loss, LR, clipping 전 grad norm,
+peak Torch allocated bytes를 매 optimizer step 기록합니다. 이 메모리는 GPU 전체
+점유량이나 정식 latency 측정값이 아닙니다. `run-<run_id>.json`에는 실행 상태,
+설정, source/submodule/checkpoint/dataset revision, 학습 코드 SHA-256,
+소프트웨어·GPU 정보를 기록하고 예외 시 failed/interrupted 상태를 남깁니다.
+초기 경로 검사나 CUDA 가용성 검사에서 실패한 경우에는 run manifest 생성 전입니다.
+
+저장은 숨김 `.incomplete` 디렉터리에 수행한 뒤 최종 `step-XXXXXXX`로 rename합니다.
+최종 경로와 COMPLETE가 함께 있는 checkpoint만 선택하십시오. 숨김 임시 폴더는
+실패 조사용이며 사용하지 않습니다. 기존 step은 덮어쓰지 않습니다.
+
+### CPU 검증
+
+사전학습 모델이나 RLDS 없이 작은 합성 액션 정책으로 backward/update/save/load/resume을
+검사합니다. 아래 경로는 아직 없는 새 디렉터리여야 합니다.
+
+```bash
+python -m pytest tests/unit -q
+python scripts/train/smoke_loop.py --output-dir artifacts/training/cpu-loop-smoke
+```
+
+이 검증은 실제 AVA/OFT forward, bitsandbytes, RLDS 또는 GPU 실행의 증거가 아닙니다.
+
+### 실제 VLA 최소 학습과 재개
+
+데이터와 모델별 의존성을 준비한 뒤 별도 출력 경로로 실행합니다.
+
+```bash
+python scripts/train/run_fft.py --model ava_vla --preflight
+python scripts/train/run_fft.py --model ava_vla --max-steps 1 --save-steps 1 --save-training-state --output-dir artifacts/training/ava-one-step-smoke
+python scripts/train/run_fft.py --model ava_vla --save-training-state
+python scripts/train/run_fft.py --model ava_vla --resume artifacts/training/libero_plus_fft/ava_vla/step-0000500 --save-training-state --preflight
+python scripts/train/run_fft.py --model ava_vla --resume artifacts/training/libero_plus_fft/ava_vla/step-0000500 --save-training-state
+```
+
+`max_steps`는 추가 실행 횟수가 아니라 최종 목표 optimizer step입니다. 재개 시 원본
+설정의 max_steps, batch/accumulation, optimizer, schedule, seed, dataset/checkpoint
+revision, upstream revision과 학습 코드 SHA-256가 일치해야 합니다. max_steps=1 smoke를
+1000-step 학습으로 재개하면 거부됩니다. 장기 학습은 새 출력 경로에서 시작합니다.
+source/데이터 경로가 다른 머신으로 옮겨졌다면 경로 호환성 검사에서 거부될 수 있습니다.
+
+**RLDS stream은 새로 시작합니다.** TensorFlow shuffle, augmentation RNG와 iterator
+커서는 저장하지 않으므로 optimizer/scheduler/PyTorch RNG를 복원해도 중단 전과
+비트 단위로 동일한 샘플 순서나 결과를 보장하지 않습니다. stateful sampler/cache가
+구현되기 전까지 manifest에도 이 제한을 남깁니다. 부분 accumulation은 저장하지 않습니다.
+
+### 선택적 validation
+
+`fft_defaults.eval_steps`를 양수로 설정하면 upstream `train=False`의 **val split**을
+augmentation 없이 최대 `max_eval_batches`만 읽고 `val_l1`을 기록합니다. 기본값은 0입니다.
+실제 TFDS에 val split이 있어야 합니다. 없으면 명시적으로 실패하며 train split을
+검증용으로 재사용하지 않습니다. 데이터 분할은 episode 단위로 독립적인지 먼저 확인하십시오.
+평균은 동일 batch 크기의 L1 평균이며 소수의 고정·대표 subset을 평가한 값으로 해석합니다.
+검증 중 eval/no_grad를 사용하고 종료·예외 시 각 모듈의 모드와 host/Torch RNG를 복원합니다.
+TensorFlow RNG와 validation 샘플 순서는 복원하지 않습니다. `val_l1`은 로봇 rollout
+성공률이나 LIBERO+ macro average를 대신하지 않습니다.
 
 ## 남은 검증
 

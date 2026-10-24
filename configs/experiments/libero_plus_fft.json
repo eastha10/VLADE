@@ -33,7 +33,8 @@
     "hyperparameters_status": "provisional_smoke_defaults_not_validated",
     "upstream_training_support": "lora_only",
     "requires_vlade_fft_trainer": true,
-    "vlade_fft_entrypoint": "scripts/train/run_fft.py"
+    "vlade_fft_entrypoint": "scripts/train/run_fft.py",
+    "trainer_validation_status": "cpu_unit_and_synthetic_smoke_passed; real_gpu_not_run"
   },
   "fft_defaults": {
     "data_root": "data/processed/libero_plus_rlds",
@@ -42,7 +43,7 @@
     "max_steps": 1000,
     "batch_size": 1,
     "grad_accumulation_steps": 8,
-    "learning_rate": 2e-5,
+    "learning_rate": 2e-05,
     "weight_decay": 0.01,
     "save_steps": 500,
     "seed": 42,
@@ -51,7 +52,14 @@
     "optimizer": "paged_adamw_8bit",
     "gradient_checkpointing": true,
     "image_aug": true,
-    "save_optimizer_state": false
+    "save_optimizer_state": false,
+    "max_grad_norm": 1.0,
+    "lr_schedule": "constant",
+    "warmup_steps": 0,
+    "log_steps": 10,
+    "eval_steps": 0,
+    "max_eval_batches": 10,
+    "device": "cuda:0"
   },
   "fft_runs": {
     "ava_vla": {
@@ -97,6 +105,9 @@
     "fft_code_implemented": true,
     "fft_pipeline_implemented": false,
     "evaluation_smoke_tested": false,
-    "experiment_run": false
+    "experiment_run": false,
+    "cpu_training_loop_tested": true,
+    "gpu_fft_tested": false,
+    "student_kd_implemented": false
   }
 }

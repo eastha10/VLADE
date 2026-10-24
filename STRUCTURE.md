@@ -39,3 +39,15 @@ vlade/
 - Teacher와 Student가 달라도 학습 코드는 공통 인터페이스만 보도록 구성합니다.
 - quantization, pruning 등의 압축 확장은 증류 baseline이 고정된 뒤 별도 설정으로 추가합니다.
 - 논문 보고값과 자체 재현값을 같은 결과로 덮어쓰지 않습니다.
+
+## 학습 구현
+
+- `src/vlade/training/loop.py`: 모델과 독립적인 optimizer step 루프·검증·학습 상태
+- `src/vlade/training/fft.py`: 기존 AVA/OFT의 모델·RLDS·L1·checkpoint 어댑터
+- `src/vlade/training/smoke.py`: 합성 CPU 액션 정책의 학습·저장·재개 검사
+- `scripts/train/smoke_loop.py`: 합성 검사의 얇은 CLI
+- `tests/unit/test_training_loop.py`: 누적·clipping·NaN·validation·재개 검증
+- `docs/decisions/0003-backbone-review.md`: Student 후보 비교와 도입 조건
+
+공통 루프의 loss callback에 향후 action/representation KD를 연결할 수 있습니다.
+현재 제공하는 실제 모델 경로는 기존 FFT이며 Student/KD 경로는 미구현입니다.

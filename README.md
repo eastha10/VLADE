@@ -15,8 +15,8 @@ baseline으로 등록했습니다. 사용자 포크 `eastha10/AVA-VLA`의 원본
 `third_party/ava_vla/`, OpenVLA-OFT 원본 소스는 `third_party/openvla_oft/` Git
 submodule로 관리합니다. VLADE 자체 구현은 `src/vlade/`에 분리합니다.
 
-현재 단계는 원본 소스 이양과 baseline 실행 설정 등록입니다. 실험용 FFT 학습
-경로는 추가했지만 아직 실제 Colab GPU 학습은 검증하지 않았습니다. Teacher 어댑터,
+현재 단계는 baseline 등록과 FFT 공통 학습 루프의 CPU 검증까지입니다.
+실제 Colab GPU 학습은 아직 검증하지 않았습니다. Teacher 어댑터,
 Student 및 증류 학습 코드는 아직 구현하지 않았습니다. 두 공개 체크포인트의
 A100 단일 추론은 통과했으며, 실제 benchmark 평가 결과는 아직 검증하지 않았습니다. baseline 사용법은
 [`experiments/baselines/README.md`](experiments/baselines/README.md), AVA-VLA 연결
@@ -104,3 +104,18 @@ python scripts/train/run_fft.py --model openvla_oft --preflight
 - `third_party/`: AVA-VLA, OpenVLA-OFT 등 외부 원본 코드를 별도로 관리합니다.
 
 자세한 디렉터리 역할은 `STRUCTURE.md`를 참고하십시오.
+
+## Training loop 보완 및 backbone 검토 (2026-10-24)
+
+FFT 어댑터는 공통 `src/vlade/training/loop.py`를 사용합니다. 누적 학습,
+clipping·비정상 값 검사, 선택적 LR 스케줄·val loss, JSONL 실행 기록,
+완료 checkpoint의 optimizer/scheduler/RNG 재개를 지원합니다.
+RLDS stream 위치는 복원하지 않으며 GPU FFT는 아직 검증하지 않았습니다.
+CPU 검사는 `python -m pytest tests/unit -q` 및
+`python scripts/train/smoke_loop.py --output-dir artifacts/training/cpu-loop-smoke`로
+수행합니다. 실행·재개 제한은 [학습 안내](docs/environment/libero_plus_fft_colab.md)에 있습니다.
+
+기존 Teacher/baseline과 Llama-2-7B 가중치는 유지합니다. Student 후보인 Qwen3,
+Qwen3.5, SmolVLM2/SmolVLA, Llama 3.2, Gemma 4의 호환성과 계산량 검토는
+[backbone 검토](docs/decisions/0003-backbone-review.md)에 정리했습니다.
+이는 후보 우선순위이며 Student 구현·모델 교체나 VLA 성능 검증을 의미하지 않습니다.

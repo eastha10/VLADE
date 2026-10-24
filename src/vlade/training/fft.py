@@ -7,6 +7,8 @@ must run in its own Python environment because AVA uses a transformers fork.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import importlib.metadata
 import json
 import math
 import platform
@@ -14,6 +16,8 @@ import random
 import shutil
 import subprocess
 import sys
+import uuid
+from datetime import datetime, timezone
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -44,6 +48,14 @@ class FFTConfig:
     image_aug: bool = True
     save_optimizer_state: bool = False
     config_path: Path | None = None
+    max_grad_norm: float = 1.0
+    lr_schedule: str = "constant"
+    warmup_steps: int = 0
+    log_steps: int = 10
+    eval_steps: int = 0
+    max_eval_batches: int = 10
+    device: str = "cuda:0"
+    resume: Path | None = None
 
     @classmethod
     def from_json(cls, path: Path, model: str) -> "FFTConfig":
@@ -71,6 +83,14 @@ class FFTConfig:
             raise ValueError("optimizer must be paged_adamw_8bit or adamw")
         if self.num_images_in_input != 2:
             raise ValueError("These LIBERO checkpoints expect primary and wrist images")
+        if not all(math.isfinite(value) for value in (self.learning_rate, self.weight_decay, self.max_grad_norm)):
+            raise ValueError("Optimizer values must be finite")
+        if self.max_grad_norm <= 0 or self.log_steps < 1 or self.eval_steps < 0 or self.max_eval_batches < 1:
+            raise ValueError("Invalid clipping, logging or evaluation settings")
+        if self.lr_schedule not in {"constant", "cosine"} or not 0 <= self.warmup_steps < self.max_steps:
+            raise ValueError("Invalid LR schedule or warmup_steps")
+        if not self.device.startswith("cuda"):
+            raise ValueError("The pinned FFT adapters require a BF16 CUDA device")
 
 
 def _tfds_info_files(data_root: Path, dataset_name: str) -> list[Path]:
@@ -127,6 +147,9 @@ def preflight(cfg: FFTConfig) -> None:
     source = REPO_ROOT / SOURCES[cfg.model]
     if not (source / "prismatic").is_dir():
         raise FileNotFoundError(f"Missing upstream submodule: {source}")
+    if cfg.resume is not None:
+        validate_resume(cfg)
+        cfg = replace(cfg, checkpoint=cfg.resume)
     if not (cfg.checkpoint / "config.json").is_file():
         raise FileNotFoundError(f"Missing model checkpoint: {cfg.checkpoint / 'config.json'}")
     index = cfg.checkpoint / "model.safetensors.index.json"
@@ -230,7 +253,7 @@ def _make_model_and_components(cfg: FFTConfig, device: Any) -> tuple[Any, Any, A
     return model, processor, head, proprio, generator
 
 
-def _make_loader(cfg: FFTConfig, model: Any, processor: Any) -> tuple[Any, Any]:
+def _make_loader(cfg: FFTConfig, model: Any, processor: Any, *, train: bool = True) -> tuple[Any, Any]:
     from torch.utils.data import DataLoader
 
     from prismatic.models.backbones.llm.prompting import PurePromptBuilder
@@ -248,12 +271,14 @@ def _make_loader(cfg: FFTConfig, model: Any, processor: Any) -> tuple[Any, Any]:
     dataset = RLDSDataset(
         cfg.data_root, cfg.dataset_name, transform,
         resize_resolution=tuple(model.config.image_sizes),
-        shuffle_buffer_size=cfg.shuffle_buffer_size, image_aug=cfg.image_aug,
+        shuffle_buffer_size=cfg.shuffle_buffer_size, image_aug=cfg.image_aug if train else False,
+        train=train,
     )
     collator = PaddedCollatorForActionPrediction(
         processor.tokenizer.model_max_length, processor.tokenizer.pad_token_id, padding_side="right"
     )
-    return DataLoader(dataset, batch_size=cfg.batch_size, collate_fn=collator, num_workers=0), dataset
+    return DataLoader(dataset, batch_size=cfg.batch_size, collate_fn=collator,
+                      num_workers=0, drop_last=True), dataset
 
 
 def compute_loss(model: Any, head: Any, proprio: Any, generator: Any, batch: dict, device: Any,
@@ -264,7 +289,13 @@ def compute_loss(model: Any, head: Any, proprio: Any, generator: Any, batch: dic
     from prismatic.vla.constants import ACTION_DIM, NUM_ACTIONS_CHUNK
 
     labels = batch["labels"].to(device)
-    with torch.autocast("cuda", dtype=torch.bfloat16):
+    batch_size = labels.shape[0]
+    target = batch["actions"].to(device=device, dtype=torch.float32)
+    if target.shape != (batch_size, NUM_ACTIONS_CHUNK, ACTION_DIM):
+        raise ValueError(f"Expected actions [B, {NUM_ACTIONS_CHUNK}, {ACTION_DIM}], got {target.shape}")
+    # Upstream collator squeezes the batch dimension for B=1.
+    state = batch["proprio"].to(device=device, dtype=torch.bfloat16).reshape(batch_size, -1)
+    with torch.autocast(device.type, dtype=torch.bfloat16):
         kwargs = {}
         if generator is not None:
             # RLDSBatchTransform samples individual timesteps; it has no previous
@@ -275,17 +306,21 @@ def compute_loss(model: Any, head: Any, proprio: Any, generator: Any, batch: dic
             attention_mask=batch["attention_mask"].to(device),
             pixel_values=batch["pixel_values"].to(device=device, dtype=torch.bfloat16),
             labels=labels, output_hidden_states=True,
-            proprio=batch["proprio"].to(device=device, dtype=torch.bfloat16),
+            proprio=state,
             proprio_projector=proprio,
             use_cache=False,
             **kwargs,
         )
         action_mask = get_current_action_mask(labels[:, 1:]) | get_next_actions_mask(labels[:, 1:])
         hidden = output.hidden_states[-1][:, num_patches:-1]
+        expected_tokens = NUM_ACTIONS_CHUNK * ACTION_DIM
+        if hidden.shape[:2] != action_mask.shape or not (action_mask.sum(dim=1) == expected_tokens).all():
+            raise ValueError("Action token/hidden alignment failed; check truncation and tokenizer")
         action_hidden = hidden[action_mask].reshape(labels.shape[0], NUM_ACTIONS_CHUNK * ACTION_DIM, -1)
         prediction = head.predict_action(action_hidden.to(torch.bfloat16))
-        target = batch["actions"].to(device=device, dtype=torch.bfloat16)
-        return torch.nn.functional.l1_loss(prediction, target)
+        if prediction.shape != target.shape:
+            raise ValueError(f"Prediction/target shape mismatch: {prediction.shape} vs {target.shape}")
+        return torch.nn.functional.l1_loss(prediction.float(), target)
 
 
 def _make_optimizer(cfg: FFTConfig, params: list[Any]) -> Any:
@@ -306,15 +341,32 @@ def _git_revision(path: Path) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+def _code_fingerprint() -> dict[str, str]:
+    return {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
+            for name in ("fft.py", "loop.py")}
+
+
+def _software_versions() -> dict[str, str | None]:
+    result: dict[str, str | None] = {"python": platform.python_version()}
+    for package in ("torch", "tensorflow", "transformers", "bitsandbytes", "numpy"):
+        try:
+            result[package] = importlib.metadata.version(package)
+        except importlib.metadata.PackageNotFoundError:
+            result[package] = None
+    return result
+
+
 def save_checkpoint(cfg: FFTConfig, step: int, model: Any, processor: Any, head: Any,
-                    proprio: Any, generator: Any, optimizer: Any, dataset: Any) -> Path:
+                    proprio: Any, generator: Any, optimizer: Any, dataset: Any,
+                    *, scheduler: Any = None, loop_state: Any = None) -> Path:
     """Save a reloadable full model and separate continuous-action components."""
     import torch
     from prismatic.vla.datasets.rlds.utils.data_utils import save_dataset_statistics
 
-    path = cfg.output_dir / f"step-{step:07d}"
-    if path.exists():
-        raise FileExistsError(f"Refusing to overwrite checkpoint: {path}")
+    destination = cfg.output_dir / f"step-{step:07d}"
+    if destination.exists():
+        raise FileExistsError(f"Refusing to overwrite checkpoint: {destination}")
+    path = cfg.output_dir / f".step-{step:07d}-{uuid.uuid4().hex}.incomplete"
     path.mkdir(parents=True)
     model.save_pretrained(path, safe_serialization=True, max_shard_size="2GB")
     processor.save_pretrained(path)
@@ -327,7 +379,12 @@ def save_checkpoint(cfg: FFTConfig, step: int, model: Any, processor: Any, head:
     if generator is not None:
         torch.save(generator.state_dict(), path / f"vision_attn_weight_generator--{step}_checkpoint.pt")
     if cfg.save_optimizer_state:
-        torch.save(optimizer.state_dict(), path / "optimizer.pt")
+        if scheduler is not None and loop_state is not None:
+            from vlade.training.loop import training_state
+
+            torch.save(training_state(loop_state, optimizer, scheduler), path / "trainer_state.pt")
+        else:
+            torch.save(optimizer.state_dict(), path / "optimizer.pt")
     save_dataset_statistics(dataset.dataset_statistics, path)
     experiment_path = cfg.config_path or REPO_ROOT / "configs/experiments/libero_plus_fft.json"
     experiment = json.loads(experiment_path.read_text(encoding="utf-8"))
@@ -340,55 +397,147 @@ def save_checkpoint(cfg: FFTConfig, step: int, model: Any, processor: Any, head:
         "checkpoint_revision": experiment["initial_checkpoints"][cfg.model]["revision"],
         "source_revision": _git_revision(REPO_ROOT),
         "upstream_revision": _git_revision(REPO_ROOT / SOURCES[cfg.model]),
-        "software": {"python": platform.python_version(), "torch": torch.__version__, "cuda": torch.version.cuda},
-        "hardware": {"gpu": torch.cuda.get_device_name(0), "vram_bytes": torch.cuda.get_device_properties(0).total_memory},
+        "software": {**_software_versions(), "cuda": torch.version.cuda},
+        "training_code_sha256": _code_fingerprint(),
+        "hardware": {"gpu": torch.cuda.get_device_name(torch.device(cfg.device)), "vram_bytes": torch.cuda.get_device_properties(torch.device(cfg.device)).total_memory},
         "ava_temporal_training": "zero_context" if generator is not None else None,
     }, indent=2), encoding="utf-8")
     (path / "COMPLETE").write_text("ok\n", encoding="utf-8")
-    return path
+    path.rename(destination)
+    return destination
+
+
+def validate_resume(cfg: FFTConfig) -> dict[str, Any]:
+    """Reject weight-only/incomplete checkpoints and changes to training semantics."""
+    assert cfg.resume is not None
+    for name in ("COMPLETE", "vlade_fft.json", "trainer_state.pt"):
+        if not (cfg.resume / name).is_file():
+            raise FileNotFoundError(f"Resume requires {cfg.resume / name}; enable save_optimizer_state")
+    saved = json.loads((cfg.resume / "vlade_fft.json").read_text(encoding="utf-8"))
+    current = asdict(cfg)
+    compatible = ("model", "checkpoint", "data_root", "dataset_name", "max_steps", "batch_size",
+                  "grad_accumulation_steps", "learning_rate", "weight_decay", "seed",
+                  "shuffle_buffer_size", "num_images_in_input", "optimizer", "gradient_checkpointing",
+                  "image_aug", "max_grad_norm", "lr_schedule", "warmup_steps")
+    for name in compatible:
+        value = str(current[name]) if isinstance(current[name], Path) else current[name]
+        if saved["configuration"].get(name) != value:
+            raise ValueError(f"Resume configuration mismatch: {name}")
+    experiment_path = cfg.config_path or REPO_ROOT / "configs/experiments/libero_plus_fft.json"
+    experiment = json.loads(experiment_path.read_text(encoding="utf-8"))
+    if saved["dataset_revision"] != experiment["training"]["dataset_revision"]:
+        raise ValueError("Resume dataset revision mismatch")
+    if saved["checkpoint_revision"] != experiment["initial_checkpoints"][cfg.model]["revision"]:
+        raise ValueError("Resume checkpoint revision mismatch")
+    upstream = _git_revision(REPO_ROOT / SOURCES[cfg.model])
+    if upstream is not None and saved["upstream_revision"] != upstream:
+        raise ValueError("Resume upstream revision mismatch")
+    if saved.get("training_code_sha256") != _code_fingerprint():
+        raise ValueError("Resume training code mismatch")
+    return saved
 
 
 def train(cfg: FFTConfig) -> None:
     import torch
+    from vlade.training.loop import LoopState, evaluate, make_scheduler, restore_training_state, run_loop
 
     preflight(cfg)
-    if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
+    if not torch.cuda.is_available():
         raise RuntimeError("FFT requires a CUDA GPU with BF16 support")
+    device = torch.device(cfg.device)
+    torch.cuda.set_device(device)
+    if not torch.cuda.is_bf16_supported():
+        raise RuntimeError("FFT requires a CUDA GPU with BF16 support")
+    # RLDS preprocessing must not reserve CUDA memory needed by the VLA.
+    import tensorflow as tf
+    tf.config.set_visible_devices([], "GPU")
+    tf.random.set_seed(cfg.seed)
     _activate_upstream(cfg.model)
     set_seed(cfg.seed)
-    device = torch.device("cuda:0")
-    model, processor, head, proprio, generator = _make_model_and_components(cfg, device)
-    loader, dataset = _make_loader(cfg, model, processor)
-    modules = [model, head, proprio] + ([generator] if generator is not None else [])
-    for module in modules:
-        module.train()
-    params = [p for module in modules for p in module.parameters() if p.requires_grad]
-    for module in modules:
-        if not all(param.requires_grad for param in module.parameters()):
-            raise RuntimeError("FFT invariant failed: some model/component parameters are frozen")
-    optimizer = _make_optimizer(cfg, params)
-    num_patches = model.vision_backbone.get_num_patches() * cfg.num_images_in_input + 1
     cfg.output_dir.mkdir(parents=True, exist_ok=True)
-    optimizer.zero_grad(set_to_none=True)
-    step = 0
-    for microstep, batch in enumerate(loader, start=1):
-        loss = compute_loss(model, head, proprio, generator, batch, device, num_patches, step)
-        (loss / cfg.grad_accumulation_steps).backward()
-        if microstep % cfg.grad_accumulation_steps:
-            continue
-        optimizer.step()
-        optimizer.zero_grad(set_to_none=True)
-        step += 1
-        if step == 1 or step % 10 == 0:
-            print(f"step={step} loss={loss.detach().float().item():.5f} "
-                  f"allocated_gb={torch.cuda.max_memory_allocated() / 2**30:.2f}", flush=True)
-        if step % cfg.save_steps == 0 or step == cfg.max_steps:
-            saved = save_checkpoint(cfg, step, model, processor, head, proprio, generator, optimizer, dataset)
-            print(f"Saved {saved}", flush=True)
-        if step >= cfg.max_steps:
-            break
-    if step != cfg.max_steps:
-        raise RuntimeError(f"RLDS stream ended at step {step}, before requested step {cfg.max_steps}")
+    if cfg.resume is None and any(cfg.output_dir.glob("step-*")):
+        raise FileExistsError("Output already contains checkpoints; choose a new output_dir or --resume")
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
+    manifest_path = cfg.output_dir / f"run-{run_id}.json"
+    metrics_path = cfg.output_dir / f"metrics-{run_id}.jsonl"
+    experiment_path = cfg.config_path or REPO_ROOT / "configs/experiments/libero_plus_fft.json"
+    experiment = json.loads(experiment_path.read_text(encoding="utf-8"))
+    manifest = {
+        "status": "running", "run_id": run_id,
+        "configuration": {k: str(v) if isinstance(v, Path) else v for k, v in asdict(cfg).items()},
+        "source_revision": _git_revision(REPO_ROOT),
+        "upstream_revision": _git_revision(REPO_ROOT / SOURCES[cfg.model]),
+        "dataset_revision": experiment["training"]["dataset_revision"],
+        "checkpoint_revision": experiment["initial_checkpoints"][cfg.model]["revision"],
+        "software": {**_software_versions(), "cuda": torch.version.cuda},
+        "training_code_sha256": _code_fingerprint(),
+        "hardware": {"gpu": torch.cuda.get_device_name(device),
+                     "vram_bytes": torch.cuda.get_device_properties(device).total_memory},
+        "ava_temporal_training": "zero_context" if cfg.model == "ava_vla" else None,
+        "resume_data_stream": "restarted_not_bitwise_exact" if cfg.resume else None,
+    }
+
+    def record_manifest() -> None:
+        temporary = manifest_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        temporary.replace(manifest_path)
+
+    record_manifest()
+    state = LoopState()
+    try:
+        load_cfg = replace(cfg, checkpoint=cfg.resume) if cfg.resume else cfg
+        model, processor, head, proprio, generator = _make_model_and_components(load_cfg, device)
+        loader, dataset = _make_loader(cfg, model, processor)
+        validation = _make_loader(cfg, model, processor, train=False)[0] if cfg.eval_steps else None
+        modules = [model, head, proprio] + ([generator] if generator is not None else [])
+        for module in modules:
+            if not all(param.requires_grad for param in module.parameters()):
+                raise RuntimeError("FFT invariant failed: some model/component parameters are frozen")
+        params = [p for module in modules for p in module.parameters() if p.requires_grad]
+        optimizer = _make_optimizer(cfg, params)
+        scheduler = make_scheduler(optimizer, cfg.max_steps, cfg.warmup_steps, cfg.lr_schedule)
+        if cfg.resume:
+            payload = torch.load(cfg.resume / "trainer_state.pt", map_location="cpu", weights_only=True)
+            state = restore_training_state(payload, optimizer, scheduler)
+            saved = validate_resume(cfg)
+            if state.step != saved["step"]:
+                raise ValueError("Trainer state step does not match checkpoint metadata")
+            print("Resumed optimizer/scheduler/RNG; RLDS stream restarts (not bitwise exact).", flush=True)
+        num_patches = model.vision_backbone.get_num_patches() * cfg.num_images_in_input + 1
+        torch.cuda.reset_peak_memory_stats(device)
+
+        def loss_fn(batch: Any, step: int) -> Any:
+            return compute_loss(model, head, proprio, generator, batch, device, num_patches, step)
+
+        with metrics_path.open("x", encoding="utf-8") as metrics_file:
+            def on_step(current: Any, metrics: dict[str, float]) -> None:
+                metrics["peak_allocated_bytes"] = torch.cuda.max_memory_allocated(device)
+                if validation is not None and current.step % cfg.eval_steps == 0:
+                    metrics["val_l1"] = evaluate(modules, validation, loss_fn, current.step, cfg.max_eval_batches)
+                metrics_file.write(json.dumps({"step": current.step, "microsteps": current.microsteps,
+                                               **metrics}) + "\n")
+                metrics_file.flush()
+                if current.step == 1 or current.step % cfg.log_steps == 0:
+                    print(f"step={current.step} loss={metrics['loss']:.5f} lr={metrics['lr']:.3g}", flush=True)
+                if current.step % cfg.save_steps == 0 or current.step == cfg.max_steps:
+                    saved_path = save_checkpoint(cfg, current.step, model, processor, head, proprio,
+                                                 generator, optimizer, dataset,
+                                                 scheduler=scheduler, loop_state=current)
+                    print(f"Saved {saved_path}", flush=True)
+                manifest["step"] = current.step
+                record_manifest()
+
+            run_loop(modules=modules, optimizer=optimizer, scheduler=scheduler, batches=loader,
+                     loss_fn=loss_fn, max_steps=cfg.max_steps,
+                     accumulation_steps=cfg.grad_accumulation_steps, max_grad_norm=cfg.max_grad_norm,
+                     state=state, on_step=on_step)
+        manifest["status"] = "completed"
+    except BaseException as exc:
+        manifest.update(status="interrupted" if isinstance(exc, KeyboardInterrupt) else "failed",
+                        step=state.step, error_type=type(exc).__name__, error=str(exc))
+        raise
+    finally:
+        record_manifest()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -398,11 +547,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--preflight", action="store_true", help="Validate paths and files without loading CUDA")
     parser.add_argument("--max-steps", type=int, help="Override max steps, useful for a one-step smoke test")
     parser.add_argument("--save-steps", type=int, help="Override checkpoint interval")
+    parser.add_argument("--resume", type=Path, help="Completed checkpoint containing trainer_state.pt")
+    parser.add_argument("--output-dir", type=Path, help="Use a separate output for smoke runs")
+    parser.add_argument("--save-training-state", action="store_true", help="Save optimizer/scheduler/RNG for resume")
     args = parser.parse_args(argv)
     cfg = FFTConfig.from_json(args.config, args.model)
     cfg = replace(cfg, **{key: value for key, value in {
         "max_steps": args.max_steps, "save_steps": args.save_steps,
     }.items() if value is not None})
+    cfg = replace(cfg, resume=args.resume.resolve() if args.resume else None,
+                  output_dir=args.output_dir.resolve() if args.output_dir else cfg.output_dir,
+                  save_optimizer_state=cfg.save_optimizer_state or args.save_training_state)
     cfg.validate()
     if args.preflight:
         preflight(cfg)

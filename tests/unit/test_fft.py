@@ -3,6 +3,7 @@
 import json
 import sys
 from contextlib import nullcontext
+from dataclasses import replace
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -15,6 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from vlade.training.fft import (  # noqa: E402
     FFTConfig, compute_loss, find_component, preflight, register_libero_plus_dataset, save_checkpoint,
+    validate_resume,
 )
 
 
@@ -159,12 +161,59 @@ def test_full_checkpoint_saves_model_and_all_components(monkeypatch, tmp_path):
     source.mkdir()
     for name in ("configuration_prismatic.py", "modeling_prismatic.py", "processing_prismatic.py"):
         (source / name).write_text("# model code\n", encoding="utf-8")
-    cfg = FFTConfig("ava_vla", source, tmp_path, tmp_path / "out")
+    cfg = FFTConfig("ava_vla", source, tmp_path, tmp_path / "out", save_optimizer_state=True,
+                    optimizer="adamw")
     module = DummySaver()
-    result = save_checkpoint(cfg, 1, module, DummyProcessor(), module, module, module, None,
-                             SimpleNamespace(dataset_statistics={"ok": True}))
+    from vlade.training.loop import LoopState, make_scheduler
+    optimizer = torch.optim.AdamW(module.parameters())
+    scheduler = make_scheduler(optimizer, cfg.max_steps)
+    result = save_checkpoint(cfg, 1, module, DummyProcessor(), module, module, module, optimizer,
+                             SimpleNamespace(dataset_statistics={"ok": True}),
+                             scheduler=scheduler, loop_state=LoopState(1, 8))
     assert (result / "COMPLETE").is_file()
     assert (result / "model.pt").is_file()
     assert (result / "vision_attn_weight_generator--1_checkpoint.pt").is_file()
     assert (result / "modeling_prismatic.py").is_file()
     assert json.loads((result / "vlade_fft.json").read_text(encoding="utf-8"))["step"] == 1
+    assert (result / "trainer_state.pt").is_file()
+    assert not list(cfg.output_dir.glob("*.incomplete"))
+    validate_resume(replace(cfg, resume=result))
+    with pytest.raises(ValueError, match="learning_rate"):
+        validate_resume(replace(cfg, resume=result, learning_rate=1e-3))
+    with pytest.raises(FileExistsError):
+        save_checkpoint(cfg, 1, module, DummyProcessor(), module, module, module, optimizer,
+                        SimpleNamespace(dataset_statistics={}))
+
+
+def test_resume_rejects_weight_only_or_incomplete_checkpoint(tmp_path):
+    cfg = FFTConfig("ava_vla", tmp_path, tmp_path, tmp_path, resume=tmp_path)
+    with pytest.raises(FileNotFoundError, match="COMPLETE"):
+        validate_resume(cfg)
+    (tmp_path / "COMPLETE").touch()
+    (tmp_path / "vlade_fft.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(FileNotFoundError, match="trainer_state"):
+        validate_resume(cfg)
+
+
+@pytest.mark.parametrize("overrides", [{"learning_rate": float("nan")}, {"max_grad_norm": 0},
+                                     {"warmup_steps": 1000}, {"eval_steps": -1}])
+def test_invalid_training_options(overrides, tmp_path):
+    with pytest.raises(ValueError):
+        FFTConfig("ava_vla", tmp_path, tmp_path, tmp_path, **overrides).validate()
+
+
+def test_failed_save_never_publishes_complete_checkpoint(tmp_path):
+    class BrokenSaver:
+        def save_pretrained(self, path, **kwargs):
+            raise OSError("disk full")
+
+    # Imports for the upstream statistics writer occur before the model save.
+    utilities = ModuleType("prismatic.vla.datasets.rlds.utils.data_utils")
+    utilities.save_dataset_statistics = lambda *_: None
+    from unittest.mock import patch
+    cfg = FFTConfig("ava_vla", tmp_path, tmp_path, tmp_path / "out")
+    with patch.dict(sys.modules, {utilities.__name__: utilities}):
+        with pytest.raises(OSError, match="disk full"):
+            save_checkpoint(cfg, 1, BrokenSaver(), None, None, None, None, None, None)
+    assert not (cfg.output_dir / "step-0000001").exists()
+    assert not list(cfg.output_dir.rglob("COMPLETE"))
