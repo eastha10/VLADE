@@ -1,0 +1,57 @@
+{
+  "review_date": "2026-10-28 morning Asia/Seoul",
+  "source_review_coverage": [
+    {
+      "id": "404b5dd0687081ffb383cdc487f52a01",
+      "total": 5,
+      "covered": 5,
+      "missing": []
+    },
+    {
+      "id": "404b5dd0687081209307da07bda9d7e7",
+      "total": 6,
+      "covered": 6,
+      "missing": []
+    },
+    {
+      "id": "404b5dd0687081fdaec2e3c2e5b32a2e",
+      "total": 6,
+      "covered": 6,
+      "missing": []
+    },
+    {
+      "id": "403b5dd0687081bcbf1ef3b79d6acd73",
+      "total": 4,
+      "covered": 4,
+      "missing": []
+    },
+    {
+      "id": "403b5dd068708126a4a5c5559d807981",
+      "total": 3,
+      "covered": 3,
+      "missing": []
+    }
+  ],
+  "unit_tests": {
+    "passed": 77,
+    "seconds": 15.37,
+    "command": "python -m pytest tests/unit -q -p no:cacheprovider --basetemp=artifacts/testing/colab-code-fixes-run4 --tb=short"
+  },
+  "notebooks": 3,
+  "notebook_code_cells": 19,
+  "real_gpu_training_executed": false,
+  "real_data_pipeline_executed": false,
+  "review_url": "https://app.notion.com/p/406b5dd068708197bcc9df8b8f79e175",
+  "implemented": [
+    "epoch_budget",
+    "seeded_episode_shuffle_and_query_cursor",
+    "spread_periodic_validation",
+    "opt_in_main_and_pilot_report_gates",
+    "pre_update_gradient_diagnostics",
+    "post_checkpoint_bounded_debug",
+    "checkpoint_space_and_atomic_json",
+    "cache_code_software_identity_and_spread_replay",
+    "measured_validation_report_schema",
+    "source_package_replacement_guard"
+  ]
+}

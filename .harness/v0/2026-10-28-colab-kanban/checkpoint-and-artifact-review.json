@@ -1,0 +1,61 @@
+{
+  "record_type": "checkpoint_and_artifact_cross_review",
+  "date": "2026-10-28",
+  "unit_tests": {
+    "passed": 115,
+    "seconds": 35.26,
+    "command": "python -m pytest tests/unit -q -p no:cacheprovider --basetemp=artifacts/testing/final-review-run3 --tb=short"
+  },
+  "review_scope": [
+    "episode manifest/split/normalization consistency",
+    "model/optimizer checkpoint seal and stage counters",
+    "all cache part source identity/feature mode",
+    "completed vs incomplete cache bytes",
+    "pilot data/code/config/checkpoint/policy identity",
+    "existing T1 selection conflict and T0/T1 distinct path",
+    "recoverable owned extraction staging",
+    "latest run report ordering",
+    "TensorFlow CPU isolation",
+    "bounded Windows publish retry"
+  ],
+  "new_regression_files": [
+    "tests/unit/test_final_data_review.py",
+    "tests/unit/test_final_cache_review.py",
+    "tests/unit/test_final_run_review.py"
+  ],
+  "real_gpu_training_executed": false,
+  "real_rlds_pipeline_executed": false,
+  "pretrained_weights_downloaded": false,
+  "source_criterion_coverage": {
+    "covered": 24,
+    "total": 24
+  },
+  "notion_url": "https://app.notion.com/p/406b5dd068708197bcc9df8b8f79e175",
+  "bundle_sha256": "cd8ef2d707fc21703e104f1112e2b9f001e6dd883126df959060c76abd035925",
+  "bundle_files_verified": 159,
+  "python_ast_files": 21,
+  "notebook_code_cells": 19,
+  "source_sha256": {
+    "src/vlade/training/debug_records.py": "a22afd4083dc783ec4aa212e8b74f42df1839320e4a701bf9afb2f2c8818aa43",
+    "src/vlade/training/fft.py": "ba0f036a0ceb3dd7851744b8ad97aa8d8714206e4881dc00724b9a910a2eb50e",
+    "src/vlade/training/fixed_cache.py": "7d66690717c633ecd7cf49089eead47b540999a29e8bdbf3206af80998c8f43d",
+    "src/vlade/training/loop.py": "1830babeffbcd002dcb360febbca6cd87ae88cefea84e6f73986663f6c954f2e",
+    "src/vlade/training/prepared_fft.py": "d2bda5a74c557ec40459050974c8a0a976919faf259af8d317e24824f4ec0f38",
+    "src/vlade/training/run_control.py": "a53e8f431e4877a48bee05dfc57d100416e903b89bc413e239acc3a60e885898",
+    "src/vlade/training/smoke.py": "470a7cf3fbc0c4968bd920ea17cc6499c554c2ae67688a1dff2748596eddc68c",
+    "src/vlade/training/student_task.py": "16324e9ecbf7df44e41073216f4ce719121a85ab560c87cd9691a88058b66183",
+    "src/vlade/data/episode_data.py": "292f74a4a28bcc142ae66613d3e257815b87caa75d30011b39c269cda62f6eb2",
+    "src/vlade/data/colab_assets.py": "02cf9b3397426cd3f3623a0e00b507c72a778a1a3675250fdbaa8675bc71ddf8",
+    "src/vlade/utils/filesystem.py": "5328964c462b19b2360b3b083ecbf3a91bdeb3c4f71231c37fb736a669227141",
+    "src/vlade/utils/colab_package.py": "657e3c2fa943711ba0ec2081d2515fad0bd22c400b04c573dc35531b4d3f39a9",
+    "scripts/train/check_fft_checkpoint.py": "8f42e9b75a8b38ab18c62167e2f821ba0c56fa557e81e151bedd37f40fc563a4",
+    "scripts/train/check_student_checkpoint.py": "7793bbf95c6b05f94630943393824ec7a88e0b6e5356cbf5a3e0f454d9d0e1a7",
+    "scripts/train/run_fft.py": "e364fbc9d660a9b099b27fdff6f236f4cbd829ac9a98f80b280debb6481b54fa",
+    "scripts/train/run_student_task.py": "bc28f8256e3940d1ce5b7625b90b7695608929bfa5bd85c8901fa5d1b64f7e44",
+    "scripts/train/smoke_loop.py": "da88748e9cc566d800ea694fed07781d75362241af8249a7e7d3af71ec3d81d9",
+    "scripts/train/smoke_student.py": "63a04c5076cd82a5b585fbb54e4d1808bbc89357d1e32436a2854ad4147bf19e",
+    "tests/unit/test_final_cache_review.py": "3fa61acaa90c7255d9c55dca36cce69fa5f510f9e0dc517bc4b5c10ded4a9e0d",
+    "tests/unit/test_final_data_review.py": "399e3f34133b05bb34331c510fba01c2c3d8acbd0a70d0d390c21594d15cc07d",
+    "tests/unit/test_final_run_review.py": "2f2577bbf619e49135f5b2c7ae2c30d9bb0e0f5af3b0ac46772d58ef89793e1e"
+  }
+}

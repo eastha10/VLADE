@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "status": "contract_implemented_pretrained_validation_pending",
+  "student": {
+    "model_id": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "hidden_size": 1024,
+    "head_size": 256,
+    "head_heads": 4,
+    "history_queries": 2,
+    "query_interval_steps": 8,
+    "max_sequence_length": 8192,
+    "max_pixels_per_image": 65536,
+    "schema_version": 1
+  },
+  "action_contract": {
+    "shape": [8, 7],
+    "proprio_dimension": 8,
+    "normalization": "exact_teacher_stats_identified_by_sha256",
+    "coordinate_and_gripper_convention": "exact_teacher_adapter_convention",
+    "deployment_denormalization": "benchmark_adapter_only",
+    "head": "8_learned_queries_cross_attention_then_continuous_mlp",
+    "representation_kd": "project_semantic_horizon_features_not_raw_token_ids",
+    "temporal": "2_query_history_rebuild_no_recurrent_cache"
+  },
+  "environment": {
+    "separate_from_teacher": true,
+    "tested_transformers": "5.9.0",
+    "tested_torch": "2.12.0+cpu",
+    "pretrained_weights_downloaded": false,
+    "gpu_tested": false,
+    "edge_tested": false
+  },
+  "reference": "https://huggingface.co/Qwen/Qwen3.5-0.8B/blob/2fc06364715b967f1860aea9cf38778875588b17/config.json"
+}

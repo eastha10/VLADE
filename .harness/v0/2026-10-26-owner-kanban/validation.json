@@ -1,0 +1,63 @@
+{
+  "base_commit": "600f304292700d2408e226e75cb895e1c1b735c8",
+  "source_sha256": {
+    "src/vlade/data/teacher_records.py": "1e17786c40d2d238a19365faf26baa960ac2d4ce3bcc7e7d996d95515850f2c7",
+    "src/vlade/models/contracts.py": "79bcf084ab9ab16db56539702c3c75aa0d3dd0b6364e52ae6255aad8f6406257",
+    "src/vlade/models/students/qwen.py": "c656a79314643f143453352d24f9d4ecd070d207c876a36e13a2b02c403c1c5e",
+    "src/vlade/models/students/smoke.py": "96f1259d9fc3f3c5dcd55512fc6889549e8b0085caa5e6ccd19b1a889a54c105",
+    "scripts/train/smoke_student.py": "63a04c5076cd82a5b585fbb54e4d1808bbc89357d1e32436a2854ad4147bf19e",
+    "configs/models/student/qwen3_5_0_8b.json": "c2260711f132af1d03db57c79b0911262bd01d7a0ac4f871aebd536be9ff0d5f"
+  },
+  "unit_tests_passed": 55,
+  "native_tiny_result": {
+    "status": "passed",
+    "test_type": "tiny_random_native_qwen3_5_cpu_not_pretrained_0_8b",
+    "torch": "2.12.0+cpu",
+    "transformers": "5.9.0",
+    "action_shape": [
+      1,
+      8,
+      7
+    ],
+    "loss": 0.8037014007568359,
+    "finite_nonzero_gradient_groups": {
+      "vision": true,
+      "language": true,
+      "proprio": true,
+      "action": true
+    },
+    "input_sensitivity_max_abs": {
+      "vision": 0.2794322967529297,
+      "language": 0.0036247819662094116,
+      "proprio": 0.0018203258514404297
+    },
+    "save_load_exact": true,
+    "official_tokenizer_processor_tested": true,
+    "input_shapes": {
+      "input_ids": [
+        1,
+        330
+      ],
+      "attention_mask": [
+        1,
+        330
+      ],
+      "mm_token_type_ids": [
+        1,
+        330
+      ],
+      "pixel_values": [
+        1024,
+        1536
+      ],
+      "image_grid_thw": [
+        4,
+        3
+      ]
+    },
+    "pretrained_weights_tested": false,
+    "gpu_tested": false,
+    "edge_tested": false
+  },
+  "pretrained_weights_deferred_by_user": true
+}

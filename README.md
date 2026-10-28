@@ -15,9 +15,9 @@ baseline으로 등록했습니다. 사용자 포크 `eastha10/AVA-VLA`의 원본
 `third_party/ava_vla/`, OpenVLA-OFT 원본 소스는 `third_party/openvla_oft/` Git
 submodule로 관리합니다. VLADE 자체 구현은 `src/vlade/`에 분리합니다.
 
-현재 단계는 baseline 등록과 FFT 공통 학습 루프의 CPU 검증까지입니다.
+현재 단계는 baseline 등록, FFT 공통 학습 루프와 Teacher 출력 저장·Student 계약의 CPU 검증까지입니다.
 실제 Colab GPU 학습은 아직 검증하지 않았습니다. Teacher 어댑터,
-Student 및 증류 학습 코드는 아직 구현하지 않았습니다. 두 공개 체크포인트의
+Qwen Student의 연속 action head와 별도 VLM 연결 계약은 구현했으며 실제 0.8B 가중치·증류 학습은 아직 검증하지 않았습니다. 두 공개 체크포인트의
 A100 단일 추론은 통과했으며, 실제 benchmark 평가 결과는 아직 검증하지 않았습니다. baseline 사용법은
 [`experiments/baselines/README.md`](experiments/baselines/README.md), AVA-VLA 연결
 방법과 검토할 가중치는 [`docs/environment/ava_vla.md`](docs/environment/ava_vla.md)에
@@ -119,3 +119,69 @@ CPU 검사는 `python -m pytest tests/unit -q` 및
 Qwen3.5, SmolVLM2/SmolVLA, Llama 3.2, Gemma 4의 호환성과 계산량 검토는
 [backbone 검토](docs/decisions/0003-backbone-review.md)에 정리했습니다.
 이는 후보 우선순위이며 Student 구현·모델 교체나 VLA 성능 검증을 의미하지 않습니다.
+
+## Teacher 저장·Student 계약·집필 준비 (2026-10-26)
+
+Teacher action/GT token/hidden-state 저장·로드와 provenance·episode 순서·용량 검사를
+`src/vlade/data/teacher_records.py`에 구현했습니다. Qwen3.5-0.8B를 별도 VLM으로
+연결하는 계약과 연속 `[B,8,7]` action head는 `src/vlade/models/students/qwen.py`에 있습니다.
+공식 tokenizer·processor와 축소 무작위 native Qwen 모듈에서 CPU 검증을 수행합니다.
+모델 가중치 검토는 사용자 요청에 따라 추후로 미뤘으며 실제 pretrained 0.8B·GPU·KD
+학습이나 성공률을 검증한 것은 아닙니다.
+
+- [저장 형식·Student 계약·실행 안내](docs/environment/teacher_records_and_student.md)
+- [논문 outline·Related Work·조건/결과표 양식](docs/paper/preparation.md)
+- [실험 기록 JSON 템플릿](docs/paper/experiment-record.template.json)
+
+```bash
+python scripts/train/smoke_student.py --output-dir artifacts/student/tiny-random-check
+```
+
+실제 고정 T1 cache 생성·episode rollout 연결과 학습/평가 budget 확정은 별도 선행 작업입니다.
+
+## Colab 데이터 준비·FFT·27일 업무 인계 (2026-10-28)
+
+Drive를 공통 저장소로 사용하는 순서별 노트북을 추가했습니다.
+
+1. [LIBERO+·AVA 가중치 다운로드/검증·episode 전처리](experiments/colab_01_download_data_weights.ipynb)
+2. [AVA-VLA FFT·저장/재개·T1 선택·순차 cache](experiments/colab_02_ava_fft_and_fixed_cache.ipynb)
+3. [Qwen Task-only·실제 가중치 로딩·overfit·저장/재개](experiments/colab_03_qwen_task_only.ipynb)
+
+Colab에서 사용하는 코드와 노트북은 아래 위치의 일반 파일을 정본으로 관리합니다.
+
+| 위치 | 용도 |
+|---|---|
+| `src/vlade/data/`, `src/vlade/training/` | 다운로드·episode 데이터·FFT·cache·Student 학습의 실제 구현 |
+| `scripts/data/`, `scripts/train/` | 위 구현을 실행하는 명령과 checkpoint 재로딩 검사 |
+| `experiments/colab_01_*.ipynb`부터 `colab_03_*.ipynb` | Colab에서 여는 순서별 실행 노트북 |
+| `configs/` | 모델·데이터·학습 조건과 고정 revision |
+| `experiments/baselines/`, `experiments/manifests/` | 비교 기준과 원본 소스 기록, Colab 파일별 SHA256 manifest |
+| `docs/`, `tests/` | 실행·연구 검토 안내와 회귀 검사 |
+
+노트북과 `experiments/manifests/colab_source.json`은 저장소 루트에서 아래 명령으로 갱신합니다.
+
+```bash
+python scripts/prepare/generate_colab_notebooks.py
+```
+
+생성 구현은 `src/vlade/utils/colab_notebooks.py`에 있습니다. 현재 작업 파일 트리를
+Drive의 `/content/drive/MyDrive/VLADE`에 같은 구조로 배치한 뒤 `experiments/`의 노트북을
+Colab에서 여십시오. 노트북의 `ROOT`와 `PROJECT_ROOT`는 기본적으로 이 같은 경로를 가리키며,
+그 바로 아래에 `src/`, `scripts/`, `configs/`, `third_party/`가 있어야 합니다.
+시작 셀은 manifest와 각 파일의 SHA256을 확인하고 필요한 일반 파일을 `/content`로 복사합니다.
+미커밋 변경도 사용할 파일 트리와 manifest에 포함되어야 합니다. GitHub HEAD만 받은 사본에는
+현재 작업 내용이 빠질 수 있습니다.
+
+Colab manifest에는 baseline·원본 소스 기록을 포함하지만, 이번 실행에서 사용하는 upstream
+코드는 `third_party/ava_vla/`입니다. OpenVLA-OFT는 기존 baseline의 별도 환경에서 다룹니다.
+실행·분할 정본·AVA zero-context FFT 제한은 [Colab 인계 문서](docs/environment/colab_kanban_handoff.md)에
+정리했습니다. 일반 파일 전환 후 전체 CPU 회귀 검사 **127개 통과(40.24초)**와 실제 GPU 미검증 범위를 구분하며,
+CPU 검증을 실제 T1 선정/cache·Task-only 성능 결과로 해석하지 않습니다.
+
+Colab 본 학습은 실제 train query 수×설정 epoch로 예산을 계산하며 기본 자동 실행을 끕니다.
+공통 episode shuffle/query cursor 재개, 주기 validation, 첫 gradient 검사, 파일럿 실행 조건,
+checkpoint 공간 검사·bounded debug와 T1 비교 보고서 검증을 연결했습니다.
+기본 1 epoch·overfit 감소 기준 등 최종 실험 선택은 검토 대상이며 실제 GPU 성공을 뜻하지 않습니다.
+
+추가 교차 검토 후 split manifest 정합성, checkpoint 파일·step 봉인, cache source/feature 대조,
+파일럿 보고서 identity와 기존 T1 선택 충돌 검사, 소유한 추출 임시 파일의 재시작도 보완했습니다.

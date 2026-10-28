@@ -1,0 +1,25 @@
+{
+  "report_type": "teacher_validation_comparison",
+  "selection_split": "validation",
+  "used_final_test": false,
+  "evaluation_protocol_sha256": "",
+  "data_split_sha256": "",
+  "candidates": [
+    {
+      "role": "T0",
+      "checkpoint": "",
+      "validation_success_rate": null,
+      "validation_episodes": null,
+      "original_libero_success_rate": null,
+      "original_libero_episodes": null
+    },
+    {
+      "role": "T1",
+      "checkpoint": "",
+      "validation_success_rate": null,
+      "validation_episodes": null,
+      "original_libero_success_rate": null,
+      "original_libero_episodes": null
+    }
+  ]
+}

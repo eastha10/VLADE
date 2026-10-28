@@ -56,6 +56,8 @@ class FFTConfig:
     max_eval_batches: int = 10
     device: str = "cuda:0"
     resume: Path | None = None
+    prepared_data_root: Path | None = None
+    debug_records: int = 0
 
     @classmethod
     def from_json(cls, path: Path, model: str) -> "FFTConfig":
@@ -68,6 +70,9 @@ class FFTConfig:
         for key in ("checkpoint", "data_root", "output_dir"):
             value = Path(merged[key]).expanduser()
             merged[key] = value if value.is_absolute() else REPO_ROOT / value
+        if merged.get("prepared_data_root") is not None:
+            value = Path(merged["prepared_data_root"]).expanduser()
+            merged["prepared_data_root"] = value if value.is_absolute() else REPO_ROOT / value
         cfg = cls(**merged)
         cfg.validate()
         return cfg
@@ -89,6 +94,8 @@ class FFTConfig:
             raise ValueError("Invalid clipping, logging or evaluation settings")
         if self.lr_schedule not in {"constant", "cosine"} or not 0 <= self.warmup_steps < self.max_steps:
             raise ValueError("Invalid LR schedule or warmup_steps")
+        if self.debug_records < 0:
+            raise ValueError("debug_records must be nonnegative")
         if not self.device.startswith("cuda"):
             raise ValueError("The pinned FFT adapters require a BF16 CUDA device")
 
@@ -163,14 +170,17 @@ def preflight(cfg: FFTConfig) -> None:
     for filename in ("configuration_prismatic.py", "modeling_prismatic.py", "processing_prismatic.py"):
         if not (cfg.checkpoint / filename).is_file():
             raise FileNotFoundError(f"Missing checkpoint model code: {cfg.checkpoint / filename}")
-    if not cfg.data_root.is_dir():
+    if cfg.prepared_data_root is not None:
+        from vlade.data.episode_data import EpisodeData
+        EpisodeData(cfg.prepared_data_root)
+    elif not cfg.data_root.is_dir():
         raise FileNotFoundError(f"Missing extracted RLDS data root: {cfg.data_root}")
-    if not (cfg.data_root / cfg.dataset_name).is_dir():
+    if cfg.prepared_data_root is None and not (cfg.data_root / cfg.dataset_name).is_dir():
         raise FileNotFoundError(
             f"Expected extracted TFDS directory {cfg.data_root / cfg.dataset_name}; "
             "the split ZIP archives must be extracted first"
         )
-    if cfg.dataset_name == "libero_plus_mixdata" and len(_tfds_info_files(cfg.data_root, cfg.dataset_name)) != 1:
+    if cfg.prepared_data_root is None and cfg.dataset_name == "libero_plus_mixdata" and len(_tfds_info_files(cfg.data_root, cfg.dataset_name)) != 1:
         raise FileNotFoundError(f"Expected one TFDS dataset_info.json under {cfg.data_root / cfg.dataset_name}")
     for name in ("action_head", "proprio_projector"):
         find_component(cfg.checkpoint, name)
@@ -211,8 +221,12 @@ def _make_model_and_components(cfg: FFTConfig, device: Any) -> tuple[Any, Any, A
     AutoProcessor.register(OpenVLAConfig, PrismaticProcessor)
     AutoModelForVision2Seq.register(OpenVLAConfig, OpenVLAForActionPrediction)
     processor = AutoProcessor.from_pretrained(cfg.checkpoint, trust_remote_code=True)
-    model = AutoModelForVision2Seq.from_pretrained(
-        cfg.checkpoint, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, trust_remote_code=True
+    # Use the pinned source implementation; do not rewrite the original Hub snapshot.
+    model_config = OpenVLAConfig.from_pretrained(cfg.checkpoint, local_files_only=True)
+    model = OpenVLAForActionPrediction.from_pretrained(
+        cfg.checkpoint, config=model_config, torch_dtype=torch.bfloat16,
+        low_cpu_mem_usage=True, attn_implementation="eager" if cfg.model == "ava_vla" else "sdpa",
+        local_files_only=True,
     )
     model.vision_backbone.set_num_images_in_input(cfg.num_images_in_input)
     if cfg.gradient_checkpointing:
@@ -254,6 +268,9 @@ def _make_model_and_components(cfg: FFTConfig, device: Any) -> tuple[Any, Any, A
 
 
 def _make_loader(cfg: FFTConfig, model: Any, processor: Any, *, train: bool = True) -> tuple[Any, Any]:
+    if cfg.prepared_data_root is not None:
+        from vlade.training.prepared_fft import make_loader
+        return make_loader(cfg, processor, train=train)
     from torch.utils.data import DataLoader
 
     from prismatic.models.backbones.llm.prompting import PurePromptBuilder
@@ -282,7 +299,7 @@ def _make_loader(cfg: FFTConfig, model: Any, processor: Any, *, train: bool = Tr
 
 
 def compute_loss(model: Any, head: Any, proprio: Any, generator: Any, batch: dict, device: Any,
-                 num_patches: int, step: int) -> Any:
+                 num_patches: int, step: int, *, capture: Any = None) -> Any:
     """Continuous-action L1 objective, with AVA's attention module in the graph."""
     import torch
     from prismatic.training.train_utils import get_current_action_mask, get_next_actions_mask
@@ -300,7 +317,8 @@ def compute_loss(model: Any, head: Any, proprio: Any, generator: Any, batch: dic
         if generator is not None:
             # RLDSBatchTransform samples individual timesteps; it has no previous
             # action feature. The upstream generator uses its learned zero buffer.
-            kwargs = {"temporal_context": None, "vision_attn_weight_generator": generator, "batch_idx": step}
+            kwargs = {"temporal_context": None, "vision_attn_weight_generator": generator,
+                      "batch_idx": step if model.training else None}
         output = model(
             input_ids=batch["input_ids"].to(device),
             attention_mask=batch["attention_mask"].to(device),
@@ -320,6 +338,15 @@ def compute_loss(model: Any, head: Any, proprio: Any, generator: Any, batch: dic
         prediction = head.predict_action(action_hidden.to(torch.bfloat16))
         if prediction.shape != target.shape:
             raise ValueError(f"Prediction/target shape mismatch: {prediction.shape} vs {target.shape}")
+        if capture is not None:
+            capture({"predicted_action": prediction.detach().float().cpu(), "gt_action": target.detach().cpu(),
+                     "proprio": state.detach().float().cpu(),
+                     "gt_token_ids": labels[:, 1:][action_mask].reshape(batch_size, 56).detach().cpu()})
+        if "action_valid_mask" in batch:
+            valid = batch["action_valid_mask"].to(device)
+            if valid.shape != target.shape or valid.dtype != torch.bool or not valid.any():
+                raise ValueError("Invalid action tail mask")
+            return (prediction.float()[valid] - target[valid]).abs().mean()
         return torch.nn.functional.l1_loss(prediction.float(), target)
 
 
@@ -338,12 +365,28 @@ def _git_revision(path: Path) -> str | None:
         ["git", "-c", f"safe.directory={path.as_posix()}", "-C", str(path), "rev-parse", "HEAD"],
         text=True, capture_output=True, check=False,
     )
-    return result.stdout.strip() if result.returncode == 0 else None
+    if result.returncode == 0:
+        return result.stdout.strip()
+    source_manifest = REPO_ROOT / "experiments/manifests/colab_source.json"
+    if source_manifest.is_file():
+        relative = "." if path == REPO_ROOT else path.relative_to(REPO_ROOT).as_posix()
+        return json.loads(source_manifest.read_text(encoding="utf-8"))["source_revisions"].get(relative)
+    return None
 
 
 def _code_fingerprint() -> dict[str, str]:
-    return {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
-            for name in ("fft.py", "loop.py")}
+    paths = [Path(__file__).with_name(name) for name in ("fft.py", "loop.py", "prepared_fft.py", "run_control.py", "debug_records.py")]
+    paths.append(Path(__file__).parents[1] / "data/episode_data.py")
+    return {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+
+
+def _prepared_data_identity(cfg: FFTConfig) -> dict | None:
+    if cfg.prepared_data_root is None:
+        return None
+    from vlade.data.episode_data import EpisodeData
+    data = EpisodeData(cfg.prepared_data_root)
+    return {**{key: data.manifest[key] for key in ("normalization_sha256", "split_sha256")},
+            "manifest_sha256": hashlib.sha256((data.root / "manifest.json").read_bytes()).hexdigest()}
 
 
 def _software_versions() -> dict[str, str | None]:
@@ -399,11 +442,15 @@ def save_checkpoint(cfg: FFTConfig, step: int, model: Any, processor: Any, head:
         "upstream_revision": _git_revision(REPO_ROOT / SOURCES[cfg.model]),
         "software": {**_software_versions(), "cuda": torch.version.cuda},
         "training_code_sha256": _code_fingerprint(),
+        "prepared_data_identity": _prepared_data_identity(cfg),
         "hardware": {"gpu": torch.cuda.get_device_name(torch.device(cfg.device)), "vram_bytes": torch.cuda.get_device_properties(torch.device(cfg.device)).total_memory},
         "ava_temporal_training": "zero_context" if generator is not None else None,
     }, indent=2), encoding="utf-8")
+    from vlade.training.run_control import seal_checkpoint
+    seal_checkpoint(path, step, loop_state.microsteps if loop_state is not None else step * cfg.grad_accumulation_steps)
     (path / "COMPLETE").write_text("ok\n", encoding="utf-8")
-    path.rename(destination)
+    from vlade.utils.filesystem import publish_directory
+    publish_directory(path, destination)
     return destination
 
 
@@ -413,12 +460,16 @@ def validate_resume(cfg: FFTConfig) -> dict[str, Any]:
     for name in ("COMPLETE", "vlade_fft.json", "trainer_state.pt"):
         if not (cfg.resume / name).is_file():
             raise FileNotFoundError(f"Resume requires {cfg.resume / name}; enable save_optimizer_state")
+    from vlade.training.run_control import verify_checkpoint
+    sealed = verify_checkpoint(cfg.resume, accumulation=cfg.grad_accumulation_steps)
     saved = json.loads((cfg.resume / "vlade_fft.json").read_text(encoding="utf-8"))
+    if sealed["step"] != saved["step"]:
+        raise ValueError("Checkpoint seal/metadata step mismatch")
     current = asdict(cfg)
     compatible = ("model", "checkpoint", "data_root", "dataset_name", "max_steps", "batch_size",
                   "grad_accumulation_steps", "learning_rate", "weight_decay", "seed",
                   "shuffle_buffer_size", "num_images_in_input", "optimizer", "gradient_checkpointing",
-                  "image_aug", "max_grad_norm", "lr_schedule", "warmup_steps")
+                  "image_aug", "max_grad_norm", "lr_schedule", "warmup_steps", "prepared_data_root")
     for name in compatible:
         value = str(current[name]) if isinstance(current[name], Path) else current[name]
         if saved["configuration"].get(name) != value:
@@ -434,6 +485,8 @@ def validate_resume(cfg: FFTConfig) -> dict[str, Any]:
         raise ValueError("Resume upstream revision mismatch")
     if saved.get("training_code_sha256") != _code_fingerprint():
         raise ValueError("Resume training code mismatch")
+    if saved.get("prepared_data_identity") != _prepared_data_identity(cfg):
+        raise ValueError("Resume prepared split/normalization mismatch")
     return saved
 
 
@@ -449,9 +502,8 @@ def train(cfg: FFTConfig) -> None:
     if not torch.cuda.is_bf16_supported():
         raise RuntimeError("FFT requires a CUDA GPU with BF16 support")
     # RLDS preprocessing must not reserve CUDA memory needed by the VLA.
-    import tensorflow as tf
-    tf.config.set_visible_devices([], "GPU")
-    tf.random.set_seed(cfg.seed)
+    from vlade.training.run_control import configure_tensorflow_cpu
+    configure_tensorflow_cpu(cfg.seed)
     _activate_upstream(cfg.model)
     set_seed(cfg.seed)
     cfg.output_dir.mkdir(parents=True, exist_ok=True)
@@ -471,10 +523,12 @@ def train(cfg: FFTConfig) -> None:
         "checkpoint_revision": experiment["initial_checkpoints"][cfg.model]["revision"],
         "software": {**_software_versions(), "cuda": torch.version.cuda},
         "training_code_sha256": _code_fingerprint(),
+        "prepared_data_identity": _prepared_data_identity(cfg),
         "hardware": {"gpu": torch.cuda.get_device_name(device),
                      "vram_bytes": torch.cuda.get_device_properties(device).total_memory},
         "ava_temporal_training": "zero_context" if cfg.model == "ava_vla" else None,
-        "resume_data_stream": "restarted_not_bitwise_exact" if cfg.resume else None,
+        "resume_data_stream": ("deterministic_query_cursor" if cfg.prepared_data_root else "restarted_not_bitwise_exact") if cfg.resume else None,
+        "sampler": "seeded_episode_shuffle_causal_queries_v1" if cfg.prepared_data_root else "upstream_rlds",
     }
 
     def record_manifest() -> None:
@@ -502,17 +556,30 @@ def train(cfg: FFTConfig) -> None:
             saved = validate_resume(cfg)
             if state.step != saved["step"]:
                 raise ValueError("Trainer state step does not match checkpoint metadata")
-            print("Resumed optimizer/scheduler/RNG; RLDS stream restarts (not bitwise exact).", flush=True)
+            print("Resumed optimizer/scheduler/RNG; prepared queries restore their cursor; raw RLDS restarts.", flush=True)
         num_patches = model.vision_backbone.get_num_patches() * cfg.num_images_in_input + 1
         torch.cuda.reset_peak_memory_stats(device)
 
+        last_training_batch = None
         def loss_fn(batch: Any, step: int) -> Any:
+            nonlocal last_training_batch
+            if model.training:
+                last_training_batch = batch
             return compute_loss(model, head, proprio, generator, batch, device, num_patches, step)
+
+        def before_step(current: Any) -> None:
+            if "gradient_diagnostics" not in manifest:
+                from vlade.training.run_control import gradient_diagnostics
+                groups = {"vision": model.vision_backbone, "language": model.language_model,
+                          "projector": model.projector, "action": head, "proprio": proprio}
+                if generator is not None:
+                    groups["attention_generator"] = generator
+                manifest["gradient_diagnostics"] = gradient_diagnostics(groups)
 
         with metrics_path.open("x", encoding="utf-8") as metrics_file:
             def on_step(current: Any, metrics: dict[str, float]) -> None:
                 metrics["peak_allocated_bytes"] = torch.cuda.max_memory_allocated(device)
-                if validation is not None and current.step % cfg.eval_steps == 0:
+                if validation is not None and (current.step % cfg.eval_steps == 0 or current.step == cfg.max_steps):
                     metrics["val_l1"] = evaluate(modules, validation, loss_fn, current.step, cfg.max_eval_batches)
                 metrics_file.write(json.dumps({"step": current.step, "microsteps": current.microsteps,
                                                **metrics}) + "\n")
@@ -520,17 +587,24 @@ def train(cfg: FFTConfig) -> None:
                 if current.step == 1 or current.step % cfg.log_steps == 0:
                     print(f"step={current.step} loss={metrics['loss']:.5f} lr={metrics['lr']:.3g}", flush=True)
                 if current.step % cfg.save_steps == 0 or current.step == cfg.max_steps:
+                    from vlade.training.run_control import checkpoint_space
+                    manifest["checkpoint_estimated_bytes"] = checkpoint_space(cfg.output_dir, modules, optimizer)
                     saved_path = save_checkpoint(cfg, current.step, model, processor, head, proprio,
                                                  generator, optimizer, dataset,
                                                  scheduler=scheduler, loop_state=current)
                     print(f"Saved {saved_path}", flush=True)
+                    if cfg.debug_records and last_training_batch is not None:
+                        from vlade.training.debug_records import emit_checkpoint_debug
+                        emit_checkpoint_debug(cfg, saved_path, current.step, modules, last_training_batch,
+                                              lambda capture: compute_loss(model, head, proprio, generator,
+                                                  last_training_batch, device, num_patches, current.step, capture=capture))
                 manifest["step"] = current.step
                 record_manifest()
 
             run_loop(modules=modules, optimizer=optimizer, scheduler=scheduler, batches=loader,
                      loss_fn=loss_fn, max_steps=cfg.max_steps,
                      accumulation_steps=cfg.grad_accumulation_steps, max_grad_norm=cfg.max_grad_norm,
-                     state=state, on_step=on_step)
+                     state=state, on_before_step=before_step, on_step=on_step)
         manifest["status"] = "completed"
     except BaseException as exc:
         manifest.update(status="interrupted" if isinstance(exc, KeyboardInterrupt) else "failed",

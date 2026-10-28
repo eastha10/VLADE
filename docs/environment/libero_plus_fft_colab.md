@@ -1,5 +1,16 @@
 # LIBERO+ FFT 실행 경로 (Colab A100)
 
+2026-10-28에 Drive 다운로드·공통 episode split·FFT/cache·Qwen Task-only를 연결하는
+순서별 Colab 노트북을 추가했습니다. [실행·검토 인계](colab_kanban_handoff.md)를 먼저
+확인하십시오. 해당 노트북은 `prepared_data_root`를 설정해 content-group 80/10/10과
+train-only 통계를 사용합니다. 아래 기존 upstream RLDS 경로와 분리한 어댑터이며,
+실제 데이터 담당자의 최종 split manifest와 대조하기 전에는 정본 동일성을 주장하지 않습니다.
+
+최신 Colab 실행은 고정 1000-step을 쓰지 않고 실제 train query 수×MAIN_EPOCHS로 예산을
+계산합니다. 공통 episode shuffle/query cursor, 주기 validation, gradient·저장 공간 검사와
+본 학습 기본 미실행 조건을 추가했습니다. 아래 일반 CLI 예시는 legacy JSON 기본값을
+설명하므로 새 Colab 설정과 구분하십시오. GPU 실측은 여전히 미완료입니다.
+
 VLADE의 `scripts/train/run_fft.py`는 upstream의 LoRA 전용 학습 스크립트를
 수정하지 않고 OpenVLA-OFT와 AVA-VLA의 **전체 VLA 가중치**를 학습합니다.
 연속 행동 헤드와 proprio projector도 학습하며, AVA에서는 공개된

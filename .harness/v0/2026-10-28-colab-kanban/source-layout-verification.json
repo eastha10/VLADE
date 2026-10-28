@@ -1,0 +1,49 @@
+{
+  "date_kst": "2026-10-28",
+  "canonical_root": "C:\\Users\\kimdo\\Desktop\\vlade",
+  "purpose": "Ordinary project file layout and Drive source loading; no source archive delivery",
+  "layout": {
+    "implementation": "src/vlade/",
+    "entrypoints": "scripts/",
+    "notebooks": [
+      "experiments\\colab_01_download_data_weights.ipynb",
+      "experiments\\colab_02_ava_fft_and_fixed_cache.ipynb",
+      "experiments\\colab_03_qwen_task_only.ipynb"
+    ],
+    "settings": "configs/",
+    "source_manifest": "experiments/manifests/colab_source.json",
+    "documentation": "docs/",
+    "regression_tests": "tests/"
+  },
+  "manifest_sha256": "33d3f755c0d2038395298cf0dffed4a142047e1e07bb1e5b0fb17341bcb0ecfc",
+  "verified_source_files": 164,
+  "notebook_schema": "passed",
+  "notebook_code_cells_compiled": 19,
+  "ordinary_file_staging": "passed",
+  "regression": {
+    "command": "C:/Users/kimdo/anaconda3/python.exe -m pytest tests/unit -q -p no:cacheprovider --basetemp=artifacts/testing/ordinary-source-regression --tb=short",
+    "passed": 127,
+    "seconds": 40.24,
+    "exit_code": 0,
+    "new_plain_source_tests": 12
+  },
+  "independent_review": "No execution-blocking error or missing required path found in the ordinary-file conversion",
+  "cleanup": {
+    "verified_duplicate_files_removed": 18,
+    "removed_export_locations": [
+      "C:\\Users\\kimdo\\Desktop\\vlade\\VLADE_Colab_2026-10-28.zip",
+      "C:\\Users\\kimdo\\Desktop\\vlade\\artifacts\\colab\\2026-10-28",
+      "C:\\Users\\kimdo\\Documents\\ChatGPT\\VLADE\\output\\VLADE_Colab_2026-10-28.zip",
+      "C:\\Users\\kimdo\\Documents\\ChatGPT\\VLADE\\output\\colab-2026-10-28"
+    ],
+    "method": "Matched SHA256 for both prior generated export copies before explicit file deletion; removed export directories only when empty"
+  },
+  "notion": {
+    "main_page": "https://app.notion.com/p/406b5dd068708197bcc9df8b8f79e175",
+    "related_pages_updated": 5,
+    "existing_review_checkboxes_preserved": 49
+  },
+  "large_downloads": "not_run",
+  "gpu_training": "not_run",
+  "commits_or_push": "not_performed"
+}

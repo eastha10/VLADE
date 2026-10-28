@@ -96,6 +96,7 @@ def run_loop(*, modules: Sequence[Any], optimizer: Any, scheduler: Any,
              batches: Iterable[Any], loss_fn: Callable[[Any, int], Any],
              max_steps: int, accumulation_steps: int = 1, max_grad_norm: float = 1.0,
              state: LoopState | None = None,
+             on_before_step: Callable[[LoopState], None] | None = None,
              on_step: Callable[[LoopState, dict[str, float]], None] | None = None) -> LoopState:
     """Run complete accumulation windows; reject truncated streams and NaN/Inf.
 
@@ -128,6 +129,8 @@ def run_loop(*, modules: Sequence[Any], optimizer: Any, scheduler: Any,
                 total += loss.detach().float().item()
             # error_if_nonfinite guards gradients even when the scalar loss is finite.
             norm = torch.nn.utils.clip_grad_norm_(params, max_grad_norm, error_if_nonfinite=True)
+            if on_before_step is not None:
+                on_before_step(state)
             lr = optimizer.param_groups[0]["lr"]
             optimizer.step()
             scheduler.step()

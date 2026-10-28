@@ -1,0 +1,83 @@
+{
+  "unit_tests": {
+    "passed": 115,
+    "seconds": 35.26,
+    "command": "python -m pytest tests/unit -q -p no:cacheprovider --basetemp=artifacts/testing/final-review-run3 --tb=short"
+  },
+  "native_tiny_qwen": {
+    "status": "passed",
+    "test_type": "tiny_random_native_qwen3_5_cpu_not_pretrained_0_8b",
+    "torch": "2.12.0+cpu",
+    "transformers": "5.9.0",
+    "action_shape": [
+      1,
+      8,
+      7
+    ],
+    "loss": 0.8037014007568359,
+    "finite_nonzero_gradient_groups": {
+      "vision": true,
+      "language": true,
+      "proprio": true,
+      "action": true
+    },
+    "input_sensitivity_max_abs": {
+      "vision": 0.2794322967529297,
+      "language": 0.0036247819662094116,
+      "proprio": 0.0018203258514404297
+    },
+    "save_load_exact": true,
+    "official_tokenizer_processor_tested": true,
+    "input_shapes": {
+      "input_ids": [
+        1,
+        330
+      ],
+      "attention_mask": [
+        1,
+        330
+      ],
+      "mm_token_type_ids": [
+        1,
+        330
+      ],
+      "pixel_values": [
+        1024,
+        1536
+      ],
+      "image_grid_thw": [
+        4,
+        3
+      ]
+    },
+    "pretrained_weights_tested": false,
+    "gpu_tested": false,
+    "edge_tested": false
+  },
+  "python_ast_files": 21,
+  "notebooks": 3,
+  "notebook_code_cells_compiled": 19,
+  "bundle_sha256": "cd8ef2d707fc21703e104f1112e2b9f001e6dd883126df959060c76abd035925",
+  "bundle_files_verified": 159,
+  "source_revisions": {
+    ".": "600f304292700d2408e226e75cb895e1c1b735c8",
+    "third_party/ava_vla": "69ae5dfb90f4eb714259693bd2c222e0b3de6456"
+  },
+  "revision_note": "Submodule reference may be the parent gitlink when metadata is inaccessible; exact bundled bytes are identified by files_sha256.",
+  "real_gpu_or_data_pipeline_executed": false,
+  "review_url": "https://app.notion.com/p/406b5dd068708197bcc9df8b8f79e175",
+  "followup": "independent data/cache/notebook review findings repaired; checkpoint/report/source identity regressions passed; GPU unrun",
+  "review_date": "2026-10-28 morning Asia/Seoul",
+  "merged_review_cards": 3,
+  "merged_execution_criteria_cards": 2,
+  "previous_unit_tests": {
+    "passed": 65,
+    "seconds": 10.42,
+    "command": "python -m pytest tests/unit -q -p no:cacheprovider --basetemp=artifacts/testing/colab-2026-10-28-run3 --tb=short"
+  },
+  "previous_code_review_unit_tests": {
+    "passed": 77,
+    "seconds": 15.37,
+    "command": "python -m pytest tests/unit -q -p no:cacheprovider --basetemp=artifacts/testing/colab-code-fixes-run4 --tb=short"
+  }
+}
