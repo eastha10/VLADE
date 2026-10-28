@@ -9,7 +9,9 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import random
+import tempfile
 from collections import Counter
 from pathlib import Path
 from typing import Any, Iterator
@@ -23,17 +25,49 @@ from vlade.data.colab_assets import DATA_REV, sha256
 from vlade.utils.filesystem import publish_directory
 
 CONVENTION = "libero_relative_xyz_axis_angle; model_gripper_1_open_0_closed; proprio_state_first6_last2"
+RESUME_SCHEMA_VERSION = 1
 
 
 def write_json(path: Path, value: Any) -> None:
-    import os
-    import tempfile
     path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
                                      prefix=f".{path.name}-", suffix=".tmp", delete=False) as stream:
         temporary = Path(stream.name)
         try:
             json.dump(value, stream, ensure_ascii=False, indent=2, allow_nan=False)
+            stream.flush()
+            os.fsync(stream.fileno())
+        except BaseException:
+            stream.close()
+            temporary.unlink(missing_ok=True)
+            raise
+    temporary.replace(path)
+
+
+def _write_bytes(path: Path, payload: bytes) -> None:
+    """Replace one file atomically so interrupted episodes never look reusable."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="wb", dir=path.parent, prefix=f".{path.name}-",
+                                     suffix=".tmp", delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        except BaseException:
+            stream.close()
+            temporary.unlink(missing_ok=True)
+            raise
+    temporary.replace(path)
+
+
+def _write_trajectory(path: Path, actions: np.ndarray, proprio: np.ndarray) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="w+b", dir=path.parent, prefix=f".{path.name}-",
+                                     suffix=".tmp", delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            np.savez(stream, actions=actions, proprio=proprio)
             stream.flush()
             os.fsync(stream.fileno())
         except BaseException:
@@ -79,19 +113,147 @@ def tfds_episodes(directory: Path) -> Iterator[list[dict]]:
     dataset = builder.as_dataset(split="train", shuffle_files=False, decoders=decoders,
                                 read_config=tfds.ReadConfig(interleave_cycle_length=1,
                                                             num_parallel_calls_for_decode=1))
+    options = tf.data.Options()
+    options.autotune.enabled = False
+    options.experimental_optimization.inject_prefetch = False
+    options.threading.max_intra_op_parallelism = 1
+    options.threading.private_threadpool_size = 1
+    dataset = dataset.with_options(options)
     for episode in tfds.as_numpy(dataset):
         yield list(episode["steps"])
+
+
+def _resume_contract(seed: int, source: dict | None, canonical: CanonicalSplit | None,
+                     canonical_normalization_sha256: str | None) -> dict:
+    source_bytes = json.dumps(source, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    return {
+        "schema_version": RESUME_SCHEMA_VERSION,
+        "seed": seed,
+        "source_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        "canonical_manifest_sha256": canonical.sha256 if canonical else None,
+        "canonical_normalization_sha256": canonical_normalization_sha256,
+    }
+
+
+def _read_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _reusable_entry(folder: Path, checkpoint: Path, expected: dict, actions: np.ndarray,
+                    proprio: np.ndarray, queries: list[dict], image_hashes: dict[str, str]) -> dict | None:
+    """Return a fully verified checkpoint, including legacy folders without one."""
+    try:
+        saved = _read_json(checkpoint) if checkpoint.is_file() else None
+        if saved is not None and any(saved.get(key) != value for key, value in expected.items()):
+            return None
+        for filename, digest in image_hashes.items():
+            if sha256(folder / filename) != digest:
+                return None
+        trajectory = folder / "trajectory.npz"
+        with np.load(trajectory) as numeric:
+            if (not np.array_equal(numeric["actions"], actions) or
+                    not np.array_equal(numeric["proprio"], proprio)):
+                return None
+        if _read_json(folder / "queries.json") != queries:
+            return None
+        files = dict(image_hashes)
+        files["trajectory.npz"] = sha256(trajectory)
+        files["queries.json"] = sha256(folder / "queries.json")
+        entry = {**expected, "files": files}
+        if saved is not None and saved != entry:
+            return None
+        return entry
+    except (OSError, ValueError, KeyError, json.JSONDecodeError):
+        return None
+
+
+def _write_episode(folder: Path, checkpoint: Path, expected: dict, actions: np.ndarray,
+                   proprio: np.ndarray, queries: list[dict], payloads: dict[str, bytes]) -> dict:
+    """Write one episode with its checkpoint last; partial files are never trusted."""
+    folder.mkdir(parents=True, exist_ok=True)
+    for filename, payload in payloads.items():
+        _write_bytes(folder / filename, payload)
+    _write_trajectory(folder / "trajectory.npz", actions, proprio)
+    write_json(folder / "queries.json", queries)
+    files = {filename: sha256(folder / filename) for filename in payloads}
+    files["trajectory.npz"] = sha256(folder / "trajectory.npz")
+    files["queries.json"] = sha256(folder / "queries.json")
+    entry = {**expected, "files": files}
+    write_json(checkpoint, entry)
+    return entry
+
+
+def _statistics_from_disk(stage: Path, entries: list[dict]) -> dict:
+    """Compute exact non-canonical statistics from a disk-backed array."""
+    total = sum(entry["steps"] for entry in entries if entry["split"] == "train")
+    statistics = {}
+    for key, width, mask in (("actions", 7, [True] * 6 + [False]),
+                             ("proprio", 8, [True] * 8)):
+        scratch = stage / f".{key}-statistics.f32"
+        values = np.memmap(scratch, dtype=np.float32, mode="w+", shape=(total, width))
+        offset = 0
+        for entry in entries:
+            if entry["split"] != "train":
+                continue
+            with np.load(stage / "episodes" / entry["episode_id"] / "trajectory.npz") as numeric:
+                count = entry["steps"]
+                values[offset:offset + count] = numeric[key]
+                offset += count
+        if key == "actions":
+            values[:, 6] = 1 - np.clip(values[:, 6], 0, 1)
+        statistics["action" if key == "actions" else key] = {
+            "q01": np.quantile(values, 0.01, axis=0).tolist(),
+            "q99": np.quantile(values, 0.99, axis=0).tolist(),
+            "min": values.min(axis=0).tolist(), "max": values.max(axis=0).tolist(),
+            "mean": values.mean(axis=0).tolist(), "std": values.std(axis=0).tolist(), "mask": mask}
+        values.flush()
+        del values
+        scratch.unlink(missing_ok=True)
+    return statistics
+
+
+def _validate_completed_episodes(stage: Path, entries: list[dict]) -> None:
+    """Rehash every published file before COMPLETE is allowed to exist."""
+    for entry in entries:
+        checkpoint = stage / ".checkpoints" / f"{entry['episode_id']}.json"
+        if _read_json(checkpoint) != entry:
+            raise ValueError(f"Episode checkpoint mismatch: {entry['episode_id']}")
+        folder = stage / "episodes" / entry["episode_id"]
+        for filename, expected in entry["files"].items():
+            if sha256(folder / filename) != expected:
+                raise ValueError(f"Episode integrity mismatch: {entry['episode_id']}/{filename}")
 
 
 def prepare(episodes: Iterator[list[dict]], destination: Path, *, seed: int = 42,
             source: dict | None = None, canonical: CanonicalSplit | None = None,
             canonical_normalization: dict | None = None,
-            canonical_normalization_sha256: str | None = None) -> dict:
+            canonical_normalization_sha256: str | None = None, resume: bool = False) -> dict:
     """Publish only a completed, duplicate-grouped 80/10/10 prepared dataset."""
     if destination.exists():
         raise FileExistsError(f"Use a new prepared dataset path: {destination}")
     stage = destination.with_name(destination.name + ".incomplete")
-    stage.mkdir(parents=True, exist_ok=False)
+    if stage.exists():
+        if not resume:
+            raise FileExistsError(f"Incomplete output exists; pass resume=True to validate and reuse it: {stage}")
+        if not stage.is_dir() or (stage / "COMPLETE").exists():
+            raise ValueError(f"Refusing to resume an invalid or already-complete staging path: {stage}")
+    else:
+        stage.mkdir(parents=True)
+    if canonical is not None:
+        if canonical_normalization is None or canonical_normalization_sha256 is None:
+            raise ValueError("Canonical preparation requires the sealed train-only normalization")
+        if (canonical_normalization.get("canonical_manifest_sha256") != canonical.sha256 or
+                canonical_normalization.get("normalization_scope") != "canonical_train_only" or
+                canonical_normalization.get("num_trajectories") != 11_477 or
+                canonical_normalization.get("num_transitions") != 1_791_269):
+            raise ValueError("Canonical normalization metadata does not match the selected train split")
+    contract = _resume_contract(seed, source, canonical, canonical_normalization_sha256)
+    contract_path = stage / "resume.json"
+    if contract_path.is_file() and _read_json(contract_path) != contract:
+        raise ValueError("Incomplete output belongs to a different source or canonical contract")
+    write_json(contract_path, contract)
+    checkpoint_root = stage / ".checkpoints"
+    checkpoint_root.mkdir(exist_ok=True)
     entries = []
     observed_groups: Counter[str] = Counter()
     for index, steps in enumerate(episodes):
@@ -117,17 +279,17 @@ def prepare(episodes: Iterator[list[dict]], destination: Path, *, seed: int = 42
             except IndexError as error:
                 raise ValueError(f"Canonical content group occurs too many times: {content_group_id}") from error
             observed_groups[content_group_id] += 1
-        folder = stage / "episodes" / episode_id
-        folder.mkdir(parents=True)
         digest = hashlib.sha256()
-        files = {}
         queries = []
+        payloads = {}
+        image_hashes = {}
         for t, step in enumerate(steps):
             instruction = _language(step["language_instruction"])
             if not instruction.strip():
                 raise ValueError("Missing language instruction")
             # Length-prefix bytes to avoid ambiguous concatenations.
             values = [actions[t].tobytes(), states[t].tobytes(), instruction.encode("utf-8")]
+            query_files = {}
             for camera, key in (("primary", "image"), ("wrist", "wrist_image")):
                 value = step["observation"][key]
                 raw = bytes(value) if isinstance(value, (bytes, np.bytes_)) else np.asarray(value).tobytes()
@@ -135,28 +297,36 @@ def prepare(episodes: Iterator[list[dict]], destination: Path, *, seed: int = 42
                 if t % 8 == 0:
                     payload, suffix = _image_bytes(value)
                     name = f"{camera}-{t:07d}{suffix}"
-                    (folder / name).write_bytes(payload)
-                    files[name] = hashlib.sha256(payload).hexdigest()
+                    payloads[name] = payload
+                    image_hashes[name] = hashlib.sha256(payload).hexdigest()
+                    query_files[camera] = name
             for value in values:
                 digest.update(len(value).to_bytes(8, "little"))
                 digest.update(value)
             if t % 8 == 0:
                 queries.append({"timestep": t, "instruction": instruction,
-                                "primary": next(name for name in files if name.startswith(f"primary-{t:07d}.")),
-                                "wrist": next(name for name in files if name.startswith(f"wrist-{t:07d}."))})
-        np.savez(folder / "trajectory.npz", actions=actions, proprio=proprio)
-        files["trajectory.npz"] = sha256(folder / "trajectory.npz")
-        write_json(folder / "queries.json", queries)
-        files["queries.json"] = sha256(folder / "queries.json")
+                                "primary": query_files["primary"], "wrist": query_files["wrist"]})
         content = digest.hexdigest()
         if canonical is None:
             split, is_calibration, content_group_id = group_split(content, seed), False, content
-        entries.append({"episode_id": episode_id, "content_sha256": content,
-                        "content_group_id": content_group_id, "split": split,
-                        "is_calibration": is_calibration, "steps": len(steps), "queries": len(queries),
-                        "files": files})
+        expected = {"episode_id": episode_id, "content_sha256": content,
+                    "content_group_id": content_group_id, "split": split,
+                    "is_calibration": is_calibration, "steps": len(steps), "queries": len(queries)}
+        folder = stage / "episodes" / episode_id
+        checkpoint = checkpoint_root / f"{episode_id}.json"
+        entry = _reusable_entry(folder, checkpoint, expected, actions, proprio, queries, image_hashes)
+        if entry is None:
+            entry = _write_episode(folder, checkpoint, expected, actions, proprio, queries, payloads)
+            verified = _reusable_entry(folder, checkpoint, expected, actions, proprio, queries, image_hashes)
+            if verified != entry:
+                raise ValueError(f"New episode failed post-write verification: {episode_id}")
+        elif not checkpoint.is_file():
+            # Adopt a fully verified folder produced by the pre-checkpoint implementation.
+            write_json(checkpoint, entry)
+        entries.append(entry)
+        payloads.clear()
         if index % 100 == 0:
-            print(f"Prepared {index + 1} episodes", flush=True)
+            print(f"Prepared or verified {index + 1} episodes", flush=True)
     if not entries or any(not any(e["split"] == split for e in entries) for split in ("train", "validation", "test")):
         raise ValueError("Need nonempty train/validation/test splits; do not use a tiny subset as the formal dataset")
     if canonical is not None:
@@ -166,35 +336,12 @@ def prepare(episodes: Iterator[list[dict]], destination: Path, *, seed: int = 42
         )
         if {entry["episode_id"] for entry in entries} != canonical.episode_ids:
             raise ValueError("Prepared source does not reproduce the canonical Episode ID set")
-    training = []
-    for entry in entries:
-        if entry["split"] == "train":
-            with np.load(stage / "episodes" / entry["episode_id"] / "trajectory.npz") as numeric:
-                training.append({key: numeric[key].copy() for key in ("actions", "proprio")})
-    statistics = {}
-    for key, mask in (("actions", [True] * 6 + [False]), ("proprio", [True] * 8)):
-        values = np.concatenate([item[key] for item in training], axis=0)
-        if key == "actions":
-            values[:, 6] = 1 - np.clip(values[:, 6], 0, 1)
-        statistics["action" if key == "actions" else key] = {
-            "q01": np.quantile(values, 0.01, axis=0).tolist(),
-            "q99": np.quantile(values, 0.99, axis=0).tolist(),
-            "min": values.min(axis=0).tolist(), "max": values.max(axis=0).tolist(),
-            "mean": values.mean(axis=0).tolist(), "std": values.std(axis=0).tolist(), "mask": mask}
     if canonical is not None:
-        if canonical_normalization is None or canonical_normalization_sha256 is None:
-            raise ValueError("Canonical preparation requires the sealed train-only normalization")
-        if (canonical_normalization.get("canonical_manifest_sha256") != canonical.sha256 or
-                canonical_normalization.get("normalization_scope") != "canonical_train_only" or
-                canonical_normalization.get("num_trajectories") != 11_477 or
-                canonical_normalization.get("num_transitions") != 1_791_269):
-            raise ValueError("Canonical normalization metadata does not match the selected train split")
-        for section in ("action", "proprio"):
-            for key in ("q01", "q99", "min", "max", "mean", "std"):
-                if not np.allclose(statistics[section][key], canonical_normalization[section][key],
-                                   rtol=1e-6, atol=1e-7):
-                    raise ValueError(f"Recomputed {section}/{key} differs from canonical normalization")
+        # Exact action+state canonical assignment above proves the sealed train-only input set;
+        # do not reload and accumulate all 11,477 trajectories in RAM merely to recompute it.
         statistics = {section: canonical_normalization[section] for section in ("action", "proprio")}
+    else:
+        statistics = _statistics_from_disk(stage, entries)
     split_keys = ("episode_id", "content_sha256", "content_group_id", "split", "is_calibration", "steps", "queries")
     split_rows = [{k: e[k] for k in split_keys} for e in entries]
     write_json(stage / "splits.json", split_rows)
@@ -215,8 +362,9 @@ def prepare(episodes: Iterator[list[dict]], destination: Path, *, seed: int = 42
                 "canonical_normalization_sha256": canonical_normalization_sha256,
                 "calibration_episodes": sum(entry["is_calibration"] for entry in entries),
                 "counts": dict(Counter(e["split"] for e in entries)), "episodes": entries}
+    _validate_completed_episodes(stage, entries)
     write_json(stage / "manifest.json", manifest)
-    (stage / "COMPLETE").write_text("ok\n", encoding="utf-8")
+    _write_bytes(stage / "COMPLETE", b"ok\n")
     publish_directory(stage, destination)
     return manifest
 
@@ -379,7 +527,10 @@ def query_stream(data: EpisodeData, split: str, *, seed: int = 42, repeat: bool 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tfds-root", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True,
+                        help="Prepared-data directory; use Colab local SSD and archive it to Drive after COMPLETE")
+    parser.add_argument("--resume", action="store_true",
+                        help="Validate and reuse only complete episodes in OUTPUT.incomplete")
     parser.add_argument("--canonical-manifest", type=Path, required=True)
     parser.add_argument("--canonical-sha256", default=CANONICAL_SHA256)
     parser.add_argument("--canonical-normalization", type=Path, required=True)
@@ -399,7 +550,8 @@ def main() -> None:
     prepare(tfds_episodes(infos[0].parent), args.output, source=source,
             seed=CANONICAL_SEED, canonical=canonical,
             canonical_normalization=canonical_normalization,
-            canonical_normalization_sha256=actual_normalization_sha256)
+            canonical_normalization_sha256=actual_normalization_sha256,
+            resume=args.resume)
 
 
 if __name__ == "__main__":

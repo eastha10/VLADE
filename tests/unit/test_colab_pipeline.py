@@ -13,6 +13,7 @@ import torch
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+import vlade.data.episode_data as episode_data_module
 from vlade.data.colab_assets import safe_members, sha256
 from vlade.data.episode_data import EpisodeData, group_split, prepare
 from vlade.training.fixed_cache import generate, validate_selection
@@ -146,6 +147,56 @@ def test_data_rejects_nonfinite_and_never_publishes_complete(tmp_path):
         prepare(iter([steps]), tmp_path / "bad")
     assert not (tmp_path / "bad").exists()
     assert not list((tmp_path / "bad.incomplete").rglob("COMPLETE"))
+
+
+def test_prepare_resumes_verified_legacy_episode_and_rewrites_damaged_episode(tmp_path, monkeypatch):
+    output = tmp_path / "data"
+
+    def interrupted():
+        yield episode(0)
+        yield episode(1)
+        raise RuntimeError("simulated interruption")
+
+    with pytest.raises(RuntimeError, match="simulated interruption"):
+        prepare(interrupted(), output)
+    stage = tmp_path / "data.incomplete"
+    assert not (stage / "COMPLETE").exists()
+    checkpoints = stage / ".checkpoints"
+    (checkpoints / "episode-0000000.json").unlink()
+    damaged = stage / "episodes/episode-0000001/primary-0000000.png"
+    damaged.write_bytes(b"damaged")
+
+    rewritten = []
+    original_write = episode_data_module._write_episode
+
+    def observe_write(folder, checkpoint, expected, actions, proprio, queries, payloads):
+        rewritten.append(expected["episode_id"])
+        return original_write(folder, checkpoint, expected, actions, proprio, queries, payloads)
+
+    monkeypatch.setattr(episode_data_module, "_write_episode", observe_write)
+    manifest = prepare(iter([episode(0), episode(1)] + [episode(i) for i in range(2, 51)]),
+                       output, resume=True)
+
+    assert "episode-0000000" not in rewritten
+    assert "episode-0000001" in rewritten
+    assert len(manifest["episodes"]) == 51
+    assert (output / "COMPLETE").is_file()
+    assert not (tmp_path / "data.incomplete").exists()
+    EpisodeData(output)
+
+
+def test_prepare_resume_rejects_a_different_source_contract(tmp_path):
+    output = tmp_path / "data"
+
+    def interrupted():
+        yield episode(0)
+        raise RuntimeError("stop")
+
+    with pytest.raises(RuntimeError, match="stop"):
+        prepare(interrupted(), output, source={"revision": "one"})
+    with pytest.raises(ValueError, match="different source or canonical contract"):
+        prepare(iter([episode(i) for i in range(51)]), output, source={"revision": "two"}, resume=True)
+    assert not list((tmp_path / "data.incomplete").rglob("COMPLETE"))
 
 
 def keys(stream):
