@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from collections import Counter
@@ -22,7 +23,7 @@ from vlade.training.prepared_fft import loader_split
 
 MANIFEST = ROOT / "experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz"
 NORMALIZATION = ROOT / "experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json"
-NORMALIZATION_SHA256 = "74b5c78ddce7f5d5fb00ccf91e1c34381fc7cece060110752c75fe4e7ca1abb8"
+NORMALIZATION_SHA256 = "eac95bcc81b6182b90a2bd030096df6e3e408cb88923d0a1d57dc6c81e297c67"
 
 
 def test_canonical_candidate_identity_counts_and_no_group_leakage():
@@ -50,7 +51,8 @@ def test_canonical_manifest_hash_is_enforced_before_parsing(tmp_path):
 
 def test_canonical_normalization_is_train_only_and_bound_to_manifest():
     normalization = json.loads(NORMALIZATION.read_text(encoding="utf-8"))
-    assert file_sha256(NORMALIZATION) == NORMALIZATION_SHA256
+    normalized = NORMALIZATION.read_bytes().replace(b"\r\n", b"\n")
+    assert hashlib.sha256(normalized).hexdigest() == NORMALIZATION_SHA256
     assert normalization["canonical_manifest_sha256"] == CANONICAL_SHA256
     assert normalization["normalization_scope"] == "canonical_train_only"
     assert normalization["num_trajectories"] == CANONICAL_COUNTS["train"]

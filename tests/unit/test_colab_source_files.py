@@ -29,6 +29,13 @@ def write_manifest(root, files, revisions=None):
     return hashlib.sha256(manifest.read_bytes()).hexdigest()
 
 
+def test_canonical_normalization_source_hash_uses_git_lf_bytes(tmp_path, monkeypatch):
+    monkeypatch.setattr(colab_notebooks, "ROOT", tmp_path)
+    path = write_file(tmp_path, colab_notebooks.CANONICAL_NORMALIZATION.as_posix(), b'{\r\n  "value": 1\r\n}\r\n')
+    expected = hashlib.sha256(b'{\n  "value": 1\n}\n').hexdigest()
+    assert colab_notebooks.source_sha256(path) == expected
+
+
 def test_generation_keeps_source_structure_without_archive_or_self_reference(tmp_path, monkeypatch):
     root = tmp_path / "project"
     included = {

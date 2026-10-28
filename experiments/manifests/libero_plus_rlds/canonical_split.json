@@ -20,7 +20,7 @@
   "unique_content_groups": 1681,
   "cross_split_content_group_leaks": 0,
   "normalization": "experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json",
-  "normalization_sha256": "74b5c78ddce7f5d5fb00ccf91e1c34381fc7cece060110752c75fe4e7ca1abb8",
+  "normalization_sha256": "eac95bcc81b6182b90a2bd030096df6e3e408cb88923d0a1d57dc6c81e297c67",
   "normalization_scope": "canonical_train_only",
   "train_transitions": 1791269,
   "source_dataset": "Sylvest/libero_plus_rlds",

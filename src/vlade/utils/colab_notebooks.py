@@ -9,6 +9,15 @@ import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
+CANONICAL_NORMALIZATION = Path("experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json")
+
+
+def source_sha256(path: Path) -> str:
+    """Hash repository text as stored by Git, independent of Windows checkout EOLs."""
+    payload = path.read_bytes()
+    if path.relative_to(ROOT) == CANONICAL_NORMALIZATION:
+        payload = payload.replace(b"\r\n", b"\n")
+    return hashlib.sha256(payload).hexdigest()
 
 
 def revision(path: Path) -> str | None:
@@ -144,7 +153,7 @@ def generate() -> list[Path]:
                 "revision_note": "Submodule reference may be the parent gitlink when metadata is inaccessible; exact ordinary source files are identified by files_sha256.",
                 "source_revisions": {name: revision(ROOT if name == "." else ROOT / name)
                                      for name in (".", "third_party/ava_vla", "third_party/openvla_oft")},
-                "files_sha256": {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                "files_sha256": {p.relative_to(ROOT).as_posix(): source_sha256(p)
                                   for p in sorted(set(paths))}}
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
@@ -204,7 +213,7 @@ def generate() -> list[Path]:
                  '--canonical-manifest', CODE / 'experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz',
                  '--canonical-sha256', '487d2be1039ba6a4facc3ba44785ba5159245dfe53462a1d5a41ba8230446e80',
                  '--canonical-normalization', CODE / 'experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json',
-                 '--canonical-normalization-sha256', '74b5c78ddce7f5d5fb00ccf91e1c34381fc7cece060110752c75fe4e7ca1abb8'])
+                 '--canonical-normalization-sha256', 'eac95bcc81b6182b90a2bd030096df6e3e408cb88923d0a1d57dc6c81e297c67'])
         manifest = json.loads((PREPARED / 'manifest.json').read_text())
         print(json.dumps({key: manifest[key] for key in ['counts', 'calibration_episodes', 'split_policy',
                                                        'canonical_manifest_sha256', 'canonical_normalization_sha256',
