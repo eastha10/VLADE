@@ -26,7 +26,7 @@ def read(path):
 
 def reseal(root, manifest):
     """Update hashes too, so failures must come from the semantic invariant."""
-    keys = ("episode_id", "content_sha256", "split", "steps", "queries")
+    keys = ("episode_id", "content_sha256", "content_group_id", "split", "is_calibration", "steps", "queries")
     write_json(root / "splits.json", [{key: row[key] for key in keys} for row in manifest["episodes"]])
     manifest["split_sha256"] = sha256(root / "splits.json")
     stats = read(root / "normalization.json")
@@ -100,7 +100,7 @@ def test_rehashed_duplicate_episode_identity_is_rejected(prepared):
 def test_rehashed_duplicate_content_cannot_cross_splits(prepared):
     manifest = read(prepared / "manifest.json")
     first, duplicate = manifest["episodes"][:2]
-    assert first["content_sha256"] == duplicate["content_sha256"]
+    assert first["content_group_id"] == duplicate["content_group_id"]
     duplicate["split"] = "validation" if first["split"] != "validation" else "train"
     manifest["counts"] = dict(Counter(row["split"] for row in manifest["episodes"]))
     reseal(prepared, manifest)

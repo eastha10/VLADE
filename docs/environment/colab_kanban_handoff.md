@@ -25,6 +25,7 @@
 | `experiments/colab_01_download_data_weights.ipynb` | Drive 데이터·AVA 가중치 준비·전처리 |
 | `experiments/colab_02_ava_fft_and_fixed_cache.ipynb` | AVA FFT·파일럿·T1 선정·cache |
 | `experiments/colab_03_qwen_task_only.ipynb` | Qwen 가중치·파일럿·overfit·Task-only |
+| `experiments/colab_04_openvla_oft_fft.ipynb` | OpenVLA-OFT 독립 환경 FFT·저장/재로딩 |
 | `experiments/manifests/colab_source.json` | 사용할 파일 목록과 파일별 SHA256·source revision |
 | `experiments/baselines/`, 원본 source manifests | 원본 비교 조건과 소스 이양 기록 |
 | `configs/` | 모델·학습 조건·고정 revision |
@@ -33,7 +34,7 @@
 Drive의 `ROOT=/content/drive/MyDrive/VLADE`, `PROJECT_ROOT=ROOT`를 기본으로 사용합니다.
 이 디렉터리 바로 아래에 `src/`, `scripts/`, `configs/`, `third_party/`가 있어야 합니다.
 노트북은 `experiments/manifests/colab_source.json`과 일반 파일의 SHA를 검증한 뒤 필요한
-파일을 `/content`로 복사해 실행합니다. 이번 실행의 upstream은 AVA이며, OpenVLA-OFT는
+파일을 `/content`로 복사해 실행합니다. AVA와 OpenVLA-OFT는 각각 고정된 upstream과
 별도 환경입니다. baseline과 원본 manifest 기록은 함께 보관합니다.
 
 ## 추가 교차 검토·수정 결과
@@ -67,9 +68,11 @@ Drive의 `ROOT=/content/drive/MyDrive/VLADE`, `PROJECT_ROOT=ROOT`를 기본으�
 
 ## 보완 완료: 실제 데이터 기반 학습량과 실행 조건
 
-2026-10-28 추가 대화에서 사용자는 80/10/10 비율이 맞다고 확인했습니다.
-FFT는 train 80%만 사용하는 방식을 유지합니다. 분할 비율 자체는 재결정 대상이 아니며,
-다른 PC의 실제 최종 manifest와 현재 코드의 배정·통계 정본을 대조하는 일만 남습니다.
+2026-10-28 사용자가 D/content-group 80/10/10, seed 42를 최종 확정했습니다.
+Train/Validation/Test는 11,477/1,428/1,442 Episode이고 Train 내부 Calibration은 728개입니다.
+후보 원본 SHA-256 `487d2be...6e80`을 그대로 canonical manifest로 보존했으며, 전체 원본
+1,024 shard를 재판독해 group membership과 Train 1,791,269 transition 전용 normalization을
+계산했습니다. 이전 85/5/5/5 통계는 사용하지 않습니다.
 
 이전 노트북의 고정 1000-step을 제거했습니다. 새 Colab 본 학습은 실제 manifest의 train
 query 수 N과 `MAIN_EPOCHS`로 `ceil(N × epochs / (batch × accumulation))`을 계산합니다.
@@ -89,21 +92,21 @@ Teacher/Student는 공통 seed 기반 episode shuffle을 사용하고 episode �
 ## 검토 후 실행 순서
 
 1. 저장소 루트에서 `python scripts/prepare/generate_colab_notebooks.py`를 실행해
-   `experiments/colab_01~03` 노트북과 `experiments/manifests/colab_source.json`을 갱신합니다.
-   현재 일반 소스·고정 AVA upstream·라이선스·설정·baseline·원본 manifest를 같은 파일 트리로
+   `experiments/colab_01~04` 노트북과 `experiments/manifests/colab_source.json`을 갱신합니다.
+   현재 일반 소스·고정 AVA/OFT upstream·라이선스·설정·baseline·canonical manifest를 같은 파일 트리로
    준비합니다. GitHub HEAD만 clone한 사본에는 미커밋 구현이 빠질 수 있으므로 실제 작업 파일과
    그 파일에서 생성한 manifest를 함께 사용하십시오.
 2. 이 파일 트리를 Drive의 `/content/drive/MyDrive/VLADE`에 배치하고 `experiments/`의
-   `colab_01_download_data_weights.ipynb`를 Colab에서 엽니다. 세 노트북 모두 `ROOT`와
+   `colab_01_download_data_weights.ipynb`를 Colab에서 엽니다. 네 노트북 모두 `ROOT`와
    `PROJECT_ROOT=ROOT`를 같은 실제 저장소 루트로 지정합니다. 시작 셀의 manifest·파일 SHA 검증이
    통과하면 필요한 일반 파일이 `/content`의 실행 디렉터리로 복사됩니다.
-3. 공식 LIBERO+ `.z01/.z02/.zip` 세 part와 공개 AVA 전체 bundle을 Drive에 받고,
+3. 공식 LIBERO+ `.z01/.z02/.zip` 세 part와 공개 AVA/OFT 전체 bundle을 Drive에 받고,
    공식 메타데이터와 파일 해시를 대조합니다. 세 part를 Info-ZIP으로 결합한 뒤 CRC를
    검사하며 추출합니다. 완료 표식 없는 추출/전처리는 학습에 사용하지 않습니다.
 4. TFDS episode를 공통 prepared format으로 변환합니다. query 간격 8, 두 카메라,
    raw state의 첫 6+마지막 2차원 proprio, 상대 action 6차원과 gripper 규약을 사용합니다.
-   같은 내용의 episode는 같은 split에 배정하고 train 전체 timestep만으로 q01/q99를
-   계산합니다. Query JPEG/PNG payload와 숫자 trajectory의 해시를 저장합니다.
+   exact action+state group을 canonical manifest와 대조해 split을 적용하고 train 전체 timestep만으로
+   q01/q99를 재검산합니다. Query JPEG/PNG payload와 숫자 trajectory의 해시를 저장합니다.
 5. A100에서 `colab_02_ava_fft_and_fixed_cache.ipynb`를 실행합니다. Python 3.11·AVA
    Transformers fork를 별도로 설치합니다. 실제 1-step backward/save/reload를 먼저
    확인한 뒤 실제 query 수·설정 epoch에 맞는 별도 실험을 실행합니다. 본 학습 플래그는
@@ -147,7 +150,7 @@ Teacher/Student는 공통 seed 기반 episode shuffle을 사용하고 episode �
 
 | 우선순위 | 검토·결정 사항 | 현재 확인한 사실 / 남은 일 |
 |---|---|---|
-| 실행 전 | 분할 정본 | 데이터 담당 Notion 카드 제목은 최종 80/10/10, 상세 수치·digest는 이전 85/5/5/5입니다. 다른 PC의 실제 최종 manifest를 받지 못했습니다. 새 content-group 80/10/10 배정과 대조하고 정본 하나로 고정해야 합니다. |
+| 완료 | 분할 정본 | D/content-group 80/10/10 seed 42와 후보 SHA-256을 확정했고, canonical manifest·Train 전용 normalization·prepared-data 검증 경계를 연결했습니다. 실제 Colab prepared-data 생성은 아직 실행하지 않았습니다. |
 | 실행 전 | AVA temporal FFT | 기존/이번 FFT는 zero-context입니다. cache inference의 이전 hidden 전달과 시간 문맥 학습은 다릅니다. episode 학습·state reset·TBPTT 및 gradient 경로는 아직 구현/실측하지 않았습니다. 이 제한을 인정하는 파일럿인지 본 실험 전 확장이 필요한지 결정해야 합니다. |
 | 실행 전 | Colab 설치·메모리 | 2026-10-04 A100 단일 추론 성공과 FFT는 다릅니다. 이번 환경 설치, 실제 TFDS schema, 첫 backward·checkpoint 저장·재로딩을 Colab에서 확인해야 합니다. A100 40 GB에서 FFT OOM 가능성이 있으며 80 GB도 실측 전 보장하지 않습니다. |
 | 실행 전 | 저장공간·속도 | 원본 ZIP 75.5 GB 외에 추출본·query 이미지·가중치·optimizer 포함 checkpoint가 추가됩니다. Drive 계정 quota와 Colab scratch의 실제 여유 공간을 확인하십시오. 다수 query 파일의 Drive I/O 비용도 아직 측정하지 않았습니다. |
@@ -247,7 +250,7 @@ cache/Task-only 두 실행 카드의 원래 완료 조건까지 옮겼습니다.
 - **데이터 분리의 의미:** 80/10/10은 확정입니다. exact-byte content grouping은 유사한 다른
   episode/task/초기상태·교란 조건의 누수나 미관측 조건 일반화를 보장하지 않습니다.
   공개 학습 RLDS와 평가용 LIBERO+ assets/held-out 시나리오는 별개이며 평가 환경 commit/
-  adapter·assets 준비는 아직입니다. 다른 PC의 최종 manifest·통계 정본을 먼저 대조합니다.
+  adapter·assets 준비는 아직입니다. 분할·통계 정본은 확정됐으며 실제 Colab 생성 결과의 해시를 대조해야 합니다.
 - **Validation·선정:** val L1 subset 크기/대표성, rollout metric·tie-break·허용 원본 LIBERO 저하·
   지연/메모리 한계, seed/trial 수·time cap·실패 처리·7교란 macro 산식을 사전 고정합니다.
   최종 test로 T1/S*를 다시 고르지 않습니다. 수치가 악화되면 그대로 기록합니다.

@@ -57,6 +57,10 @@ class FFTConfig:
     device: str = "cuda:0"
     resume: Path | None = None
     prepared_data_root: Path | None = None
+    canonical_split_manifest: Path | None = None
+    canonical_split_sha256: str | None = None
+    canonical_normalization: Path | None = None
+    canonical_normalization_sha256: str | None = None
     debug_records: int = 0
 
     @classmethod
@@ -70,9 +74,10 @@ class FFTConfig:
         for key in ("checkpoint", "data_root", "output_dir"):
             value = Path(merged[key]).expanduser()
             merged[key] = value if value.is_absolute() else REPO_ROOT / value
-        if merged.get("prepared_data_root") is not None:
-            value = Path(merged["prepared_data_root"]).expanduser()
-            merged["prepared_data_root"] = value if value.is_absolute() else REPO_ROOT / value
+        for key in ("prepared_data_root", "canonical_split_manifest", "canonical_normalization"):
+            if merged.get(key) is not None:
+                value = Path(merged[key]).expanduser()
+                merged[key] = value if value.is_absolute() else REPO_ROOT / value
         cfg = cls(**merged)
         cfg.validate()
         return cfg
@@ -96,6 +101,18 @@ class FFTConfig:
             raise ValueError("Invalid LR schedule or warmup_steps")
         if self.debug_records < 0:
             raise ValueError("debug_records must be nonnegative")
+        canonical = (self.canonical_split_manifest, self.canonical_split_sha256,
+                     self.canonical_normalization, self.canonical_normalization_sha256)
+        if any(value is not None for value in canonical) and not all(value is not None for value in canonical):
+            raise ValueError("Canonical split manifest and normalization paths/hashes must be configured together")
+        if self.dataset_name == "libero_plus_mixdata" and (
+                self.prepared_data_root is None or not all(value is not None for value in canonical)):
+            raise ValueError(
+                "LIBERO+ FFT requires canonical prepared data plus the sealed split and normalization identities"
+            )
+        for value in (self.canonical_split_sha256, self.canonical_normalization_sha256):
+            if value is not None and (len(value) != 64 or any(char not in "0123456789abcdefABCDEF" for char in value)):
+                raise ValueError("Canonical SHA-256 values must contain 64 hexadecimal characters")
         if not self.device.startswith("cuda"):
             raise ValueError("The pinned FFT adapters require a BF16 CUDA device")
 
@@ -172,7 +189,18 @@ def preflight(cfg: FFTConfig) -> None:
             raise FileNotFoundError(f"Missing checkpoint model code: {cfg.checkpoint / filename}")
     if cfg.prepared_data_root is not None:
         from vlade.data.episode_data import EpisodeData
-        EpisodeData(cfg.prepared_data_root)
+        from vlade.data.canonical_split import load_canonical_split
+        from vlade.data.colab_assets import sha256
+
+        assert cfg.canonical_split_manifest is not None and cfg.canonical_split_sha256 is not None
+        assert cfg.canonical_normalization is not None and cfg.canonical_normalization_sha256 is not None
+        canonical = load_canonical_split(cfg.canonical_split_manifest, cfg.canonical_split_sha256)
+        if sha256(cfg.canonical_normalization) != cfg.canonical_normalization_sha256.lower():
+            raise ValueError("Canonical normalization SHA-256 mismatch")
+        data = EpisodeData(cfg.prepared_data_root)
+        if (data.manifest.get("canonical_manifest_sha256") != canonical.sha256 or
+                data.manifest.get("canonical_normalization_sha256") != cfg.canonical_normalization_sha256.lower()):
+            raise ValueError("Prepared data was built from a different canonical split or normalization")
     elif not cfg.data_root.is_dir():
         raise FileNotFoundError(f"Missing extracted RLDS data root: {cfg.data_root}")
     if cfg.prepared_data_root is None and not (cfg.data_root / cfg.dataset_name).is_dir():
@@ -376,7 +404,8 @@ def _git_revision(path: Path) -> str | None:
 
 def _code_fingerprint() -> dict[str, str]:
     paths = [Path(__file__).with_name(name) for name in ("fft.py", "loop.py", "prepared_fft.py", "run_control.py", "debug_records.py")]
-    paths.append(Path(__file__).parents[1] / "data/episode_data.py")
+    paths.extend(Path(__file__).parents[1] / "data" / name for name in
+                 ("episode_data.py", "canonical_split.py", "canonical_normalization.py"))
     return {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
 
 
@@ -385,7 +414,9 @@ def _prepared_data_identity(cfg: FFTConfig) -> dict | None:
         return None
     from vlade.data.episode_data import EpisodeData
     data = EpisodeData(cfg.prepared_data_root)
-    return {**{key: data.manifest[key] for key in ("normalization_sha256", "split_sha256")},
+    return {**{key: data.manifest[key] for key in ("normalization_sha256", "split_sha256",
+                                                    "canonical_manifest_sha256",
+                                                    "canonical_normalization_sha256")},
             "manifest_sha256": hashlib.sha256((data.root / "manifest.json").read_bytes()).hexdigest()}
 
 
@@ -469,7 +500,9 @@ def validate_resume(cfg: FFTConfig) -> dict[str, Any]:
     compatible = ("model", "checkpoint", "data_root", "dataset_name", "max_steps", "batch_size",
                   "grad_accumulation_steps", "learning_rate", "weight_decay", "seed",
                   "shuffle_buffer_size", "num_images_in_input", "optimizer", "gradient_checkpointing",
-                  "image_aug", "max_grad_norm", "lr_schedule", "warmup_steps", "prepared_data_root")
+                  "image_aug", "max_grad_norm", "lr_schedule", "warmup_steps", "prepared_data_root",
+                  "canonical_split_manifest", "canonical_split_sha256", "canonical_normalization",
+                  "canonical_normalization_sha256")
     for name in compatible:
         value = str(current[name]) if isinstance(current[name], Path) else current[name]
         if saved["configuration"].get(name) != value:

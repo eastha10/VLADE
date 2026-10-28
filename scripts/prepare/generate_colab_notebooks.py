@@ -1,4 +1,4 @@
-"""Generate three Colab notebooks and a manifest for ordinary source files."""
+"""Generate the four Colab notebooks and their ordinary-source manifest."""
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))

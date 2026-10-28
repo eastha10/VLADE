@@ -10,6 +10,11 @@ from torch.utils.data import DataLoader, IterableDataset
 from vlade.data.episode_data import EpisodeData, query_stream
 
 
+def loader_split(*, train: bool) -> str:
+    """Map training to canonical train and evaluation to validation; test is never selectable."""
+    return "train" if train else "validation"
+
+
 def make_loader(cfg: Any, processor: Any, *, train: bool = True) -> tuple[Any, Any]:
     from prismatic.models.backbones.llm.prompting import PurePromptBuilder
     from prismatic.util.data_utils import PaddedCollatorForActionPrediction
@@ -31,7 +36,7 @@ def make_loader(cfg: Any, processor: Any, *, train: bool = True) -> tuple[Any, A
             if train and cfg.resume:
                 saved = json.loads((cfg.resume / "vlade_fft.json").read_text(encoding="utf-8"))
                 skip = saved["step"] * cfg.grad_accumulation_steps * cfg.batch_size
-            for sample, _ in query_stream(data, "train" if train else "validation", seed=cfg.seed,
+            for sample, _ in query_stream(data, loader_split(train=train), seed=cfg.seed,
                                          repeat=train, skip=skip,
                                          limit=0 if train else cfg.max_eval_batches * cfg.batch_size):
                 item = transform({"dataset_name": cfg.dataset_name.encode(),

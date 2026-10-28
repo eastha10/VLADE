@@ -2,9 +2,11 @@
 
 2026-10-28에 Drive 다운로드·공통 episode split·FFT/cache·Qwen Task-only를 연결하는
 순서별 Colab 노트북을 추가했습니다. [실행·검토 인계](colab_kanban_handoff.md)를 먼저
-확인하십시오. 해당 노트북은 `prepared_data_root`를 설정해 content-group 80/10/10과
-train-only 통계를 사용합니다. 아래 기존 upstream RLDS 경로와 분리한 어댑터이며,
-실제 데이터 담당자의 최종 split manifest와 대조하기 전에는 정본 동일성을 주장하지 않습니다.
+확인하십시오. 확정 정본은 D/content-group 80/10/10, seed 42이며 Train/Validation/Test는
+11,477/1,428/1,442 Episode, Train 내부 Calibration은 728 Episode입니다. 정본 후보의
+SHA-256은 `487d2be...6e80`이고 전체 원본을 다시 읽어 계산한 Train 1,791,269 transition
+전용 normalization SHA-256은 `74b5c78d...abb8`입니다. 두 모델은 같은 prepared-data,
+manifest와 normalization을 사용하며 Validation/Test는 학습 loader에서 선택할 수 없습니다.
 
 최신 Colab 실행은 고정 1000-step을 쓰지 않고 실제 train query 수×MAIN_EPOCHS로 예산을
 계산합니다. 공통 episode shuffle/query cursor, 주기 validation, gradient·저장 공간 검사와
@@ -25,13 +27,32 @@ zero-context 경로를 학습하며, 에피소드 간 temporal context를 활용
 
 ## 데이터 준비
 
-LIBERO+ RLDS 자료는 로컬에서 사용자 요청으로 삭제했습니다. FFT를 진행할 때는
+고정 revision의 분할 ZIP은 다음과 같이 코드에 봉인되어 있습니다.
+
+| 파일 | bytes | SHA-256 |
+|---|---:|---|
+| `libero_plus_mixdata.z01` | 32,212,254,720 | `61928db465d2ae68994796174ddaaccd951c3728550e8454f3331b32ab555741` |
+| `libero_plus_mixdata.z02` | 32,212,254,720 | `57abe4f928e80b5c40f5f3ffaabafe175ec2b301adf9e85c1b7779a9a6bdb2e0` |
+| `libero_plus_mixdata.zip` | 11,119,747,860 | `56bf87a8decce0a0a331b09f3fe5011af3fb061a1867a761c755283342b0836e` |
+
+합계는 75,544,257,300 bytes(약 75.5 GB, 70.4 GiB)입니다. 결합 ZIP을 만드는 `/content`
+scratch에는 이 크기와 최소 2 GiB 여유가 필요하고, Drive에는 세 원본 part·추출본·prepared
+query 이미지·두 모델 가중치·checkpoint를 함께 둘 별도 여유가 필요합니다. 압축 해제 후 실제
+용량은 archive central directory의 합계를 읽은 뒤 공간을 검사하므로 사전에 고정값으로 단정하지 않습니다.
+
+Colab에서 FFT를 진행할 때는
 Colab에서 공식 분할 ZIP 3개를 직접 받은 다음
 `data/processed/libero_plus_rlds/libero_plus_mixdata/` 디렉터리가 생기도록
 압축 해제합니다. ZIP 내부 구조는 다운로드 완료 후 확인해야 합니다. 데이터가
 해당 경로와 다르게 풀리면 JSON 설정의 `fft_defaults.data_root`를 바꾸십시오.
 실행 전 압축 해제된 TFDS의 `dataset_info.json`과 shards가 있는지 확인하십시오.
 원본 평가 assets는 학습 입력이 아니므로 이 단계에서 설치할 필요가 없습니다.
+
+`colab_01_download_data_weights.ipynb`는 canonical manifest로 각 action+state trajectory
+group을 대조한 뒤에만 prepared dataset을 게시합니다. 임의 해시 재분할은 하지 않으며,
+확정 Train 전체 transition에서 재계산한 통계가 저장된 canonical normalization과 다르면
+실패합니다. `colab_02_ava_fft_and_fixed_cache.ipynb`와
+`colab_04_openvla_oft_fft.ipynb`는 서로 독립된 Transformers 환경을 사용합니다.
 
 ## 실행
 

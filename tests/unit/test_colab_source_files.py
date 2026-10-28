@@ -23,7 +23,8 @@ def write_file(root, relative, contents):
 
 def write_manifest(root, files, revisions=None):
     value = {"schema_version": 1, "files_sha256": files,
-             "source_revisions": revisions or {".": "parent-sha", "third_party/ava_vla": "ava-sha"}}
+             "source_revisions": revisions or {".": "parent-sha", "third_party/ava_vla": "ava-sha",
+                                                 "third_party/openvla_oft": "oft-sha"}}
     manifest = write_file(root, MANIFEST, (json.dumps(value, sort_keys=True) + "\n").encode())
     return hashlib.sha256(manifest.read_bytes()).hexdigest()
 
@@ -37,6 +38,7 @@ def test_generation_keeps_source_structure_without_archive_or_self_reference(tmp
         "docs/environment/setup.md": b"setup\n",
         "third_party/ava_vla/module.py": b"pass\n",
         "third_party/ava_vla/LICENSE": b"upstream license\n",
+        "third_party/openvla_oft/other.py": b"pass\n",
         "experiments/baselines/ava_vla/libero.json": b"{}\n",
         "experiments/manifests/ava_vla_source.json": b"{}\n",
         "README.md": b"readme\n", "STRUCTURE.md": b"structure\n", "AGENTS.md": b"instructions\n",
@@ -48,14 +50,14 @@ def test_generation_keeps_source_structure_without_archive_or_self_reference(tmp
         "src/.git/private.py": b"not source",
         "src/__pycache__/cached.py": b"not source",
         "src/credentials.env": b"not source",
-        "third_party/openvla_oft/other.py": b"not this execution environment",
         "experiments/colab_01_download_data_weights.ipynb": b"old notebook",
     }
     for relative, data in {**included, **excluded}.items():
         write_file(root, relative, data)
     write_manifest(root, {"old.py": "old"})
     monkeypatch.setattr(colab_notebooks, "ROOT", root)
-    monkeypatch.setattr(colab_notebooks, "revision", lambda path: "parent-sha" if path == root else "ava-sha")
+    monkeypatch.setattr(colab_notebooks, "revision", lambda path: "parent-sha" if path == root else
+                        "ava-sha" if path.name == "ava_vla" else "oft-sha")
 
     generated = colab_notebooks.generate()
     first_manifest = (root / MANIFEST).read_bytes()
@@ -63,11 +65,11 @@ def test_generation_keeps_source_structure_without_archive_or_self_reference(tmp
     assert manifest["files_sha256"] == {
         name: hashlib.sha256(contents).hexdigest() for name, contents in included.items()
     }
-    assert len(generated) == 4
-    assert {p.parent for p in generated[:3]} == {root / "experiments"}
+    assert len(generated) == 5
+    assert {p.parent for p in generated[:4]} == {root / "experiments"}
     assert generated[-1] == root / MANIFEST
     digest = hashlib.sha256(first_manifest).hexdigest()
-    for path in generated[:3]:
+    for path in generated[:4]:
         notebook = json.loads(path.read_text(encoding="utf-8"))
         cells = {cell["id"]: "".join(cell["source"]) for cell in notebook["cells"]}
         assert digest in cells["drive-and-source"]
@@ -134,9 +136,10 @@ def test_git_revision_falls_back_to_plain_source_manifest(tmp_path, monkeypatch)
     from vlade.training import fft
 
     root = tmp_path / "staged-project"
-    write_manifest(root, {}, {".": "parent-sha", "third_party/ava_vla": "ava-sha"})
+    write_manifest(root, {}, {".": "parent-sha", "third_party/ava_vla": "ava-sha",
+                              "third_party/openvla_oft": "oft-sha"})
     monkeypatch.setattr(fft, "REPO_ROOT", root)
     monkeypatch.setattr(fft.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=128, stdout=""))
     assert fft._git_revision(root) == "parent-sha"
     assert fft._git_revision(root / "third_party/ava_vla") == "ava-sha"
-    assert fft._git_revision(root / "third_party/openvla_oft") is None
+    assert fft._git_revision(root / "third_party/openvla_oft") == "oft-sha"

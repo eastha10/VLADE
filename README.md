@@ -146,6 +146,7 @@ Drive를 공통 저장소로 사용하는 순서별 노트북을 추가했습니
 1. [LIBERO+·AVA 가중치 다운로드/검증·episode 전처리](experiments/colab_01_download_data_weights.ipynb)
 2. [AVA-VLA FFT·저장/재개·T1 선택·순차 cache](experiments/colab_02_ava_fft_and_fixed_cache.ipynb)
 3. [Qwen Task-only·실제 가중치 로딩·overfit·저장/재개](experiments/colab_03_qwen_task_only.ipynb)
+4. [OpenVLA-OFT 독립 환경 FFT·체크포인트 재로딩](experiments/colab_04_openvla_oft_fft.ipynb)
 
 Colab에서 사용하는 코드와 노트북은 아래 위치의 일반 파일을 정본으로 관리합니다.
 
@@ -153,7 +154,7 @@ Colab에서 사용하는 코드와 노트북은 아래 위치의 일반 파일�
 |---|---|
 | `src/vlade/data/`, `src/vlade/training/` | 다운로드·episode 데이터·FFT·cache·Student 학습의 실제 구현 |
 | `scripts/data/`, `scripts/train/` | 위 구현을 실행하는 명령과 checkpoint 재로딩 검사 |
-| `experiments/colab_01_*.ipynb`부터 `colab_03_*.ipynb` | Colab에서 여는 순서별 실행 노트북 |
+| `experiments/colab_01_*.ipynb`부터 `colab_04_*.ipynb` | Colab에서 여는 순서별 실행 노트북 |
 | `configs/` | 모델·데이터·학습 조건과 고정 revision |
 | `experiments/baselines/`, `experiments/manifests/` | 비교 기준과 원본 소스 기록, Colab 파일별 SHA256 manifest |
 | `docs/`, `tests/` | 실행·연구 검토 안내와 회귀 검사 |
@@ -172,8 +173,10 @@ Colab에서 여십시오. 노트북의 `ROOT`와 `PROJECT_ROOT`는 기본적으�
 미커밋 변경도 사용할 파일 트리와 manifest에 포함되어야 합니다. GitHub HEAD만 받은 사본에는
 현재 작업 내용이 빠질 수 있습니다.
 
-Colab manifest에는 baseline·원본 소스 기록을 포함하지만, 이번 실행에서 사용하는 upstream
-코드는 `third_party/ava_vla/`입니다. OpenVLA-OFT는 기존 baseline의 별도 환경에서 다룹니다.
+Colab manifest에는 baseline·원본 소스 기록과 고정 AVA/OFT upstream을 포함합니다.
+두 모델은 서로 다른 Transformers 환경에서 실행하지만 D/content-group 80/10/10 seed 42
+canonical manifest와 확정 Train 전용 normalization을 공유합니다. Train/Validation/Test는
+11,477/1,428/1,442 Episode이며 Calibration 728개는 Train 내부 subset입니다.
 실행·분할 정본·AVA zero-context FFT 제한은 [Colab 인계 문서](docs/environment/colab_kanban_handoff.md)에
 정리했습니다. 일반 파일 전환 후 전체 CPU 회귀 검사 **127개 통과(40.24초)**와 실제 GPU 미검증 범위를 구분하며,
 CPU 검증을 실제 T1 선정/cache·Task-only 성능 결과로 해석하지 않습니다.

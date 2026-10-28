@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "status": "canonical",
+  "decision_date_kst": "2026-10-28",
+  "candidate": "D_80_10_10",
+  "policy": "exact_action_state_content_group_80_10_10",
+  "seed": 42,
+  "manifest": "experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz",
+  "manifest_sha256": "487d2be1039ba6a4facc3ba44785ba5159245dfe53462a1d5a41ba8230446e80",
+  "episode_counts": {
+    "train": 11477,
+    "validation": 1428,
+    "test": 1442
+  },
+  "calibration": {
+    "scope": "train_subset",
+    "episodes": 728
+  },
+  "unique_episode_ids": 14347,
+  "unique_content_groups": 1681,
+  "cross_split_content_group_leaks": 0,
+  "normalization": "experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json",
+  "normalization_sha256": "74b5c78ddce7f5d5fb00ccf91e1c34381fc7cece060110752c75fe4e7ca1abb8",
+  "normalization_scope": "canonical_train_only",
+  "train_transitions": 1791269,
+  "source_dataset": "Sylvest/libero_plus_rlds",
+  "source_dataset_revision": "fb0c7029b076030d5d57227229e4f7460def1f7c",
+  "verification": {
+    "manifest_bytes_preserved_from_candidate": true,
+    "full_source_group_membership_rechecked": true,
+    "normalization_recomputed_from_all_canonical_train_transitions": true,
+    "gpu_training_run": false
+  }
+}

@@ -17,7 +17,14 @@ DATA_REPO = "Sylvest/libero_plus_rlds"
 DATA_REV = "fb0c7029b076030d5d57227229e4f7460def1f7c"
 AVA_REPO = "LiAuto-DSR/avavla-libero-4in1"
 AVA_REV = "090bf68d234ea13bc78476236f82458b25b797b8"
+OFT_REPO = "moojink/openvla-7b-oft-finetuned-libero-spatial-object-goal-10"
+OFT_REV = "638918f3d1c2e43a39a8a20772bdb8b91835e4b7"
 PARTS = ("libero_plus_mixdata.z01", "libero_plus_mixdata.z02", "libero_plus_mixdata.zip")
+PART_METADATA = {
+    "libero_plus_mixdata.z01": (32_212_254_720, "61928db465d2ae68994796174ddaaccd951c3728550e8454f3331b32ab555741"),
+    "libero_plus_mixdata.z02": (32_212_254_720, "57abe4f928e80b5c40f5f3ffaabafe175ec2b301adf9e85c1b7779a9a6bdb2e0"),
+    "libero_plus_mixdata.zip": (11_119_747_860, "56bf87a8decce0a0a331b09f3fe5011af3fb061a1867a761c755283342b0836e"),
+}
 OWNER = ".vlade-extraction-owner.json"
 
 
@@ -41,6 +48,12 @@ def download(repo: str, revision: str, destination: Path, *, dataset: bool = Fal
              not item.rfilename.startswith(("logs/", ".")))]
     if dataset and {item.rfilename for item in files} != set(PARTS):
         raise ValueError("Expected all three spanned ZIP parts")
+    if dataset:
+        for item in files:
+            expected_size, expected_sha256 = PART_METADATA[item.rfilename]
+            official_sha256 = getattr(item.lfs, "sha256", None) if item.lfs else None
+            if item.size != expected_size or (official_sha256 and official_sha256 != expected_sha256):
+                raise ValueError(f"Pinned dataset metadata changed: {item.rfilename}")
     destination.mkdir(parents=True, exist_ok=True)
     required = sum(item.size or 0 for item in files if not (destination / item.rfilename).exists())
     if shutil.disk_usage(destination).free < required + 2 * 1024**3:
@@ -53,7 +66,7 @@ def download(repo: str, revision: str, destination: Path, *, dataset: bool = Fal
         if item.size is not None and path.stat().st_size != item.size:
             raise ValueError(f"Size mismatch: {item.rfilename}")
         lfs = item.lfs
-        expected = getattr(lfs, "sha256", None) if lfs else None
+        expected = PART_METADATA[item.rfilename][1] if dataset else (getattr(lfs, "sha256", None) if lfs else None)
         if expected and actual != expected:
             raise ValueError(f"LFS SHA256 mismatch: {item.rfilename}; remove the damaged file and retry")
         if not expected and item.blob_id:
@@ -175,7 +188,7 @@ def extract(parts: Path, output: Path, scratch: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("data", "ava", "extract"))
+    parser.add_argument("action", choices=("data", "ava", "oft", "extract"))
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--scratch", type=Path, default=Path("/content/libero_zip_scratch"))
     args = parser.parse_args()
@@ -183,6 +196,9 @@ def main() -> None:
         download(DATA_REPO, DATA_REV, args.root / "data/raw/libero_plus_rlds", dataset=True)
     elif args.action == "ava":
         download(AVA_REPO, AVA_REV, args.root / "checkpoints/teacher/avavla-libero-4in1")
+    elif args.action == "oft":
+        download(OFT_REPO, OFT_REV,
+                 args.root / "checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-spatial-object-goal-10")
     else:
         extract(args.root / "data/raw/libero_plus_rlds", args.root / "data/processed/libero_plus_tfds", args.scratch)
 

@@ -37,9 +37,8 @@ def test_preflight_requires_component_checkpoints(tmp_path):
     for filename in ("configuration_prismatic.py", "modeling_prismatic.py", "processing_prismatic.py"):
         (checkpoint / filename).touch()
     data_root = tmp_path / "data"
-    (data_root / "libero_plus_mixdata").mkdir(parents=True)
-    (data_root / "libero_plus_mixdata" / "dataset_info.json").touch()
-    cfg = FFTConfig("ava_vla", checkpoint, data_root, tmp_path / "out")
+    (data_root / "synthetic").mkdir(parents=True)
+    cfg = FFTConfig("ava_vla", checkpoint, data_root, tmp_path / "out", dataset_name="synthetic")
     with pytest.raises(FileNotFoundError, match="action_head"):
         preflight(cfg)
 
@@ -58,6 +57,11 @@ def test_config_rejects_non_fft_optimizer(tmp_path):
     path.write_text(json.dumps(raw), encoding="utf-8")
     with pytest.raises(ValueError, match="optimizer"):
         FFTConfig.from_json(path, "ava_vla")
+
+
+def test_libero_plus_config_cannot_bypass_canonical_prepared_data(tmp_path):
+    with pytest.raises(ValueError, match="canonical prepared data"):
+        FFTConfig("ava_vla", tmp_path, tmp_path, tmp_path / "out").validate()
 
 
 def test_libero_plus_rlds_uses_disk_builder(monkeypatch, tmp_path):

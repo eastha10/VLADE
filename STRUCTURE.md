@@ -23,6 +23,7 @@ vlade/
 │  ├─ colab_01_*.ipynb      # 데이터·AVA 가중치 준비
 │  ├─ colab_02_*.ipynb      # AVA FFT·T1 선택·cache
 │  ├─ colab_03_*.ipynb      # Qwen Task-only
+│  ├─ colab_04_*.ipynb      # OpenVLA-OFT 독립 환경 FFT·재로딩
 │  └─ runs/                 # 실제 실행별 기록
 ├─ tests/                   # unit, integration, smoke test
 ├─ docs/                    # 의사결정·프로토콜·환경·논문 메모
@@ -74,9 +75,10 @@ Student 계약 구현은 아래 범위이며 KD trainer는 미구현입니다.
 
 ## Colab 실행 연결 (2026-10-28)
 
-- `experiments/colab_01_*.ipynb` → `colab_02_*.ipynb` → `colab_03_*.ipynb`: 다운로드·FFT/cache·Task-only 실행 순서.
+- `experiments/colab_01_*.ipynb` → `colab_02_*.ipynb` / `colab_04_*.ipynb`: 공통 데이터 준비 후 AVA와 OFT를 독립 환경에서 실행합니다. `colab_03_*.ipynb`는 별도 Qwen Task-only 단계입니다.
 - `src/vlade/data/colab_assets.py`, `episode_data.py`: Drive 자료 준비·공통 episode split/query/정규화.
-- `src/vlade/training/prepared_fft.py`, `fixed_cache.py`, `student_task.py`: 데이터 어댑터·순차 Teacher cache·Student BC.
+- `src/vlade/data/canonical_split.py`, `canonical_normalization.py`: 확정 D/seed-42 manifest 검증·exact group 배정·Train 전용 통계.
+- `src/vlade/training/prepared_fft.py`, `fixed_cache.py`, `student_task.py`: canonical 데이터 어댑터·순차 Teacher cache·Student BC.
 - `scripts/data/`, `scripts/train/`: 해당 기능의 얇은 CLI와 checkpoint 재로딩 검사.
 - `src/vlade/utils/colab_notebooks.py`: 현재 일반 소스 파일을 바탕으로 순서별 노트북과 파일별 SHA/revision manifest 생성.
 - `scripts/prepare/generate_colab_notebooks.py`: 저장소 루트에서 인자 없이 실행하는 생성 진입점.
@@ -87,7 +89,7 @@ Student 계약 구현은 아래 범위이며 KD trainer는 미구현입니다.
 
 정본은 위 `src/`, `scripts/`, `experiments/`, `configs/`, `docs/`, `tests/`에 유지합니다.
 `experiments/baselines/`와 원본 소스 manifests도 Colab 파일 목록에 포함합니다. 실제 upstream
-복사 대상은 `third_party/ava_vla/`이며 OpenVLA-OFT 실행 환경은 별도입니다.
+복사 대상은 고정된 `third_party/ava_vla/`와 `third_party/openvla_oft/`이며 실행 환경은 별도입니다.
 
 Drive에서는 `/content/drive/MyDrive/VLADE` 바로 아래에 저장소 구조를 둡니다. 노트북의
 `ROOT`와 `PROJECT_ROOT`가 이 경로를 가리키며, manifest와 파일 SHA를 확인한 일반 소스만

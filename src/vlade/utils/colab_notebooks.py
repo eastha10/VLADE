@@ -129,18 +129,21 @@ def completed_checkpoints(directory):
 def generate() -> list[Path]:
     paths = []
     manifest_path = ROOT / "experiments/manifests/colab_source.json"
-    for folder in ("src", "scripts", "configs", "docs", "experiments/baselines", "experiments/manifests", "third_party/ava_vla"):
+    canonical_manifest = ROOT / "experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz"
+    for folder in ("src", "scripts", "configs", "docs", "experiments/baselines", "experiments/manifests",
+                   "third_party/ava_vla", "third_party/openvla_oft"):
         for path in (ROOT / folder).rglob("*"):
             if path == manifest_path or not path.is_file() or any(part in {".git", "__pycache__", ".pytest_cache", "wandb", "node_modules"} for part in path.parts):
                 continue
-            if path.suffix.lower() in {".py", ".json", ".toml", ".txt", ".md", ".yaml", ".yml"} or path.name in {"LICENSE", "NOTICE"}:
+            if (path.suffix.lower() in {".py", ".json", ".toml", ".txt", ".md", ".yaml", ".yml"} or
+                    path.name in {"LICENSE", "NOTICE"} or path == canonical_manifest):
                 paths.append(path)
     paths.extend(ROOT / name for name in ("README.md", "STRUCTURE.md", "AGENTS.md"))
     manifest = {"schema_version": 1, "built_for": "2026-10-28_kanban_colab_preparation",
                 "contains_uncommitted_work": True,
                 "revision_note": "Submodule reference may be the parent gitlink when metadata is inaccessible; exact ordinary source files are identified by files_sha256.",
                 "source_revisions": {name: revision(ROOT if name == "." else ROOT / name)
-                                     for name in (".", "third_party/ava_vla")},
+                                     for name in (".", "third_party/ava_vla", "third_party/openvla_oft")},
                 "files_sha256": {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                                   for p in sorted(set(paths))}}
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -151,7 +154,7 @@ def generate() -> list[Path]:
     one = notebooks / "colab_01_download_data_weights.ipynb"
     notebook(one, [
         cell("markdown", """
-        # 01 · LIBERO Plus 데이터·AVA-VLA 가중치 → Google Drive
+        # 01 · LIBERO Plus 데이터·AVA/OFT 가중치 → Google Drive
         CPU 런타임에서 시작할 수 있습니다. 저장소의 일반 코드 파일과 폴더를 Drive에 복사하고 공통 프로젝트 루트를 지정하십시오.
         `src/scripts/configs/docs/experiments/third_party/ava_vla`와 루트 문서 구조를 유지하십시오. 소스 목록과 해시는 `experiments/manifests/colab_source.json`으로 검사합니다.
         실행 순서: Drive 연결 → 환경 설치 → 공식 고정 revision 다운로드/해시 검증 → 분할 ZIP 결합/CRC 검사·해제 → episode 준비.
@@ -175,6 +178,7 @@ def generate() -> list[Path]:
         cell("code", """
         run([DATA_PY, 'scripts/data/prepare_colab_assets.py', 'data', '--root', ROOT])
         run([DATA_PY, 'scripts/data/prepare_colab_assets.py', 'ava', '--root', ROOT])
+        run([DATA_PY, 'scripts/data/prepare_colab_assets.py', 'oft', '--root', ROOT])
         """, "download"),
         cell("code", """
         run([DATA_PY, 'scripts/data/prepare_colab_assets.py', 'extract', '--root', ROOT,
@@ -182,8 +186,9 @@ def generate() -> list[Path]:
         """, "extract"),
         cell("markdown", """
         ## 공통 episode 분할·정규화·관측 준비
-        80/10/10은 동일 콘텐츠 그룹의 seed 42 해시로 배정합니다. 실제 episode 비율은 근사치입니다.
-        다른 컴퓨터에서 만든 기존 split과 같은 배정이라고 주장하지 않습니다. 기존 manifest를 받으면 비교 후 한 버전으로 고정하십시오.
+        확정 정본은 D/content-group 80/10/10, seed 42입니다. Train/Validation/Test는
+        11,477/1,428/1,442 Episode이고 Train 내부 Calibration은 728 Episode입니다.
+        준비 과정은 각 trajectory의 exact action+state group을 canonical manifest와 대조하며 임의 재분할을 금지합니다.
         Train의 **전체 timestep**에서 exact q01/q99를 계산합니다. Validation/test는 통계에 넣지 않습니다.
         Query 간격은 8이며 두 카메라 원본을 query 시점에만 보관합니다. 마지막 chunk의 padding은 loss에서 제외합니다.
         이 prepared-data 경로는 augmentation 없이 FFT/BC/cache의 입력·정규화를 공유합니다.
@@ -195,10 +200,15 @@ def generate() -> list[Path]:
             print('준비된 데이터 재사용:', PREPARED)
         else:
             run([DATA_PY, 'scripts/data/prepare_episode_data.py',
-                 '--tfds-root', ROOT / 'data/processed/libero_plus_tfds', '--output', PREPARED])
+                 '--tfds-root', ROOT / 'data/processed/libero_plus_tfds', '--output', PREPARED,
+                 '--canonical-manifest', CODE / 'experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz',
+                 '--canonical-sha256', '487d2be1039ba6a4facc3ba44785ba5159245dfe53462a1d5a41ba8230446e80',
+                 '--canonical-normalization', CODE / 'experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json',
+                 '--canonical-normalization-sha256', '74b5c78ddce7f5d5fb00ccf91e1c34381fc7cece060110752c75fe4e7ca1abb8'])
         manifest = json.loads((PREPARED / 'manifest.json').read_text())
-        print(json.dumps({key: manifest[key] for key in ['counts', 'split_policy', 'split_sha256',
-                                                       'normalization_sha256', 'dataset_revision']}, indent=2))
+        print(json.dumps({key: manifest[key] for key in ['counts', 'calibration_episodes', 'split_policy',
+                                                       'canonical_manifest_sha256', 'canonical_normalization_sha256',
+                                                       'split_sha256', 'normalization_sha256', 'dataset_revision']}, indent=2))
         print('다음: 02 Teacher 노트북을 A100 런타임에서 실행하십시오.')
         """, "prepare")])
     two = notebooks / "colab_02_ava_fft_and_fixed_cache.ipynb"
@@ -460,7 +470,55 @@ def generate() -> list[Path]:
         print(json.dumps(reports[-1] if reports else {}, indent=2, ensure_ascii=False))
         print('Validation L1은 rollout 성공률이 아닙니다. 환경 평가와 최종 기준 성능 기록은 별도로 진행하십시오.')
         """, "student-main")])
-    return [one, two, three, manifest_path]
+    four = notebooks / "colab_04_openvla_oft_fft.ipynb"
+    notebook(four, [
+        cell("markdown", """
+        # 04 · OpenVLA-OFT 독립 환경 1-step FFT·재로딩
+        01에서 준비한 동일 canonical split/normalization을 사용합니다. AVA 환경과 Transformers fork를
+        공유하지 않습니다. LoRA가 아닌 전체 파라미터 FFT이며, 본격 학습 전 1 optimizer step과 저장·재로딩만 검사합니다.
+        A100 40 GB에서도 OOM 가능성이 있으므로 실제 peak VRAM과 Drive 여유 공간을 먼저 확인하십시오.
+        """, "purpose"), common,
+        cell("code", """
+        import tomllib
+        upstream = CODE / 'third_party/openvla_oft'
+        dependencies = tomllib.loads((upstream / 'pyproject.toml').read_text())['project']['dependencies']
+        dependencies = [dep for dep in dependencies if not dep.startswith(('transformers @', 'dlimp @', 'huggingface_hub', 'accelerate'))]
+        dependencies += [
+            'transformers @ git+https://github.com/moojink/transformers-openvla-oft.git@bc339d9ad707454c0c115970db43c260067c61ab',
+            'dlimp @ git+https://github.com/moojink/dlimp_openvla.git@040105d256bd28866cc6620621a3d5f7b6b91b46',
+            'numpy==1.26.4', 'tensorflow-metadata==1.15.0', 'bitsandbytes==0.43.3',
+            'huggingface_hub==0.36.2', 'accelerate==1.15.0']
+        OFT_PY = environment('vlade_oft_fft_py311', '3.11', dependencies)
+        run([UV, 'pip', 'install', '--python', OFT_PY, '--no-deps', '-e', upstream])
+        run([OFT_PY, '-c', "import torch,transformers,tensorflow_datasets; assert torch.cuda.is_available(); assert torch.cuda.is_bf16_supported(); print(torch.__version__,transformers.__version__,torch.cuda.get_device_name(0))"])
+        (ROOT / 'oft_environment_freeze.txt').write_text(subprocess.check_output(
+            [str(UV), 'pip', 'freeze', '--python', str(OFT_PY)], text=True))
+        """, "install-oft"),
+        cell("code", """
+        PREPARED = ROOT / 'data/processed/libero_plus_episode80'
+        from vlade.data.episode_data import EpisodeData
+        data = EpisodeData(PREPARED)
+        assert data.manifest['counts'] == {'train': 11477, 'validation': 1428, 'test': 1442}
+        assert data.manifest['canonical_manifest_sha256'] == '487d2be1039ba6a4facc3ba44785ba5159245dfe53462a1d5a41ba8230446e80'
+        config = json.loads((CODE / 'configs/experiments/libero_plus_fft.json').read_text())
+        output = ROOT / 'runs/openvla_oft_fft/oft-one-step-seed42'
+        config['fft_defaults'].update(
+            data_root=str(ROOT / 'data/processed/libero_plus_tfds'), prepared_data_root=str(PREPARED),
+            image_aug=False, batch_size=1, grad_accumulation_steps=1, max_steps=1, save_steps=1,
+            save_optimizer_state=True, eval_steps=0)
+        config['fft_runs']['openvla_oft'].update(
+            checkpoint=str(ROOT / 'checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-spatial-object-goal-10'),
+            output_dir=str(output))
+        configs = ROOT / 'run-configs'; configs.mkdir(exist_ok=True)
+        config_path = configs / 'openvla-oft-one-step-seed42.json'
+        config_path.write_text(json.dumps(config, indent=2))
+        run([OFT_PY, 'scripts/train/run_fft.py', '--model', 'openvla_oft', '--config', config_path, '--preflight'])
+        if not (output / 'step-0000001/COMPLETE').is_file():
+            run([OFT_PY, 'scripts/train/run_fft.py', '--model', 'openvla_oft', '--config', config_path])
+        run([OFT_PY, 'scripts/train/check_fft_checkpoint.py', '--checkpoint', output / 'step-0000001',
+             '--data', PREPARED, '--config', config_path, '--report', output / 'reload_report.json'])
+        """, "oft-smoke")])
+    return [one, two, three, four, manifest_path]
 
 
 def main() -> None:
