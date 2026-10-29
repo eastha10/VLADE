@@ -147,6 +147,7 @@ Drive를 공통 저장소로 사용하는 순서별 노트북을 추가했습니
 2. [AVA-VLA FFT·저장/재개·T1 선택·순차 cache](experiments/colab_02_ava_fft_and_fixed_cache.ipynb)
 3. [Qwen Task-only·실제 가중치 로딩·overfit·저장/재개](experiments/colab_03_qwen_task_only.ipynb)
 4. [OpenVLA-OFT 독립 환경 FFT·체크포인트 재로딩](experiments/colab_04_openvla_oft_fft.ipynb)
+5. [AVA A100 Canonical Train 1-Episode·1-step FFT·별도 프로세스 재로딩](experiments/colab_05_ava_a100_one_step_reload.ipynb)
 
 Colab에서 사용하는 코드와 노트북은 아래 위치의 일반 파일을 정본으로 관리합니다.
 
@@ -188,3 +189,8 @@ checkpoint 공간 검사·bounded debug와 T1 비교 보고서 검증을 연결�
 
 추가 교차 검토 후 split manifest 정합성, checkpoint 파일·step 봉인, cache source/feature 대조,
 파일럿 보고서 identity와 기존 T1 선택 충돌 검사, 소유한 추출 임시 파일의 재시작도 보완했습니다.
+
+AVA 전용 1-step 노트북은 전체 Episode 전처리와 본 학습을 수행하지 않습니다. 원본 TFDS를
+순서대로 읽다가 첫 canonical Train Episode를 확인한 즉시 중단하고 sealed full-Train
+normalization을 그대로 사용합니다. A100 실측값은 Colab에서 실제 실행한 뒤 생성되는
+`reload_report.json`만 근거로 삼으며, 이 저장소 변경 자체는 GPU 통과를 뜻하지 않습니다.

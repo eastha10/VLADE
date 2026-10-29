@@ -15,7 +15,10 @@ from PIL import Image
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 import vlade.data.episode_data as episode_data_module
 from vlade.data.colab_assets import safe_members, sha256
-from vlade.data.episode_data import EpisodeData, group_split, prepare
+from vlade.data.episode_data import (EpisodeData, group_split, prepare,
+    prepare_canonical_train_episode)
+from vlade.data.canonical_split import (CANONICAL_SHA256, CanonicalSplit,
+    trajectory_group_id)
 from vlade.training.fixed_cache import generate, validate_selection
 from vlade.training.student_task import samples
 from vlade.data.episode_data import query_stream, query_count, write_json
@@ -147,6 +150,43 @@ def test_data_rejects_nonfinite_and_never_publishes_complete(tmp_path):
         prepare(iter([steps]), tmp_path / "bad")
     assert not (tmp_path / "bad").exists()
     assert not list((tmp_path / "bad.incomplete").rglob("COMPLETE"))
+
+
+def test_single_canonical_train_episode_stops_early_and_reuses_full_train_stats(tmp_path, monkeypatch):
+    steps = episode(3)
+    actions = np.asarray([step["action"] for step in steps], dtype=np.float32)
+    states = np.asarray([step["observation"]["state"] for step in steps], dtype=np.float32)
+    group = trajectory_group_id(actions, states)
+    canonical = CanonicalSplit(
+        tmp_path / "canonical.jsonl.gz", CANONICAL_SHA256, frozenset({"episode-smoke"}),
+        {group: ("train", False)}, {group: 1}, {group: ("episode-smoke",)},
+    )
+    stats = {
+        "canonical_manifest_sha256": CANONICAL_SHA256,
+        "normalization_scope": "canonical_train_only",
+        "num_trajectories": 11_477,
+        "num_transitions": 1_791_269,
+        "action": {"q01": [0] * 7, "q99": [10] * 7, "mask": [True] * 6 + [False]},
+        "proprio": {"q01": [0] * 8, "q99": [10] * 8, "mask": [True] * 8},
+    }
+
+    def bounded():
+        yield steps
+        pytest.fail("Single-Episode preparation must stop after the selected Train Episode")
+
+    output = tmp_path / "smoke"
+    manifest = prepare_canonical_train_episode(
+        bounded(), output, source={"revision": "test"}, canonical=canonical,
+        canonical_normalization=stats, canonical_normalization_sha256="a" * 64,
+    )
+    assert manifest["counts"] == {"train": 1}
+    assert manifest["selected_source_episode_index"] == 0
+    assert manifest["dataset_scope"] == "canonical_train_episode_smoke"
+    assert json.loads((output / "normalization.json").read_text())["num_trajectories"] == 11_477
+    monkeypatch.setattr(episode_data_module, "load_canonical_split", lambda *_: canonical)
+    data = EpisodeData(output)
+    assert query_count(data) == 2
+    assert len(list(islice(query_stream(data, "train", repeat=True), 3))) == 3
 
 
 def test_prepare_resumes_verified_legacy_episode_and_rewrites_damaged_episode(tmp_path, monkeypatch):
@@ -365,6 +405,19 @@ def test_notebook_run_all_does_not_launch_main_training(tmp_path):
     env = {"student_config": lambda _: (tmp_path / "config.json", tmp_path), "RUN_MAIN_STUDENT": False,
            "train_student": forbidden, "json": json}
     exec(notebook_cell("colab_03_qwen_task_only.ipynb", "student-main"), env)
+
+
+def test_ava_a100_notebook_uses_bounded_canonical_episode_and_separate_reload_process():
+    prepare_cell = notebook_cell("colab_05_ava_a100_one_step_reload.ipynb", "prepare-one-episode")
+    config_cell = notebook_cell("colab_05_ava_a100_one_step_reload.ipynb", "configure-one-step")
+    run_cell = notebook_cell("colab_05_ava_a100_one_step_reload.ipynb", "run-and-reload")
+    assert "prepare_single_canonical_episode.py" in prepare_cell
+    assert "prepare_episode_data.py" not in prepare_cell
+    assert "'counts'] == {'train': 1}" in prepare_cell
+    assert "grad_accumulation_steps=1" in config_cell and "max_steps=1" in config_cell
+    assert "save_optimizer_state=True" in config_cell and "eval_steps=0" in config_cell
+    assert "check_fft_checkpoint.py" in run_cell
+    assert "--metrics" in run_cell and "--run-manifest" in run_cell
 
 
 def test_notebook_failed_overfit_cannot_launch_main_training(tmp_path):

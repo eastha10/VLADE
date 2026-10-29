@@ -16,6 +16,7 @@ import random
 import shutil
 import subprocess
 import sys
+import time
 import uuid
 from datetime import datetime, timezone
 from dataclasses import asdict, dataclass, replace
@@ -366,6 +367,8 @@ def compute_loss(model: Any, head: Any, proprio: Any, generator: Any, batch: dic
         prediction = head.predict_action(action_hidden.to(torch.bfloat16))
         if prediction.shape != target.shape:
             raise ValueError(f"Prediction/target shape mismatch: {prediction.shape} vs {target.shape}")
+        if not torch.isfinite(prediction).all():
+            raise FloatingPointError("Non-finite predicted action")
         if capture is not None:
             capture({"predicted_action": prediction.detach().float().cpu(), "gt_action": target.detach().cpu(),
                      "proprio": state.detach().float().cpu(),
@@ -608,10 +611,24 @@ def train(cfg: FFTConfig) -> None:
                 if generator is not None:
                     groups["attention_generator"] = generator
                 manifest["gradient_diagnostics"] = gradient_diagnostics(groups)
+                manifest["finite_checks"] = {
+                    "predicted_action": True,
+                    "scalar_loss": True,
+                    "gradients": True,
+                }
 
         with metrics_path.open("x", encoding="utf-8") as metrics_file:
+            torch.cuda.synchronize(device)
+            step_started = time.perf_counter()
             def on_step(current: Any, metrics: dict[str, float]) -> None:
+                nonlocal step_started
+                torch.cuda.synchronize(device)
+                step_finished = time.perf_counter()
+                from vlade.training.run_control import peak_process_rss_bytes
+                metrics["step_time_seconds"] = step_finished - step_started
                 metrics["peak_allocated_bytes"] = torch.cuda.max_memory_allocated(device)
+                metrics["peak_reserved_bytes"] = torch.cuda.max_memory_reserved(device)
+                metrics["peak_process_rss_bytes"] = peak_process_rss_bytes()
                 if validation is not None and (current.step % cfg.eval_steps == 0 or current.step == cfg.max_steps):
                     metrics["val_l1"] = evaluate(modules, validation, loss_fn, current.step, cfg.max_eval_batches)
                 metrics_file.write(json.dumps({"step": current.step, "microsteps": current.microsteps,
@@ -633,6 +650,8 @@ def train(cfg: FFTConfig) -> None:
                                                   last_training_batch, device, num_patches, current.step, capture=capture))
                 manifest["step"] = current.step
                 record_manifest()
+                torch.cuda.synchronize(device)
+                step_started = time.perf_counter()
 
             run_loop(modules=modules, optimizer=optimizer, scheduler=scheduler, batches=loader,
                      loss_fn=loss_fn, max_steps=cfg.max_steps,

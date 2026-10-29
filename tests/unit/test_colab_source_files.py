@@ -72,11 +72,11 @@ def test_generation_keeps_source_structure_without_archive_or_self_reference(tmp
     assert manifest["files_sha256"] == {
         name: hashlib.sha256(contents).hexdigest() for name, contents in included.items()
     }
-    assert len(generated) == 5
-    assert {p.parent for p in generated[:4]} == {root / "experiments"}
+    assert len(generated) == 6
+    assert {p.parent for p in generated[:5]} == {root / "experiments"}
     assert generated[-1] == root / MANIFEST
     digest = hashlib.sha256(first_manifest).hexdigest()
-    for path in generated[:4]:
+    for path in generated[:5]:
         notebook = json.loads(path.read_text(encoding="utf-8"))
         cells = {cell["id"]: "".join(cell["source"]) for cell in notebook["cells"]}
         assert digest in cells["drive-and-source"]

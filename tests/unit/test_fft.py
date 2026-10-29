@@ -135,6 +135,10 @@ def test_continuous_loss_updates_backbone_and_ava_components(monkeypatch):
     loss.backward()
     assert loss.item() > 0
     assert all(component.scale.grad is not None for component in (model, head, proprio, generator))
+    with torch.no_grad():
+        head.scale.fill_(float("nan"))
+    with pytest.raises(FloatingPointError, match="predicted action"):
+        compute_loss(model, head, proprio, generator, batch, torch.device("cpu"), 2, 0)
 
 
 def test_full_checkpoint_saves_model_and_all_components(monkeypatch, tmp_path):

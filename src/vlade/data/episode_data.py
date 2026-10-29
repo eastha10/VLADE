@@ -102,6 +102,59 @@ def _image_bytes(value: Any) -> tuple[bytes, str]:
     return buffer.getvalue(), ".png"
 
 
+def _episode_material(steps: list[dict]) -> tuple[np.ndarray, np.ndarray, np.ndarray, str,
+                                                        list[dict], dict[str, bytes], dict[str, str]]:
+    """Validate one raw episode and build only its query-time payloads."""
+    if not steps:
+        raise ValueError("Empty episode")
+    actions = np.asarray([step["action"] for step in steps], dtype=np.float32)
+    states = np.asarray([step["observation"]["state"] for step in steps], dtype=np.float32)
+    if actions.shape != (len(steps), 7) or states.shape != (len(steps), 8):
+        raise ValueError(f"Invalid action/state shape: {actions.shape}, {states.shape}")
+    proprio = np.concatenate((states[:, :6], states[:, -2:]), axis=-1)
+    if not np.isfinite(actions).all() or not np.isfinite(proprio).all():
+        raise ValueError("Non-finite trajectory")
+    if np.any(actions[:, 6] < -1.0001) or np.any(actions[:, 6] > 1.0001):
+        raise ValueError("Gripper outside the expected raw [-1,1] range")
+    digest = hashlib.sha256()
+    queries: list[dict] = []
+    payloads: dict[str, bytes] = {}
+    image_hashes: dict[str, str] = {}
+    for t, step in enumerate(steps):
+        instruction = _language(step["language_instruction"])
+        if not instruction.strip():
+            raise ValueError("Missing language instruction")
+        values = [actions[t].tobytes(), states[t].tobytes(), instruction.encode("utf-8")]
+        query_files = {}
+        for camera, key in (("primary", "image"), ("wrist", "wrist_image")):
+            value = step["observation"][key]
+            raw = bytes(value) if isinstance(value, (bytes, np.bytes_)) else np.asarray(value).tobytes()
+            values.append(raw)
+            if t % 8 == 0:
+                payload, suffix = _image_bytes(value)
+                name = f"{camera}-{t:07d}{suffix}"
+                payloads[name] = payload
+                image_hashes[name] = hashlib.sha256(payload).hexdigest()
+                query_files[camera] = name
+        for value in values:
+            digest.update(len(value).to_bytes(8, "little"))
+            digest.update(value)
+        if t % 8 == 0:
+            queries.append({"timestep": t, "instruction": instruction,
+                            "primary": query_files["primary"], "wrist": query_files["wrist"]})
+    return actions, states, proprio, digest.hexdigest(), queries, payloads, image_hashes
+
+
+def _validate_canonical_normalization(canonical: CanonicalSplit, normalization: dict,
+                                      normalization_sha256: str) -> None:
+    if (not normalization_sha256 or
+            normalization.get("canonical_manifest_sha256") != canonical.sha256 or
+            normalization.get("normalization_scope") != "canonical_train_only" or
+            normalization.get("num_trajectories") != 11_477 or
+            normalization.get("num_transitions") != 1_791_269):
+        raise ValueError("Canonical normalization metadata does not match the selected train split")
+
+
 def tfds_episodes(directory: Path) -> Iterator[list[dict]]:
     import tensorflow as tf
     import tensorflow_datasets as tfds
@@ -245,11 +298,8 @@ def prepare(episodes: Iterator[list[dict]], destination: Path, *, seed: int = 42
     if canonical is not None:
         if canonical_normalization is None or canonical_normalization_sha256 is None:
             raise ValueError("Canonical preparation requires the sealed train-only normalization")
-        if (canonical_normalization.get("canonical_manifest_sha256") != canonical.sha256 or
-                canonical_normalization.get("normalization_scope") != "canonical_train_only" or
-                canonical_normalization.get("num_trajectories") != 11_477 or
-                canonical_normalization.get("num_transitions") != 1_791_269):
-            raise ValueError("Canonical normalization metadata does not match the selected train split")
+        _validate_canonical_normalization(canonical, canonical_normalization,
+                                          canonical_normalization_sha256)
     contract = _resume_contract(seed, source, canonical, canonical_normalization_sha256)
     contract_path = stage / "resume.json"
     if contract_path.is_file() and _read_json(contract_path) != contract:
@@ -262,17 +312,7 @@ def prepare(episodes: Iterator[list[dict]], destination: Path, *, seed: int = 42
     for index, steps in enumerate(episodes):
         if backup is not None:
             backup.check_space(stage)
-        if not steps:
-            raise ValueError("Empty episode")
-        actions = np.asarray([step["action"] for step in steps], dtype=np.float32)
-        states = np.asarray([step["observation"]["state"] for step in steps], dtype=np.float32)
-        if actions.shape != (len(steps), 7) or states.shape != (len(steps), 8):
-            raise ValueError(f"Invalid action/state shape: {actions.shape}, {states.shape}")
-        proprio = np.concatenate((states[:, :6], states[:, -2:]), axis=-1)
-        if not np.isfinite(actions).all() or not np.isfinite(proprio).all():
-            raise ValueError("Non-finite trajectory")
-        if np.any(actions[:, 6] < -1.0001) or np.any(actions[:, 6] > 1.0001):
-            raise ValueError("Gripper outside the expected raw [-1,1] range")
+        actions, states, proprio, content, queries, payloads, image_hashes = _episode_material(steps)
         if canonical is None:
             episode_id = f"episode-{index:07d}"
             split = is_calibration = content_group_id = None
@@ -284,34 +324,6 @@ def prepare(episodes: Iterator[list[dict]], destination: Path, *, seed: int = 42
             except IndexError as error:
                 raise ValueError(f"Canonical content group occurs too many times: {content_group_id}") from error
             observed_groups[content_group_id] += 1
-        digest = hashlib.sha256()
-        queries = []
-        payloads = {}
-        image_hashes = {}
-        for t, step in enumerate(steps):
-            instruction = _language(step["language_instruction"])
-            if not instruction.strip():
-                raise ValueError("Missing language instruction")
-            # Length-prefix bytes to avoid ambiguous concatenations.
-            values = [actions[t].tobytes(), states[t].tobytes(), instruction.encode("utf-8")]
-            query_files = {}
-            for camera, key in (("primary", "image"), ("wrist", "wrist_image")):
-                value = step["observation"][key]
-                raw = bytes(value) if isinstance(value, (bytes, np.bytes_)) else np.asarray(value).tobytes()
-                values.append(raw)
-                if t % 8 == 0:
-                    payload, suffix = _image_bytes(value)
-                    name = f"{camera}-{t:07d}{suffix}"
-                    payloads[name] = payload
-                    image_hashes[name] = hashlib.sha256(payload).hexdigest()
-                    query_files[camera] = name
-            for value in values:
-                digest.update(len(value).to_bytes(8, "little"))
-                digest.update(value)
-            if t % 8 == 0:
-                queries.append({"timestep": t, "instruction": instruction,
-                                "primary": query_files["primary"], "wrist": query_files["wrist"]})
-        content = digest.hexdigest()
         if canonical is None:
             split, is_calibration, content_group_id = group_split(content, seed), False, content
         expected = {"episode_id": episode_id, "content_sha256": content,
@@ -378,6 +390,98 @@ def prepare(episodes: Iterator[list[dict]], destination: Path, *, seed: int = 42
     return manifest
 
 
+def prepare_canonical_train_episode(episodes: Iterator[list[dict]], destination: Path, *,
+                                    source: dict | None, canonical: CanonicalSplit,
+                                    canonical_normalization: dict,
+                                    canonical_normalization_sha256: str,
+                                    episode_id: str | None = None) -> dict:
+    """Materialize one verified canonical Train episode for a bounded FFT smoke run.
+
+    The iterator is consumed only through the selected episode. The sealed full-Train
+    normalization is copied unchanged; no subset statistics are calculated.
+    """
+    if destination.exists():
+        raise FileExistsError(f"Use a new prepared dataset path: {destination}")
+    stage = destination.with_name(destination.name + ".incomplete")
+    if stage.exists():
+        raise FileExistsError(f"Remove or inspect the existing incomplete output first: {stage}")
+    _validate_canonical_normalization(canonical, canonical_normalization,
+                                      canonical_normalization_sha256)
+    if episode_id is not None:
+        matches = [(group_id, canonical.group_assignments[group_id])
+                   for group_id, identifiers in canonical.group_episode_ids.items()
+                   if episode_id in identifiers]
+        if len(matches) != 1 or matches[0][1][0] != "train":
+            raise ValueError("Requested episode_id is not exactly one canonical Train episode")
+    stage.mkdir(parents=True)
+    (stage / ".checkpoints").mkdir()
+    observed_groups: Counter[str] = Counter()
+    selected: dict | None = None
+    selected_source_index: int | None = None
+    for source_index, steps in enumerate(episodes):
+        actions, states, proprio, content, queries, payloads, image_hashes = _episode_material(steps)
+        split, is_calibration, content_group_id = canonical.assignment(actions, states)
+        occurrence = observed_groups[content_group_id]
+        try:
+            canonical_episode_id = canonical.group_episode_ids[content_group_id][occurrence]
+        except IndexError as error:
+            raise ValueError(f"Canonical content group occurs too many times: {content_group_id}") from error
+        observed_groups[content_group_id] += 1
+        if split != "train" or (episode_id is not None and canonical_episode_id != episode_id):
+            continue
+        expected = {"episode_id": canonical_episode_id, "content_sha256": content,
+                    "content_group_id": content_group_id, "split": split,
+                    "is_calibration": is_calibration, "steps": len(steps), "queries": len(queries)}
+        folder = stage / "episodes" / canonical_episode_id
+        checkpoint = stage / ".checkpoints" / f"{canonical_episode_id}.json"
+        selected = _write_episode(folder, checkpoint, expected, actions, proprio, queries, payloads)
+        selected_source_index = source_index
+        break
+    if selected is None:
+        raise ValueError("The requested canonical Train episode was not found in the TFDS stream")
+    split_keys = ("episode_id", "content_sha256", "content_group_id", "split", "is_calibration",
+                  "steps", "queries")
+    write_json(stage / "splits.json", [{key: selected[key] for key in split_keys}])
+    statistics = {section: canonical_normalization[section] for section in ("action", "proprio")}
+    statistics.update(
+        convention=CONVENTION,
+        split_sha256=sha256(stage / "splits.json"),
+        train_only=True,
+        normalization_scope="canonical_train_only",
+        canonical_manifest_sha256=canonical.sha256,
+        canonical_normalization_sha256=canonical_normalization_sha256,
+        num_trajectories=canonical_normalization["num_trajectories"],
+        num_transitions=canonical_normalization["num_transitions"],
+        prepared_subset_trajectories=1,
+    )
+    write_json(stage / "normalization.json", statistics)
+    manifest = {
+        "schema_version": 2,
+        "dataset_scope": "canonical_train_episode_smoke",
+        "dataset_revision": DATA_REV,
+        "seed": CANONICAL_SEED,
+        "split_policy": "canonical_D_content_group_80_10_10_seed_42",
+        "query_interval_steps": 8,
+        "image_orientation": "as_stored_in_rlds_no_rotation",
+        "normalization_sha256": sha256(stage / "normalization.json"),
+        "split_sha256": sha256(stage / "splits.json"),
+        "source": source,
+        "canonical_manifest_sha256": canonical.sha256,
+        "canonical_manifest_path": str(canonical.path),
+        "canonical_normalization_sha256": canonical_normalization_sha256,
+        "canonical_full_counts": {"train": 11_477, "validation": 1_428, "test": 1_442},
+        "calibration_episodes": int(selected["is_calibration"]),
+        "counts": {"train": 1},
+        "selected_source_episode_index": selected_source_index,
+        "episodes": [selected],
+    }
+    _validate_completed_episodes(stage, [selected])
+    write_json(stage / "manifest.json", manifest)
+    _write_bytes(stage / "COMPLETE", b"ok\n")
+    publish_directory(stage, destination)
+    return manifest
+
+
 def normalize(values: np.ndarray, stats: dict) -> np.ndarray:
     low, high, mask = (np.asarray(stats[key]) for key in ("q01", "q99", "mask"))
     return np.where(mask, np.clip(2 * (values - low) / (high - low + 1e-8) - 1, -1, 1), values).astype(np.float32)
@@ -431,9 +535,23 @@ class EpisodeData:
             raise ValueError("Episode split counts do not match the manifest")
         if self.manifest.get("canonical_manifest_sha256") is not None:
             from vlade.data.canonical_split import CANONICAL_CALIBRATION_EPISODES, CANONICAL_COUNTS
-            if (self.manifest.get("counts") != CANONICAL_COUNTS or
-                    self.manifest.get("calibration_episodes") != CANONICAL_CALIBRATION_EPISODES or
-                    sum(bool(entry["is_calibration"]) for entry in self.entries) != CANONICAL_CALIBRATION_EPISODES):
+            if self.manifest.get("dataset_scope") == "canonical_train_episode_smoke":
+                if (self.manifest.get("counts") != {"train": 1} or len(self.entries) != 1 or
+                        self.manifest.get("canonical_full_counts") != CANONICAL_COUNTS or
+                        self.stats.get("normalization_scope") != "canonical_train_only" or
+                        self.stats.get("prepared_subset_trajectories") != 1):
+                    raise ValueError("Invalid canonical one-Episode smoke scope")
+                canonical_path = Path(__file__).resolve().parents[3] / (
+                    "experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz")
+                canonical = load_canonical_split(canonical_path, CANONICAL_SHA256)
+                entry = self.entries[0]
+                assignment = canonical.group_assignments.get(entry["content_group_id"])
+                if (assignment != ("train", entry["is_calibration"]) or
+                        entry["episode_id"] not in canonical.group_episode_ids[entry["content_group_id"]]):
+                    raise ValueError("Smoke Episode is not a member of canonical Train")
+            elif (self.manifest.get("counts") != CANONICAL_COUNTS or
+                  self.manifest.get("calibration_episodes") != CANONICAL_CALIBRATION_EPISODES or
+                  sum(bool(entry["is_calibration"]) for entry in self.entries) != CANONICAL_CALIBRATION_EPISODES):
                 raise ValueError("Prepared data does not reproduce canonical split/calibration counts")
 
     def episodes(self, split: str, *, order: list[str] | None = None) -> Iterator[tuple[dict, list[dict]]]:

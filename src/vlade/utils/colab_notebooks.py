@@ -536,7 +536,118 @@ def generate() -> list[Path]:
         run([OFT_PY, 'scripts/train/check_fft_checkpoint.py', '--checkpoint', output / 'step-0000001',
              '--data', PREPARED, '--config', config_path, '--report', output / 'reload_report.json'])
         """, "oft-smoke")])
-    return [one, two, three, four, manifest_path]
+    five = notebooks / "colab_05_ava_a100_one_step_reload.ipynb"
+    notebook(five, [
+        cell("markdown", """
+        # 05 · AVA-VLA A100 1-step FFT · checkpoint 별도 프로세스 재로딩
+        이 노트북은 Canonical D/seed 42의 **Train Episode 1개만** 원본 TFDS에서 준비하고
+        AVA-VLA full-parameter forward/backward/update 1-step, 전체 checkpoint 저장과 별도 Python
+        프로세스 재로딩을 검사합니다. 14,347 Episode 전체 전처리·복사나 본 학습은 실행하지 않습니다.
+
+        기본 Colab Python 3.13은 사용하지 않고 `uv`로 Python 3.11 환경을 만듭니다.
+        `bitsandbytes`를 포함한 AVA 고정 의존성을 설치하므로 네트워크 설치 시간은 필요하지만
+        모델·데이터를 새로 다운로드하지 않습니다. 입력은 Drive의 기존 TFDS와 AVA 가중치입니다.
+
+        **AVA temporal 한계:** FFT 샘플에는 이전 query의 action feature가 없어
+        `temporal_context=None`인 learned zero-context 경로만 학습합니다. 따라서 원본 AVA의
+        순차 temporal-context 학습/TBPTT 또는 rollout 성능 검증과 동등하지 않습니다.
+        """, "purpose"), common,
+        cell("code", """
+        import tomllib
+        upstream = CODE / 'third_party/ava_vla'
+        dependencies = tomllib.loads((upstream / 'pyproject.toml').read_text())['project']['dependencies']
+        dependencies = [dep for dep in dependencies if not dep.startswith(
+            ('transformers @', 'dlimp @', 'huggingface_hub', 'accelerate'))]
+        dependencies += [
+            'transformers @ git+https://github.com/LiAuto-DSR/transformers-avavla.git@a03eee5da1794c45f5a911b60a9a4545e6e0ed1f',
+            'dlimp @ git+https://github.com/moojink/dlimp_openvla.git@040105d256bd28866cc6620621a3d5f7b6b91b46',
+            'numpy==1.26.4', 'tensorflow-metadata==1.15.0', 'bitsandbytes==0.43.3',
+            'huggingface_hub==0.36.2', 'accelerate==1.15.0']
+        AVA_PY = environment('vlade_ava_fft_py311', '3.11', dependencies)
+        run([UV, 'pip', 'install', '--python', AVA_PY, '--no-deps', '-e', upstream])
+        run([AVA_PY, '-c', "import bitsandbytes,torch,transformers,tensorflow_datasets; "
+            "assert torch.cuda.is_available() and torch.cuda.is_bf16_supported(); "
+            "p=torch.cuda.get_device_properties(0); "
+            "print(torch.__version__,transformers.__version__,bitsandbytes.__version__,p.name,p.total_memory/2**30)"])
+        run(['nvidia-smi', '--query-gpu=name,memory.total,driver_version', '--format=csv,noheader'])
+        freeze = subprocess.check_output([str(UV), 'pip', 'freeze', '--python', str(AVA_PY)], text=True)
+        (ROOT / 'ava_environment_freeze.txt').write_text(freeze)
+        """, "install-ava"),
+        cell("code", """
+        TFDS_ROOT = ROOT / 'data/processed/libero_plus_tfds'
+        PREPARED = Path('/content/vlade-preprocess/libero_plus_canonical_train1')
+        if not (PREPARED / 'COMPLETE').is_file():
+            run([AVA_PY, 'scripts/data/prepare_single_canonical_episode.py',
+                 '--tfds-root', TFDS_ROOT, '--output', PREPARED,
+                 '--canonical-manifest', CODE / 'experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz',
+                 '--canonical-sha256', '487d2be1039ba6a4facc3ba44785ba5159245dfe53462a1d5a41ba8230446e80',
+                 '--canonical-normalization', CODE / 'experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json',
+                 '--canonical-normalization-sha256', 'eac95bcc81b6182b90a2bd030096df6e3e408cb88923d0a1d57dc6c81e297c67'])
+        manifest = json.loads((PREPARED / 'manifest.json').read_text())
+        assert manifest['dataset_scope'] == 'canonical_train_episode_smoke'
+        assert manifest['counts'] == {'train': 1}
+        assert manifest['canonical_manifest_sha256'] == '487d2be1039ba6a4facc3ba44785ba5159245dfe53462a1d5a41ba8230446e80'
+        assert manifest['canonical_normalization_sha256'] == 'eac95bcc81b6182b90a2bd030096df6e3e408cb88923d0a1d57dc6c81e297c67'
+        print(json.dumps({key: manifest[key] for key in (
+            'dataset_scope', 'counts', 'selected_source_episode_index',
+            'canonical_manifest_sha256', 'canonical_normalization_sha256')}, indent=2))
+        print('Episode:', manifest['episodes'][0]['episode_id'],
+              'queries:', manifest['episodes'][0]['queries'])
+        """, "prepare-one-episode"),
+        cell("code", """
+        OUTPUT = ROOT / 'runs/ava_fft/ava-a100-one-step-seed42'
+        CONFIGS = ROOT / 'run-configs'; CONFIGS.mkdir(exist_ok=True)
+        CONFIG = CONFIGS / 'ava-a100-one-step-seed42.json'
+        config = json.loads((CODE / 'configs/experiments/libero_plus_fft.json').read_text())
+        config['fft_defaults'].update(
+            data_root=str(TFDS_ROOT), prepared_data_root=str(PREPARED), image_aug=False,
+            batch_size=1, grad_accumulation_steps=1, max_steps=1, save_steps=1,
+            save_optimizer_state=True, eval_steps=0, debug_records=0)
+        config['fft_runs']['ava_vla'].update(
+            checkpoint=str(ROOT / 'checkpoints/teacher/avavla-libero-4in1'),
+            output_dir=str(OUTPUT))
+        if CONFIG.exists() and json.loads(CONFIG.read_text()) != config:
+            raise ValueError('기존 1-step 설정이 다릅니다. OUTPUT/CONFIG 이름을 바꾸십시오.')
+        CONFIG.write_text(json.dumps(config, indent=2))
+        run([AVA_PY, 'scripts/train/run_fft.py', '--model', 'ava_vla',
+             '--config', CONFIG, '--preflight'])
+        """, "configure-one-step"),
+        cell("code", """
+        CHECKPOINT = OUTPUT / 'step-0000001'
+        if not (CHECKPOINT / 'COMPLETE').is_file():
+            run([AVA_PY, 'scripts/train/run_fft.py', '--model', 'ava_vla', '--config', CONFIG])
+        metrics = sorted(OUTPUT.glob('metrics-*.jsonl'))
+        runs = sorted(OUTPUT.glob('run-*.json'))
+        if len(metrics) != 1 or len(runs) != 1:
+            raise ValueError('격리된 새 OUTPUT에는 metrics/run manifest가 각각 하나여야 합니다.')
+        run([AVA_PY, 'scripts/train/check_fft_checkpoint.py',
+             '--checkpoint', CHECKPOINT, '--data', PREPARED, '--config', CONFIG,
+             '--metrics', metrics[0], '--run-manifest', runs[0],
+             '--report', OUTPUT / 'reload_report.json'])
+        """, "run-and-reload"),
+        cell("code", """
+        report = json.loads((OUTPUT / 'reload_report.json').read_text())
+        summary = {
+            'status': report['status'], 'gpu': report['gpu'],
+            'step_time_seconds': report['training_metrics']['step_time_seconds'],
+            'training_peak_allocated_gib': report['training_metrics']['peak_allocated_bytes'] / 2**30,
+            'training_peak_reserved_gib': report['training_metrics']['peak_reserved_bytes'] / 2**30,
+            'training_peak_process_ram_gib': report['training_metrics']['peak_process_rss_bytes'] / 2**30,
+            'reload_peak_allocated_gib': report['reload_peak_allocated_bytes'] / 2**30,
+            'reload_peak_process_ram_gib': report['reload_peak_process_rss_bytes'] / 2**30,
+            'checkpoint_gib': report['checkpoint_bytes'] / 2**30,
+            'loss': report['training_metrics']['loss'],
+            'grad_norm': report['training_metrics']['grad_norm'],
+            'gradient_diagnostics': report['gradient_diagnostics'],
+            'action_finite': report['action_finite'],
+            'training_finite_checks': report['training_finite_checks'],
+            'scope': report['scope'],
+            'ava_temporal_training': 'zero_context',
+        }
+        print(json.dumps(summary, indent=2))
+        print('원본 보고서:', OUTPUT / 'reload_report.json')
+        """, "show-report")])
+    return [one, two, three, four, five, manifest_path]
 
 
 def main() -> None:

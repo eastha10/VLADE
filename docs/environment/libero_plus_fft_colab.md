@@ -170,3 +170,32 @@ TensorFlow RNG와 validation 샘플 순서는 복원하지 않습니다. `val_l1
 - AVA·OFT 각각 Colab A100 단일 step forward/backward/save/load smoke test
 - VRAM 사용량, 학습 시간, 체크포인트 크기와 평가 연결 검증
 - AVA의 이전 시점 행동 특징을 사용하는 temporal-context 학습 확장
+
+## AVA A100 1-step·재로딩 전용 경로
+
+`experiments/colab_05_ava_a100_one_step_reload.ipynb`는 현재 Drive 배치
+(`/content/real_drive/MyDrive/VLADE`)에서 다음 셀을 순서대로 실행하도록 고정합니다.
+
+1. manifest로 일반 소스 파일을 검증해 `/content`에 stage합니다.
+2. Colab 기본 Python 3.13과 분리된 `uv` Python 3.11 환경에 AVA 고정 의존성과
+   `bitsandbytes==0.43.3`을 설치하고 CUDA/BF16/A100 정보를 확인합니다.
+3. `prepare_single_canonical_episode.py`가 원본 TFDS를 순서대로 읽다가 첫 canonical
+   Train Episode를 확인한 즉시 중단합니다. 전체 14,347 Episode를 복사·전처리하지 않고,
+   D/seed 42 manifest와 sealed full-Train normalization SHA-256을 그대로 검증합니다.
+4. batch 1, accumulation 1, BF16, gradient checkpointing, paged AdamW 8-bit로 실제
+   forward/backward/update 1-step을 실행하고 optimizer state를 포함한 checkpoint를 저장합니다.
+5. 학습 프로세스 종료 후 별도 Python 프로세스에서 checkpoint를 다시 로드해 같은 첫 query의
+   action finite·reset 반복성을 확인합니다. 보고서에는 학습 peak allocated/reserved VRAM,
+   peak process RAM, step 시간, loss/grad norm, component별 finite·nonzero gradient,
+   checkpoint bytes와 재로딩 process 메모리를 기록합니다.
+
+`step_time_seconds`는 warm-up 없는 첫 optimizer step의 end-to-end 시간입니다. CUDA를
+step 직전·직후 동기화하며 batch 1, accumulation 1, BF16 조건에서 첫 데이터 로드와
+forward/backward/update를 포함하고 checkpoint 저장·재로딩 시간은 제외합니다. 따라서
+steady-state 학습 latency나 여러 step 평균으로 해석하지 않습니다.
+
+이 경로는 데이터·가중치를 새로 다운로드하지 않으며 OFT, Student, 증류, 양자화 코드를
+변경하지 않습니다. 단일 Episode는 학습 품질이나 benchmark 성공률 검증이 아니라 실제 AVA
+코드 경로·메모리·저장/재로딩의 bounded smoke test입니다. FFT 중
+`temporal_context=None`을 사용하므로 learned zero buffer만 거치는 **temporal zero-context**
+검사이며 원본 AVA의 순차 temporal-context 학습/TBPTT 또는 rollout 동등성을 입증하지 않습니다.
