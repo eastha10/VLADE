@@ -30,3 +30,10 @@
 - Git 푸시 시 Drive colab/VLADE 정본 동기화를 함께 수행하도록 규약을 추가했습니다. 브라우저에서 대상 폴더 ID와 src·scripts·configs·experiments 등의 실제 프로젝트 구조를 확인했습니다. Colab 기본 ROOT와 관련 안내도 이 경로로 맞췄습니다.
 
 - Drive ROOT 기본값 변경 후 `python -B -m pytest tests/unit/test_colab_source_files.py -q -p no:cacheprovider --basetemp=.harness/v1/2026-10-29-harness-policy/scratch/pytest-drive-sync --tb=short`: 12 passed (0.56s). 생성 노트북 3개의 문법·ROOT·manifest 참조와 정본 SHA256도 확인했으며 테스트 scratch는 삭제했습니다.
+
+## Git 관리 파일 변경 시 Drive 반영 규약 확대
+
+- 사용자의 요청에 따라 정본 파일의 변경이 생기면 별도 푸시 요청 전에도 Drive 갱신·검증을 완료 조건으로 삼도록 AGENTS.md를 수정했습니다. 요청받은 commit·push·merge 후에는 최종 버전으로 맞추고, 자동 Git 공개 권한으로 확대 해석하지 않도록 구분했습니다.
+- STRUCTURE.md의 데이터 보존 규약과 이전 Drive 데이터 경로 정리 기록을 함께 검토했습니다. 데이터·가중치·캐시 제외와 Drive 노트북의 기존 실행 결과·추가 셀 보존 원칙을 유지했습니다.
+- 생성 노트북·소스 manifest의 hash·문법 정합성 확인. `python -B -m pytest tests/unit -q -p no:cacheprovider --basetemp=.harness/v1/2026-10-29-harness-policy/scratch/pytest-main-merge --tb=short`: 127 passed (38.83s).
+- 병합 전 원격 main이 dev/eastha의 조상이며 서로 다른 이력이 없음을 확인했습니다.

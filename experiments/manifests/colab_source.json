@@ -4,11 +4,11 @@
   "contains_uncommitted_work": true,
   "revision_note": "Submodule reference may be the parent gitlink when metadata is inaccessible; exact ordinary source files are identified by files_sha256.",
   "source_revisions": {
-    ".": "8358264d8c965328de83d07f6b91e31fb135e31d",
+    ".": "1f914afa7eb3ccdae41c643ac2e353485b65dcde",
     "third_party/ava_vla": "69ae5dfb90f4eb714259693bd2c222e0b3de6456"
   },
   "files_sha256": {
-    "AGENTS.md": "e058cd8f2c3e3b2bc76da8cd6b81774a65988b98ba5bbb9e188fab8c97dda7c1",
+    "AGENTS.md": "8921f814c6ba1dbe8228c745f88c9b7579bdaab8f5f89a0f06696c93b2cced02",
     "configs/experiments/libero_plus_fft.json": "739e5d58b7c93e94b54a4afb4bd75c4ae6ef44cae36cebcba18ae2eea5d5048a",
     "configs/models/student/qwen3_5_0_8b.json": "c2260711f132af1d03db57c79b0911262bd01d7a0ac4f871aebd536be9ff0d5f",
     "configs/models/teacher/ava_vla.json": "594b2c24db01e7fab8371d9c1ff4947abb848147d8529fabce23a8a8a299fb00",
@@ -59,7 +59,7 @@
     "src/vlade/training/student_task.py": "16324e9ecbf7df44e41073216f4ce719121a85ab560c87cd9691a88058b66183",
     "src/vlade/utils/colab_notebooks.py": "036cb86a25bbbf849081babcca4d243de666d645d91608b93e977efa5371097b",
     "src/vlade/utils/filesystem.py": "5328964c462b19b2360b3b083ecbf3a91bdeb3c4f71231c37fb736a669227141",
-    "STRUCTURE.md": "8cf35b9376d80690988907d707830f7b316adfc7aec3a88a36f9672066949615",
+    "STRUCTURE.md": "6fe806c5b525ef9e891f908ad5b0c285d81e716f6a4cf2e17e79b3174f47c314",
     "third_party/ava_vla/.pre-commit-config.yaml": "c5b83c46d355cab843a5daa9805380413e9634be6e8152db3a5a0e3d9af54d9e",
     "third_party/ava_vla/experiments/robot/aloha/aloha_utils.py": "e91291733b35f33539155989e087cbd24ed0aa1d81acf61cd65eb3d2f6dcb283",
     "third_party/ava_vla/experiments/robot/aloha/constants.py": "3498c193544158b7b1156524a51af4886fc57d283d78ad54c6b2921d54779aa6",

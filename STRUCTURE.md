@@ -33,7 +33,11 @@ vlade/
 ├─ third_party/             # 외부 원본 소스 연결
 │  ├─ ava_vla/              # eastha10/AVA-VLA Git submodule (커밋 고정)
 │  └─ openvla_oft/          # moojink/openvla-oft Git submodule (커밋 고정)
-├─ data/                    # 로컬 데이터와 Teacher cache (Git 제외)
+├─ data/                    # 설치된 데이터셋·전처리 데이터·Teacher cache (보존, Git 제외)
+│  ├─ raw/                  # 출처 그대로 받은 데이터·분할 압축본
+│  ├─ processed/            # 해제된 데이터·전처리 episode와 그 manifest
+│  ├─ splits/               # 별도로 관리하는 데이터 분할 정의 (필요한 경우만)
+│  └─ teacher_cache/        # 고정 Teacher의 학습용 출력과 provenance
 ├─ checkpoints/             # Teacher/Student 가중치 (Git 제외)
 └─ artifacts/               # 로그·수치·그림·영상·프로파일 (Git 제외)
 ```
@@ -47,6 +51,64 @@ vlade/
 - Teacher와 Student가 달라도 학습 코드는 공통 인터페이스만 보도록 구성합니다.
 - quantization, pruning 등의 압축 확장은 증류 baseline이 고정된 뒤 별도 설정으로 추가합니다.
 - 논문 보고값과 자체 재현값을 같은 결과로 덮어쓰지 않습니다.
+
+## `data/` 디렉터리 운영 규약
+
+### 보관 범위와 정본
+
+`data/`는 실제 학습·평가에 사용하는 데이터의 보관 위치입니다. 로컬과 Google Drive의
+`colab/VLADE/data/`에 동일한 보존 원칙을 적용합니다. 폴더 이름이나 수정 시각만으로
+사용하지 않는 데이터라고 판단하지 않습니다. 아래 경로는 역할을 설명하며 빈 폴더를
+미리 만들거나 설치된 자료를 이 구조로 재배치하라는 지시가 아닙니다.
+
+| 위치 | 보관할 내용 | 관리 기준 |
+|---|---|---|
+| `data/raw/` | 원본 RLDS 자료, benchmark assets, 다운로드 압축본·분할 ZIP, 다운로드 manifest | 출처·revision·파일 hash를 보존합니다. 원본을 직접 수정하거나 압축 해제 후 임의로 삭제하지 않습니다. |
+| `data/processed/` | 압축 해제된 TFDS, 전처리 episode·이미지·trajectory·query, 해당 데이터의 manifest·분할·정규화 통계 | 준비 절차와 설정이 식별되는 경로를 사용합니다. 기존 완료 데이터는 재사용하며 새 전처리 결과로 덮어쓰지 않습니다. |
+| `data/splits/` | 실제로 별도 관리할 필요가 있는 train/validation/test 분할 정의 | 현재 episode 데이터의 분할 정본은 해당 `processed` 데이터 폴더의 `splits.json`입니다. 이를 다른 위치에 복제하여 서로 다른 정본을 만들지 않습니다. |
+| `data/teacher_cache/` | 고정 Teacher에서 생성한 학습용 action·feature 등의 출력, cache manifest·provenance | Teacher checkpoint hash·데이터 revision·분할·정규화 통계와 연결합니다. 이름에 cache가 있어도 삭제 가능한 임시 파일로 취급하지 않습니다. |
+
+- 현재 Colab 준비 절차의 경로 예시는 `data/raw/libero_plus_rlds/`,
+  `data/processed/libero_plus_tfds/`, `data/processed/libero_plus_episode80/`입니다.
+  실제 입력 경로는 사용하는 설정·노트북에서 확인하며, 다른 유효한 기존 경로를 임의로 바꾸지 않습니다.
+- 데이터의 정체성은 출처·dataset revision·원본 hash·전처리 코드와 설정·seed로 식별합니다.
+  `manifest.json`, `splits.json`, `normalization.json`과 완료 표시는 해당 데이터와 함께 보존합니다.
+  현재 episode 준비 형식에서는 `COMPLETE`와 manifest·분할·정규화 hash의 일치를 확인합니다.
+  완료 표시만 있거나 일부 파일만 남은 상태를 정상 데이터로 간주하지 않습니다.
+- 분할과 정규화 통계를 임의로 다시 계산하지 않습니다. 현재 정규화 통계는 train 분할로만
+  계산하며 validation/test와 섞지 않습니다. seed·분할·전처리 조건을 변경한 데이터는 별도 버전으로 식별합니다.
+- 모델 가중치는 `checkpoints/`, 공식 학습·평가 결과는 지정된 실험 결과 경로에 둡니다.
+  에이전트의 합성 테스트 데이터·임시 checkpoint·검토 메모·패키지는
+  `.harness/v1/YYYY-MM-DD-작업명/scratch/` 등 AGENTS.md의 작업 경로를 사용합니다.
+  `data/`에 작업 기록이나 테스트 부산물을 남기지 않습니다.
+
+### 생성·변경·삭제 기준
+
+- 기본 작업은 기존 자료의 조회·검증·재사용입니다. 데이터 생성·다운로드·전처리는 사용자가
+  요청했거나 승인한 데이터 준비 작업의 범위 안에서만 수행합니다.
+- 코드 수정·문서 정리·용량 확보·Git 푸시·Drive 갱신은 기존 데이터의 삭제·덮어쓰기·이동·
+  이름 변경·재다운로드를 승인한 것으로 해석하지 않습니다. 원본·전처리 결과·Teacher cache와
+  각 manifest를 포함해 보존합니다. 삭제가 필요하면 대상과 영향을 구체적으로 확인받습니다.
+- 자료가 없거나 검증에 실패하면 경로와 오류를 보고합니다. 자동 삭제·자동 재설치로 해결하거나
+  정상 데이터에 불완전한 결과를 병합하지 않습니다. 승인된 재생성이 필요하면 별도 출력 경로를 사용합니다.
+- 데이터 준비 중의 미완료 파일은 완료 자료와 구분합니다. 승인된 준비 작업의 재시작·정리에서는
+  해당 작업이 만든 파일임을 식별하고 절대 경계 경로를 확인한 임시 파일만 처리합니다.
+  다른 작업의 파일·실행 중인 다운로드·소유자가 불명확한 부분 결과는 건드리지 않습니다.
+- 재생성 가능한 결합 ZIP·일회성 테스트 파일도 목적과 소유 범위가 분명한 임시 경로를 사용하며,
+  설치된 데이터셋을 `.harness/`나 작업용 복제본으로 복사하지 않습니다.
+
+### Git과 Google Drive 갱신
+
+- 데이터 본문·압축본·전처리 파일·Teacher cache는 Git에 추가하지 않습니다. 기존 `.gitignore`의
+  `data/**` 제외를 유지합니다. 재현에 필요한 작은 설정·출처·버전 기록은 `configs/`,
+  `experiments/manifests/`, `docs/`의 정식 파일에서 데이터 경로와 식별자를 참조합니다.
+  데이터와 묶인 manifest를 Git에 넣기 위해 원래 위치에서 옮기거나 별도 정본으로 만들지 않습니다.
+- Git 관리 파일 변경과 commit·push·merge에 따른 Drive 동기화에서는 `data/` 전체를 갱신 대상에서 제외합니다.
+  `checkpoints/`, `hf_cache/`와 다른 위치에 설치된 데이터셋·다운로드 자료도 같은 원칙으로 보존합니다.
+- 갱신할 소스·설정·문서·노트북·소스 manifest만 명시적으로 선택합니다. 프로젝트 폴더 전체 교체,
+  삭제 전파, 폴더 미러링을 사용하지 않습니다. 로컬에 데이터가 없다는 이유로 Drive의 데이터를 삭제하지 않습니다.
+- `experiments/manifests/colab_source.json`은 실행할 **소스 파일**의 hash 목록입니다.
+  이를 갱신하는 작업은 `data/`의 데이터 manifest를 변경하거나 데이터셋을 다시 준비하는 작업과 구분합니다.
 
 ## 학습 구현
 
