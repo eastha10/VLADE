@@ -94,8 +94,8 @@ def bootstrap(digest: str) -> str:
 from pathlib import Path
 from google.colab import drive
 import hashlib, json, os, shutil, subprocess, sys
-drive.mount('/content/drive')
-ROOT = Path('/content/drive/MyDrive/VLADE')  # 세 노트북에서 동일한 저장 폴더를 지정하십시오.
+drive.mount('/content/real_drive')
+ROOT = Path('/content/real_drive/MyDrive/VLADE')  # 네 노트북에서 동일한 저장 폴더를 지정하십시오.
 ROOT.mkdir(parents=True, exist_ok=True)
 PROJECT_ROOT = ROOT  # src/scripts/configs/experiments/third_party가 바로 들어 있는 실제 프로젝트 루트
 EXPECTED_MANIFEST_SHA256 = "''' + digest + '''"
@@ -201,19 +201,28 @@ def generate() -> list[Path]:
         Train의 **전체 timestep**에서 exact q01/q99를 계산합니다. Validation/test는 통계에 넣지 않습니다.
         Query 간격은 8이며 두 카메라 원본을 query 시점에만 보관합니다. 마지막 chunk의 padding은 loss에서 제외합니다.
         이 prepared-data 경로는 augmentation 없이 FFT/BC/cache의 입력·정규화를 공유합니다.
-        중단된 `.incomplete`는 완료 데이터로 읽지 않습니다. 전처리 중단 시에는 새 output 경로로 다시 준비하십시오.
+        TFDS 1,024 shard는 Drive에서 순차 읽고 Episode 출력은 `/content/vlade-preprocess` 로컬 SSD에 기록합니다.
+        100 Episode마다 동기식 tar archive를 Drive에 SHA-256 검증 후 게시합니다. 재시작 시 검증된 archive와
+        기존 Drive `.incomplete`를 로컬로 복구한 뒤 `--resume`이 Episode 내용·checkpoint를 다시 검증합니다.
         """, "prepare-help"),
         cell("code", """
-        PREPARED = ROOT / 'data/processed/libero_plus_episode80'
+        PREPARED = Path('/content/vlade-preprocess/libero_plus_episode80')
+        BACKUPS = ROOT / 'data/processed/libero_plus_episode80.backups'
+        LEGACY_INCOMPLETE = ROOT / 'data/processed/libero_plus_episode80.incomplete'
         if (PREPARED / 'COMPLETE').is_file():
             print('준비된 데이터 재사용:', PREPARED)
         else:
-            run([DATA_PY, 'scripts/data/prepare_episode_data.py',
-                 '--tfds-root', ROOT / 'data/processed/libero_plus_tfds', '--output', PREPARED,
-                 '--canonical-manifest', CODE / 'experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz',
-                 '--canonical-sha256', '487d2be1039ba6a4facc3ba44785ba5159245dfe53462a1d5a41ba8230446e80',
-                 '--canonical-normalization', CODE / 'experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json',
-                 '--canonical-normalization-sha256', 'eac95bcc81b6182b90a2bd030096df6e3e408cb88923d0a1d57dc6c81e297c67'])
+            command = [DATA_PY, 'scripts/data/prepare_episode_data.py',
+                       '--tfds-root', ROOT / 'data/processed/libero_plus_tfds', '--output', PREPARED,
+                       '--resume', '--backup-dir', BACKUPS, '--backup-every', '100',
+                       '--restore-backups', '--min-free-gib', '20',
+                       '--canonical-manifest', CODE / 'experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz',
+                       '--canonical-sha256', '487d2be1039ba6a4facc3ba44785ba5159245dfe53462a1d5a41ba8230446e80',
+                       '--canonical-normalization', CODE / 'experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json',
+                       '--canonical-normalization-sha256', 'eac95bcc81b6182b90a2bd030096df6e3e408cb88923d0a1d57dc6c81e297c67']
+            if LEGACY_INCOMPLETE.is_dir():
+                command += ['--legacy-incomplete', LEGACY_INCOMPLETE]
+            run(command)
         manifest = json.loads((PREPARED / 'manifest.json').read_text())
         print(json.dumps({key: manifest[key] for key in ['counts', 'calibration_episodes', 'split_policy',
                                                        'canonical_manifest_sha256', 'canonical_normalization_sha256',
@@ -247,7 +256,7 @@ def generate() -> list[Path]:
         (ROOT / 'ava_environment_freeze.txt').write_text(freeze)
         """, "install-ava"),
         cell("code", """
-        PREPARED = ROOT / 'data/processed/libero_plus_episode80'
+        PREPARED = Path('/content/vlade-preprocess/libero_plus_episode80')
         from vlade.data.episode_data import EpisodeData
         from vlade.training.run_control import epoch_budget, require_reports, planned_checkpoint_space, pilot_context
         MAIN_EPOCHS = 1  # 최소 1회 전체 train query 순회. 최종 목표 epoch는 검토 후 조정하십시오.
@@ -393,7 +402,7 @@ def generate() -> list[Path]:
         run([STUDENT_PY, '-c', program, QWEN])
         """, "download-student"),
         cell("code", """
-        PREPARED = ROOT / 'data/processed/libero_plus_episode80'
+        PREPARED = Path('/content/vlade-preprocess/libero_plus_episode80')
         from vlade.data.episode_data import EpisodeData, write_json
         from vlade.training.run_control import epoch_budget, overfit_report, require_reports, planned_checkpoint_space, pilot_context
         MAIN_EPOCHS = 1
@@ -504,7 +513,7 @@ def generate() -> list[Path]:
             [str(UV), 'pip', 'freeze', '--python', str(OFT_PY)], text=True))
         """, "install-oft"),
         cell("code", """
-        PREPARED = ROOT / 'data/processed/libero_plus_episode80'
+        PREPARED = Path('/content/vlade-preprocess/libero_plus_episode80')
         from vlade.data.episode_data import EpisodeData
         data = EpisodeData(PREPARED)
         assert data.manifest['counts'] == {'train': 11477, 'validation': 1428, 'test': 1442}

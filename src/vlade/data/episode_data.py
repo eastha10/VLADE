@@ -19,6 +19,8 @@ from typing import Any, Iterator
 import numpy as np
 from PIL import Image
 
+from vlade.data.episode_backup import (EpisodeArchiveBackup, import_legacy_incomplete,
+    restore_episode_archives)
 from vlade.data.canonical_split import (CANONICAL_SEED, CANONICAL_SHA256, CanonicalSplit,
     assert_observed_assignments, load_canonical_split)
 from vlade.data.colab_assets import DATA_REV, sha256
@@ -227,7 +229,8 @@ def _validate_completed_episodes(stage: Path, entries: list[dict]) -> None:
 def prepare(episodes: Iterator[list[dict]], destination: Path, *, seed: int = 42,
             source: dict | None = None, canonical: CanonicalSplit | None = None,
             canonical_normalization: dict | None = None,
-            canonical_normalization_sha256: str | None = None, resume: bool = False) -> dict:
+            canonical_normalization_sha256: str | None = None, resume: bool = False,
+            backup: EpisodeArchiveBackup | None = None) -> dict:
     """Publish only a completed, duplicate-grouped 80/10/10 prepared dataset."""
     if destination.exists():
         raise FileExistsError(f"Use a new prepared dataset path: {destination}")
@@ -257,6 +260,8 @@ def prepare(episodes: Iterator[list[dict]], destination: Path, *, seed: int = 42
     entries = []
     observed_groups: Counter[str] = Counter()
     for index, steps in enumerate(episodes):
+        if backup is not None:
+            backup.check_space(stage)
         if not steps:
             raise ValueError("Empty episode")
         actions = np.asarray([step["action"] for step in steps], dtype=np.float32)
@@ -325,8 +330,12 @@ def prepare(episodes: Iterator[list[dict]], destination: Path, *, seed: int = 42
             write_json(checkpoint, entry)
         entries.append(entry)
         payloads.clear()
+        if backup is not None:
+            backup.record(stage, index, entry)
         if index % 100 == 0:
             print(f"Prepared or verified {index + 1} episodes", flush=True)
+    if backup is not None:
+        backup.flush(stage)
     if not entries or any(not any(e["split"] == split for e in entries) for split in ("train", "validation", "test")):
         raise ValueError("Need nonempty train/validation/test splits; do not use a tiny subset as the formal dataset")
     if canonical is not None:
@@ -528,9 +537,19 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tfds-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True,
-                        help="Prepared-data directory; use Colab local SSD and archive it to Drive after COMPLETE")
+                        help="Prepared-data directory on Colab local SSD")
     parser.add_argument("--resume", action="store_true",
                         help="Validate and reuse only complete episodes in OUTPUT.incomplete")
+    parser.add_argument("--backup-dir", type=Path,
+                        help="Drive directory for synchronous, SHA-256-sealed episode archives")
+    parser.add_argument("--backup-every", type=int, default=100,
+                        help="Episodes per archive (default: 100)")
+    parser.add_argument("--restore-backups", action="store_true",
+                        help="Verify and restore BACKUP_DIR archives before --resume")
+    parser.add_argument("--legacy-incomplete", type=Path,
+                        help="Optional old Drive .incomplete directory to import read-only before --resume")
+    parser.add_argument("--min-free-gib", type=float, default=10.0,
+                        help="Stop safely when local SSD free space falls below this value")
     parser.add_argument("--canonical-manifest", type=Path, required=True)
     parser.add_argument("--canonical-sha256", default=CANONICAL_SHA256)
     parser.add_argument("--canonical-normalization", type=Path, required=True)
@@ -547,11 +566,29 @@ def main() -> None:
     if actual_normalization_sha256 != args.canonical_normalization_sha256.lower():
         raise ValueError("Canonical normalization SHA-256 mismatch")
     canonical_normalization = json.loads(args.canonical_normalization.read_text(encoding="utf-8"))
+    contract = _resume_contract(CANONICAL_SEED, source, canonical, actual_normalization_sha256)
+    stage = args.output.with_name(args.output.name + ".incomplete")
+    if (args.restore_backups or args.legacy_incomplete is not None) and not args.resume:
+        parser.error("--restore-backups and --legacy-incomplete require --resume")
+    if args.restore_backups and args.backup_dir is None:
+        parser.error("--restore-backups requires --backup-dir")
+    backup = (EpisodeArchiveBackup(args.backup_dir, every=args.backup_every,
+                                   min_free_gib=args.min_free_gib)
+              if args.backup_dir is not None else None)
+    stage.parent.mkdir(parents=True, exist_ok=True)
+    if backup is not None:
+        backup.check_space(stage)
+    if args.legacy_incomplete is not None:
+        copied = import_legacy_incomplete(args.legacy_incomplete, stage)
+        print(json.dumps({"legacy_episode_directories_copied": copied}, indent=2), flush=True)
+    if args.restore_backups:
+        report = restore_episode_archives(args.backup_dir, stage, contract)
+        print(json.dumps({"episode_backup_restore": report}, indent=2), flush=True)
     prepare(tfds_episodes(infos[0].parent), args.output, source=source,
             seed=CANONICAL_SEED, canonical=canonical,
             canonical_normalization=canonical_normalization,
             canonical_normalization_sha256=actual_normalization_sha256,
-            resume=args.resume)
+            resume=args.resume, backup=backup)
 
 
 if __name__ == "__main__":
