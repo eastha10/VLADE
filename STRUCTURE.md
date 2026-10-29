@@ -2,6 +2,9 @@
 
 ```text
 vlade/
+├─ .harness/
+│  ├─ v0/                  # 과거 기록 보관본 (새 기록 금지)
+│  └─ v1/                  # 활성 작업 기록·작업별 scratch (사용 후 정리)
 ├─ configs/                 # 데이터·모델·증류·실험·배포 설정
 ├─ src/vlade/               # VLADE 자체 구현
 │  ├─ data/                 # 입력 스키마, 전처리, 데이터 어댑터
@@ -69,7 +72,7 @@ Student 계약 구현은 아래 범위이며 KD trainer는 미구현입니다.
 - `docs/environment/teacher_records_and_student.md`: 저장 스키마·Student 설계·실행 제한
 
 `data/teacher_cache/`는 실제 Teacher cache, `checkpoints/students/`는 로컬 Student
-자료, `artifacts/student/`는 합성 검증 출력에 사용합니다. 대용량 생성물은 Git에 넣지 않습니다.
+자료, 에이전트의 합성 검증 출력은 `.harness/v1/YYYY-MM-DD-작업명/scratch/outputs/`에 보관합니다. 대용량 생성물은 Git에 넣지 않습니다.
 현재 공식 processor 자료만 준비했으며 사전학습 Student 가중치는 사용자 요청으로 보류했습니다.
 
 ## Colab 실행 연결 (2026-10-28)
@@ -89,7 +92,7 @@ Student 계약 구현은 아래 범위이며 KD trainer는 미구현입니다.
 `experiments/baselines/`와 원본 소스 manifests도 Colab 파일 목록에 포함합니다. 실제 upstream
 복사 대상은 `third_party/ava_vla/`이며 OpenVLA-OFT 실행 환경은 별도입니다.
 
-Drive에서는 `/content/drive/MyDrive/VLADE` 바로 아래에 저장소 구조를 둡니다. 노트북의
+Drive에서는 `/content/drive/MyDrive/colab/VLADE` 바로 아래에 저장소 구조를 둡니다. 노트북의
 `ROOT`와 `PROJECT_ROOT`가 이 경로를 가리키며, manifest와 파일 SHA를 확인한 일반 소스만
 `/content`의 실행 디렉터리로 복사합니다. `data/`, `checkpoints/`, `artifacts/`는 각각 실제
 데이터·가중치·실행 결과를 보관합니다. 실행 결과를 수정할 소스 파일의 정본으로 사용하지 않습니다.

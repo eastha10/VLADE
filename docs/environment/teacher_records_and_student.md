@@ -116,14 +116,17 @@ Teacher fork와 분리된 Student 프로세스를 사용합니다. 이번 CPU �
 torch 2.12.0+cpu, transformers 5.9.0입니다. 공식 processor는 torchvision 0.27.0을
 추가로 요구합니다. 이 버전은 [공식 패키지 metadata](https://pypi.org/pypi/torchvision/0.27.0/json)에서
 torch 2.12.0 의존성을 확인했습니다. 이번 실행은 전역 환경을 변경하지 않고
-`artifacts/student/python-deps`에만 torchvision을 설치했습니다.
+`artifacts/student/python-deps`에만 torchvision을 설치했습니다. 이 임시 의존성은
+2026-10-29에 `.harness/v0/2026-10-29-artifact-cleanup/student/python-deps`로 옮긴 뒤,
+사용자의 불필요한 파일 삭제 지시에 따라 제거했습니다. 임시 의존성을 다시 사용할 경우
+현재 `.harness/v1/` 규약의 작업별 `scratch/`에서만 준비하고 사용 후 정리합니다.
 
 독립 Student 가상환경에서는 해당 버전으로 설치한 뒤 아래 명령을 사용합니다.
 
 ```bash
-python -m pytest tests/unit -q -p no:cacheprovider --basetemp=artifacts/testing/unique-run
-python scripts/train/smoke_student.py --output-dir artifacts/student/tiny-random-check
-python scripts/train/smoke_student.py --output-dir artifacts/student/native-input-check \
+python -m pytest tests/unit -q -p no:cacheprovider --basetemp=.harness/v1/2026-10-29-student-smoke/scratch/unique-run
+python scripts/train/smoke_student.py --output-dir .harness/v1/2026-10-29-student-smoke/scratch/outputs/tiny-random-check
+python scripts/train/smoke_student.py --output-dir .harness/v1/2026-10-29-student-smoke/scratch/outputs/native-input-check \
   --processor-dir checkpoints/students/qwen3_5_0_8b
 ```
 

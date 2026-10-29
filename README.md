@@ -88,7 +88,7 @@ python scripts/train/run_fft.py --model openvla_oft --preflight
 
 ## 폴더 안내
 
-- `.harness/`: Codex가 작업하면서 만든 결과물과 중간 산출물을 보관합니다.
+- `.harness/`: 새 에이전트 작업은 `.harness/v1/YYYY-MM-DD-작업명/`만 사용합니다. `v0/`는 과거 기록 보관본입니다. 보존 기록은 README와 필요한 작은 증거만 남기며, 테스트·검증·임시 의존성은 작업의 `scratch/`에서 사용 후 정리합니다. 자세한 규약은 `AGENTS.md`를 따릅니다.
 - `.obsidian/`: Obsidian 작업 공간 설정을 보관합니다.
 - `artifacts/`: 실험 로그, 지표, 그림, 영상과 프로파일 결과를 보관합니다.
 - `benchmarks/`: LIBERO, LIBERO+, CALVIN 벤치마크 연결 코드를 관리합니다.
@@ -112,7 +112,7 @@ clipping·비정상 값 검사, 선택적 LR 스케줄·val loss, JSONL 실행 �
 완료 checkpoint의 optimizer/scheduler/RNG 재개를 지원합니다.
 RLDS stream 위치는 복원하지 않으며 GPU FFT는 아직 검증하지 않았습니다.
 CPU 검사는 `python -m pytest tests/unit -q` 및
-`python scripts/train/smoke_loop.py --output-dir artifacts/training/cpu-loop-smoke`로
+`python scripts/train/smoke_loop.py --output-dir .harness/v1/2026-10-29-training-smoke/scratch/outputs/cpu-loop-smoke`로
 수행합니다. 실행·재개 제한은 [학습 안내](docs/environment/libero_plus_fft_colab.md)에 있습니다.
 
 기존 Teacher/baseline과 Llama-2-7B 가중치는 유지합니다. Student 후보인 Qwen3,
@@ -134,7 +134,7 @@ Teacher action/GT token/hidden-state 저장·로드와 provenance·episode 순�
 - [실험 기록 JSON 템플릿](docs/paper/experiment-record.template.json)
 
 ```bash
-python scripts/train/smoke_student.py --output-dir artifacts/student/tiny-random-check
+python scripts/train/smoke_student.py --output-dir .harness/v1/2026-10-29-student-smoke/scratch/outputs/tiny-random-check
 ```
 
 실제 고정 T1 cache 생성·episode rollout 연결과 학습/평가 budget 확정은 별도 선행 작업입니다.
@@ -165,7 +165,7 @@ python scripts/prepare/generate_colab_notebooks.py
 ```
 
 생성 구현은 `src/vlade/utils/colab_notebooks.py`에 있습니다. 현재 작업 파일 트리를
-Drive의 `/content/drive/MyDrive/VLADE`에 같은 구조로 배치한 뒤 `experiments/`의 노트북을
+Drive의 `/content/drive/MyDrive/colab/VLADE`에 같은 구조로 배치한 뒤 `experiments/`의 노트북을
 Colab에서 여십시오. 노트북의 `ROOT`와 `PROJECT_ROOT`는 기본적으로 이 같은 경로를 가리키며,
 그 바로 아래에 `src/`, `scripts/`, `configs/`, `third_party/`가 있어야 합니다.
 시작 셀은 manifest와 각 파일의 SHA256을 확인하고 필요한 일반 파일을 `/content`로 복사합니다.

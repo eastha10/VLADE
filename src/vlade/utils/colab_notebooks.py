@@ -86,7 +86,7 @@ from pathlib import Path
 from google.colab import drive
 import hashlib, json, os, shutil, subprocess, sys
 drive.mount('/content/drive')
-ROOT = Path('/content/drive/MyDrive/VLADE')  # 세 노트북에서 동일한 저장 폴더를 지정하십시오.
+ROOT = Path('/content/drive/MyDrive/colab/VLADE')  # 세 노트북에서 동일한 저장 폴더를 지정하십시오.
 ROOT.mkdir(parents=True, exist_ok=True)
 PROJECT_ROOT = ROOT  # src/scripts/configs/experiments/third_party가 바로 들어 있는 실제 프로젝트 루트
 EXPECTED_MANIFEST_SHA256 = "''' + digest + '''"

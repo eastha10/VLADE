@@ -39,3 +39,10 @@ third_party/**
 *.engine
 wandb/
 mlruns/
+
+# v1 agent scratch is disposable; retain only compact task records.
+.harness/v1/**/scratch/
+
+# Legacy test outputs and temporary packages moved out of artifacts.
+.harness/v0/2026-10-29-artifact-cleanup/testing/
+.harness/v0/2026-10-29-artifact-cleanup/student/

@@ -30,7 +30,7 @@
 | `configs/` | 모델·학습 조건·고정 revision |
 | `docs/`, `tests/` | 연구/실행 검토와 회귀 검사 |
 
-Drive의 `ROOT=/content/drive/MyDrive/VLADE`, `PROJECT_ROOT=ROOT`를 기본으로 사용합니다.
+Drive의 `ROOT=/content/drive/MyDrive/colab/VLADE`, `PROJECT_ROOT=ROOT`를 기본으로 사용합니다.
 이 디렉터리 바로 아래에 `src/`, `scripts/`, `configs/`, `third_party/`가 있어야 합니다.
 노트북은 `experiments/manifests/colab_source.json`과 일반 파일의 SHA를 검증한 뒤 필요한
 파일을 `/content`로 복사해 실행합니다. 이번 실행의 upstream은 AVA이며, OpenVLA-OFT는
@@ -93,7 +93,7 @@ Teacher/Student는 공통 seed 기반 episode shuffle을 사용하고 episode �
    현재 일반 소스·고정 AVA upstream·라이선스·설정·baseline·원본 manifest를 같은 파일 트리로
    준비합니다. GitHub HEAD만 clone한 사본에는 미커밋 구현이 빠질 수 있으므로 실제 작업 파일과
    그 파일에서 생성한 manifest를 함께 사용하십시오.
-2. 이 파일 트리를 Drive의 `/content/drive/MyDrive/VLADE`에 배치하고 `experiments/`의
+2. 이 파일 트리를 Drive의 `/content/drive/MyDrive/colab/VLADE`에 배치하고 `experiments/`의
    `colab_01_download_data_weights.ipynb`를 Colab에서 엽니다. 세 노트북 모두 `ROOT`와
    `PROJECT_ROOT=ROOT`를 같은 실제 저장소 루트로 지정합니다. 시작 셀의 manifest·파일 SHA 검증이
    통과하면 필요한 일반 파일이 `/content`의 실행 디렉터리로 복사됩니다.
