@@ -1,0 +1,20 @@
+Subject: Preserve AVA extra attention weights during gradient checkpointing
+Upstream: https://github.com/LiAuto-DSR/transformers-avavla
+Base-Commit: a03eee5da1794c45f5a911b60a9a4545e6e0ed1f
+Base-File-SHA256: 62f22856fe7b8459d6d61d4676b0075b65724979f84859ac475dbe36c10a3d80
+Upstream-License: Apache-2.0; retain the source file's copyright and license header.
+
+Pass the selected layer's weights as an explicit checkpoint tensor input,
+using the same layer selection as the ordinary forward path.
+
+diff --git a/src/transformers/models/llama/modeling_llama.py b/src/transformers/models/llama/modeling_llama.py
+--- a/src/transformers/models/llama/modeling_llama.py
++++ b/src/transformers/models/llama/modeling_llama.py
+@@ -1118,6 +1118,7 @@ class LlamaModel(LlamaPreTrainedModel):
+                     output_attentions,
+                     use_cache,
+                     cache_position,
++                    extra_attn_weights if extra_layer_ids and layer_idx in extra_layer_ids else None,
+                 )
+             else:
+                 layer_outputs = decoder_layer(
