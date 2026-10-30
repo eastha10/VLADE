@@ -1,5 +1,6 @@
 """Generate Colab notebooks that load verified ordinary project files from Drive."""
 from __future__ import annotations
+import argparse
 import hashlib
 import inspect
 import json
@@ -9,6 +10,86 @@ import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def source_state(source_revision: str | None, source_files: dict[str, bytes]) -> dict:
+    """Compare the working tree and index to a pinned commit; unknown means dirty.
+
+    Only the manifest and notebook 02 are derived outputs. Changes to other
+    tracked files, untracked files or the pinned AVA submodule remain dirty.
+    """
+    state = {"contains_uncommitted_work": True,
+             "source_revisions": {".": None, "third_party/ava_vla": None},
+             "git_comparison_verified": False}
+
+    def git(directory: Path, *args: str, payload: bytes | None = None) -> bytes:
+        result = subprocess.run(["git", "-C", str(directory), *args], input=payload,
+                                capture_output=True, check=False)
+        if result.returncode:
+            raise ValueError("Git source comparison unavailable")
+        return result.stdout
+
+    try:
+        if source_revision is not None and not source_revision.strip():
+            return state
+        if Path(git(ROOT, "rev-parse", "--show-toplevel").decode().strip()).resolve() != ROOT.resolve():
+            return state
+        fixed = git(ROOT, "rev-parse", "--verify", "--end-of-options",
+                    (source_revision or "HEAD") + "^{commit}").decode().strip()
+        state["source_revisions"]["."] = fixed
+        paths = ("--", ".", ":(top,exclude)experiments/manifests/colab_source.json",
+                 ":(top,exclude)experiments/colab_02_ava_fft_and_fixed_cache.ipynb")
+        changed = git(ROOT, "diff", "--no-ext-diff", "--no-textconv", "--name-only", "-z",
+                      "--ignore-submodules=none", fixed, *paths)
+        pending = git(ROOT, "status", "--porcelain=v1", "-z", "--untracked-files=all",
+                      "--ignore-submodules=none", *paths)
+        submodule = "third_party/ava_vla"
+        fields = git(ROOT, "ls-tree", fixed, "--", submodule).decode().split()
+        if fields[:2] != ["160000", "commit"]:
+            return state
+        expected = fields[2]
+        state["source_revisions"][submodule] = expected
+        directory = ROOT / submodule
+        if Path(git(directory, "rev-parse", "--show-toplevel").decode().strip()).resolve() != directory.resolve():
+            return state
+        actual = git(directory, "rev-parse", "--verify", "HEAD").decode().strip()
+        sub_pending = git(directory, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+
+        def blobs(repository: Path, commit: str) -> dict[str, str]:
+            result = {}
+            for entry in git(repository, "ls-tree", "-r", "-z", commit).split(b"\0"):
+                if not entry:
+                    continue
+                header, name = entry.split(b"\t", 1)
+                mode, kind, oid = header.split()
+                if mode in (b"100644", b"100755") and kind == b"blob":
+                    result[name.decode()] = oid.decode()
+            return result
+
+        root_blobs, sub_blobs = blobs(ROOT, fixed), blobs(directory, expected)
+        snapshot_dirty = False
+        for name, payload in source_files.items():
+            if name.startswith(submodule + "/"):
+                relative = name[len(submodule) + 1:]
+                repository, tree = directory, sub_blobs
+            else:
+                relative, repository, tree = name, ROOT, root_blobs
+            # Check captured bytes too: ignored files and assume-unchanged index
+            # flags must not hide an uncommitted source from the snapshot.
+            if relative not in tree:
+                snapshot_dirty = True
+            else:
+                oid = git(repository, "hash-object", "--path=" + relative, "--stdin",
+                          payload=payload).decode().strip()
+                snapshot_dirty |= oid != tree[relative]
+        state["contains_uncommitted_work"] = bool(
+            changed or pending or sub_pending or actual != expected or snapshot_dirty)
+        state["git_comparison_verified"] = True
+    except (OSError, ValueError, UnicodeError):
+        # Missing metadata, invalid refs and inaccessible submodules must never
+        # turn a plain source copy into an apparently clean checkout.
+        pass
+    return state
 
 
 def revision(path: Path) -> str | None:
@@ -80,8 +161,8 @@ def stage_source(project_root: Path, scratch_root: Path, expected_manifest_sha25
     return code
 
 
-def bootstrap(digest: str) -> str:
-    return '''
+def bootstrap(digest: str, *, isolated_uv: bool = False) -> str:
+    source = '''
 from pathlib import Path
 from google.colab import drive
 import hashlib, json, os, shutil, subprocess, sys
@@ -124,32 +205,184 @@ def completed_checkpoints(directory):
     return sorted(path for path in directory.glob('step-*')
                   if (path / 'COMPLETE').is_file() and (path / 'trainer_state.pt').is_file())
 '''
+    if isolated_uv:
+        source = source.replace("EXPECTED_MANIFEST_SHA256", "EXPECTED_SOURCE_MANIFEST_SHA256")
+        source = source.replace(
+            "if shutil.which('uv') is None:\n    run([sys.executable, '-m', 'pip', 'install', 'uv'])\nUV = shutil.which('uv')\nassert UV",
+            "UV = shutil.which('uv')\nif UV is None:\n"
+            "    tool_env = Path('/content/vlade_uv_tool')\n"
+            "    tool_python = tool_env / 'bin/python'\n"
+            "    if not tool_python.is_file():\n"
+            "        run([sys.executable, '-m', 'venv', tool_env])\n"
+            "    run([tool_python, '-m', 'pip', 'install', 'uv'])\n"
+            "    UV = str(tool_env / 'bin/uv')\nassert UV")
+    return source
 
 
-def generate() -> list[Path]:
+def _ava_installed_transformers_check() -> str:
+    """Child-process verification of the imported package in the AVA-only venv."""
+    return textwrap.dedent('''
+        import ast, hashlib, importlib, json, sys
+        from pathlib import Path
+        expected_sha, expected_prefix = sys.argv[1:3]
+        prefix = Path(sys.prefix).resolve()
+        if sys.prefix == sys.base_prefix or prefix != Path(expected_prefix).resolve():
+            raise RuntimeError('AVA verification requires the dedicated virtual environment')
+        module = importlib.import_module('transformers.models.llama.modeling_llama')
+        source = Path(module.__file__).resolve()
+        if not source.is_relative_to(prefix) or source.name != 'modeling_llama.py':
+            raise RuntimeError('Transformers was imported outside the AVA environment')
+        payload = source.read_bytes()
+        if hashlib.sha256(payload).hexdigest() != expected_sha:
+            raise RuntimeError('Installed AVA Transformers source SHA mismatch')
+        tree = ast.parse(payload)
+        model = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'LlamaModel')
+        forward = next(node for node in model.body if isinstance(node, ast.FunctionDef) and node.name == 'forward')
+        calls = [node for node in ast.walk(forward) if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Attribute) and node.func.attr == '_gradient_checkpointing_func']
+        expected = 'extra_attn_weights if extra_layer_ids and layer_idx in extra_layer_ids else None'
+        if len(calls) != 1 or len(calls[0].args) != 9 or ast.unparse(calls[0].args[-1]) != expected:
+            raise RuntimeError('Installed checkpoint attention argument was not preserved')
+        print(json.dumps({'source': str(source), 'sha256': expected_sha, 'venv': str(prefix)}))
+    ''').strip()
+
+
+def ava_install_source() -> str:
+    """Build the verified managed patch into a wheel; fail closed before any AVA run."""
+    return textwrap.dedent(r'''
+        AVA_ENV_READY = False
+        AVA_PY = None
+        import tempfile, tomllib, zipfile
+        AVA_VENV = Path('/content') / 'vlade_ava_fft_py311'
+        AVA_PATCH_REL = 'configs/models/teacher/transformers-avavla-a03eee5-checkpoint-extra-attn.patch'
+        AVA_PATCH_SHA = '9f0e46c9e93d62a92af950aeee712191cfcf314c1e636a9608fddcb57ff6087d'
+        AVA_TRANSFORMERS_REV = 'a03eee5da1794c45f5a911b60a9a4545e6e0ed1f'
+        AVA_BASE_SHA = '62f22856fe7b8459d6d61d4676b0075b65724979f84859ac475dbe36c10a3d80'
+        AVA_INSTALLED_SHA = '0a9c25300f3358f87af1719199608af3c27567dba0425690327fccd44cfb516b'
+        AVA_VERIFY_SOURCE = __AVA_VERIFY_SOURCE__
+        _VLADE_AVA_BASE_RUN = getattr(run, '_vlade_base_run', run)
+
+        def verify_ava_transformers(python):
+            _VLADE_AVA_BASE_RUN([python, '-c', AVA_VERIFY_SOURCE, AVA_INSTALLED_SHA, AVA_VENV])
+
+        def require_ava_environment():
+            if not AVA_ENV_READY or AVA_PY is None:
+                raise RuntimeError('AVA patched environment is not verified; rerun the installation cell')
+            verify_ava_transformers(AVA_PY)
+
+        def run(args, env=None):
+            command = [str(value) for value in args]
+            if command and (command[0] == str(AVA_VENV / 'bin/python')
+                            or any(Path(value).name == 'run_fft.py' for value in command)):
+                require_ava_environment()
+            return _VLADE_AVA_BASE_RUN(args, env=env)
+
+        run._vlade_base_run = _VLADE_AVA_BASE_RUN
+        patch = CODE / AVA_PATCH_REL
+        source_manifest = json.loads((CODE / 'experiments/manifests/colab_source.json').read_text())
+        if source_manifest['files_sha256'].get(AVA_PATCH_REL) != AVA_PATCH_SHA:
+            raise RuntimeError('Staged source manifest does not pin the approved AVA patch')
+        if not patch.is_file() or hashlib.sha256(patch.read_bytes()).hexdigest() != AVA_PATCH_SHA:
+            raise RuntimeError('Staged AVA patch is missing or has the wrong SHA')
+
+        build_root = Path(tempfile.mkdtemp(prefix='vlade-ava-transformers-', dir=AVA_VENV.parent))
+        source = build_root / 'source'
+        source.mkdir()
+        build_env = ENV.copy()
+        build_env.update(UV_CACHE_DIR=str(build_root / 'uv-cache'), TMPDIR=str(build_root / 'tmp'))
+        (build_root / 'tmp').mkdir()
+        fork = 'https://github.com/LiAuto-DSR/transformers-avavla.git'
+        _VLADE_AVA_BASE_RUN(['git', '-C', source, 'init'], env=build_env)
+        _VLADE_AVA_BASE_RUN(['git', '-C', source, 'fetch', '--depth', '1', fork, AVA_TRANSFORMERS_REV], env=build_env)
+        _VLADE_AVA_BASE_RUN(['git', '-C', source, 'checkout', '--detach', 'FETCH_HEAD'], env=build_env)
+        revision = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()
+        if revision != AVA_TRANSFORMERS_REV:
+            raise RuntimeError('AVA Transformers checkout revision mismatch')
+        llama = source / 'src/transformers/models/llama/modeling_llama.py'
+        if hashlib.sha256(llama.read_bytes()).hexdigest() != AVA_BASE_SHA:
+            raise RuntimeError('Unpatched AVA Transformers source SHA mismatch')
+        _VLADE_AVA_BASE_RUN(['git', '-C', source, 'apply', '--check', patch], env=build_env)
+        _VLADE_AVA_BASE_RUN(['git', '-C', source, 'apply', patch], env=build_env)
+        if hashlib.sha256(llama.read_bytes()).hexdigest() != AVA_INSTALLED_SHA:
+            raise RuntimeError('Patched AVA Transformers source SHA mismatch')
+        wheels = build_root / 'wheels'
+        wheels.mkdir()
+        _VLADE_AVA_BASE_RUN([UV, 'build', '--wheel', '--python', '3.11', '--out-dir', wheels, source], env=build_env)
+        wheel_files = list(wheels.glob('transformers-*.whl'))
+        if len(wheel_files) != 1:
+            raise RuntimeError('Expected exactly one patched Transformers wheel')
+        wheel = wheel_files[0]
+        with zipfile.ZipFile(wheel) as archive:
+            wheel_source = archive.read('transformers/models/llama/modeling_llama.py')
+        if hashlib.sha256(wheel_source).hexdigest() != AVA_INSTALLED_SHA:
+            raise RuntimeError('Built Transformers wheel does not contain the approved patch')
+
+        upstream = CODE / 'third_party/ava_vla'
+        dependencies = tomllib.loads((upstream / 'pyproject.toml').read_text())['project']['dependencies']
+        dependencies = [dep for dep in dependencies if not dep.startswith(('transformers @', 'dlimp @', 'huggingface_hub', 'accelerate'))]
+        dependencies += [
+            str(wheel),
+            'dlimp @ git+https://github.com/moojink/dlimp_openvla.git@040105d256bd28866cc6620621a3d5f7b6b91b46',
+            'numpy==1.26.4', 'tensorflow-metadata==1.15.0', 'bitsandbytes==0.43.3',
+            'huggingface_hub==0.36.2', 'accelerate==1.15.0']
+        candidate_python = environment('vlade_ava_fft_py311', '3.11', dependencies)
+        if str(candidate_python) != str(AVA_VENV / 'bin/python'):
+            raise RuntimeError('Refusing to install outside the dedicated AVA environment')
+        _VLADE_AVA_BASE_RUN([UV, 'pip', 'install', '--python', candidate_python,
+                            '--no-deps', '--force-reinstall', wheel], env=build_env)
+        _VLADE_AVA_BASE_RUN([UV, 'pip', 'install', '--python', candidate_python, '--no-deps', '-e', upstream])
+        verify_ava_transformers(candidate_python)
+        _VLADE_AVA_BASE_RUN([candidate_python, '-c', "import torch,transformers,tensorflow_datasets; assert torch.cuda.is_available(); assert torch.cuda.is_bf16_supported(); print(torch.__version__,transformers.__version__,torch.cuda.get_device_name(0),torch.cuda.get_device_properties(0).total_memory/2**30)"])
+        freeze = subprocess.check_output([str(UV), 'pip', 'freeze', '--python', str(candidate_python)], text=True)
+        (ROOT / 'ava_environment_freeze.txt').write_text(freeze)
+        (AVA_VENV / 'vlade_transformers_patch.json').write_text(json.dumps({
+            'base_commit': AVA_TRANSFORMERS_REV, 'patch_sha256': AVA_PATCH_SHA,
+            'installed_source_sha256': AVA_INSTALLED_SHA,
+            'wheel_sha256': hashlib.sha256(wheel.read_bytes()).hexdigest()}, indent=2))
+        AVA_PY = candidate_python
+        AVA_ENV_READY = True
+        print('AVA managed Transformers patch verified; FFT environment ready')
+    ''').replace('__AVA_VERIFY_SOURCE__', repr(_ava_installed_transformers_check())).strip()
+
+
+def generate(*, source_revision: str | None = None, only_notebook: int | None = None) -> list[Path]:
+    """Generate all notebooks, or only 02, against one immutable source commit."""
+    if only_notebook not in (None, 2):
+        raise ValueError("Only notebook 02 supports selective generation")
     paths = []
     manifest_path = ROOT / "experiments/manifests/colab_source.json"
     for folder in ("src", "scripts", "configs", "docs", "experiments/baselines", "experiments/manifests", "third_party/ava_vla"):
         for path in (ROOT / folder).rglob("*"):
             if path == manifest_path or not path.is_file() or any(part in {".git", "__pycache__", ".pytest_cache", "wandb", "node_modules"} for part in path.parts):
                 continue
-            if path.suffix.lower() in {".py", ".json", ".toml", ".txt", ".md", ".yaml", ".yml"} or path.name in {"LICENSE", "NOTICE"}:
+            if path.suffix.lower() in {".py", ".json", ".toml", ".txt", ".md", ".yaml", ".yml", ".patch"} or path.name in {"LICENSE", "NOTICE"}:
                 paths.append(path)
     paths.extend(ROOT / name for name in ("README.md", "STRUCTURE.md", "AGENTS.md"))
+    payloads = {p.relative_to(ROOT).as_posix(): p.read_bytes() for p in sorted(set(paths))}
+    file_hashes = {name: hashlib.sha256(payload).hexdigest() for name, payload in payloads.items()}
+    state = source_state(source_revision, payloads)
+    if any(hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != expected
+           for name, expected in file_hashes.items()):
+        state["contains_uncommitted_work"] = True
+        state["git_comparison_verified"] = False
     manifest = {"schema_version": 1, "built_for": "2026-10-28_kanban_colab_preparation",
-                "contains_uncommitted_work": True,
-                "revision_note": "Submodule reference may be the parent gitlink when metadata is inaccessible; exact ordinary source files are identified by files_sha256.",
-                "source_revisions": {name: revision(ROOT if name == "." else ROOT / name)
-                                     for name in (".", "third_party/ava_vla")},
-                "files_sha256": {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-                                  for p in sorted(set(paths))}}
+                "contains_uncommitted_work": state["contains_uncommitted_work"],
+                "revision_note": "Source revision is pinned independently of derived manifest/notebook-02 commits; unverified Git state is dirty. files_sha256 records actual source bytes.",
+                "source_revisions": state["source_revisions"],
+                "git_comparison_verified": state["git_comparison_verified"],
+                "files_sha256": file_hashes}
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     common = cell("code", bootstrap(digest), "drive-and-source")
     notebooks = ROOT / "experiments"
+
+    def write_selected(path: Path, cells: list[dict]) -> None:
+        if only_notebook is None or path.name == "colab_02_ava_fft_and_fixed_cache.ipynb":
+            notebook(path, cells)
+
     one = notebooks / "colab_01_download_data_weights.ipynb"
-    notebook(one, [
+    write_selected(one, [
         cell("markdown", """
         # 01 · LIBERO Plus 데이터·AVA-VLA 가중치 → Google Drive
         CPU 런타임에서 시작할 수 있습니다. 저장소의 일반 코드 파일과 폴더를 Drive에 복사하고 공통 프로젝트 루트를 지정하십시오.
@@ -202,7 +435,7 @@ def generate() -> list[Path]:
         print('다음: 02 Teacher 노트북을 A100 런타임에서 실행하십시오.')
         """, "prepare")])
     two = notebooks / "colab_02_ava_fft_and_fixed_cache.ipynb"
-    notebook(two, [
+    write_selected(two, [
         cell("markdown", """
         # 02 · AVA-VLA 전체 미세조정 → 검증 후 T1 선택 → 순차 캐시
         01을 완료한 뒤 A100 런타임에서 실행하십시오. LoRA를 사용하지 않으며 backbone/head/proprio/attention generator를 학습 대상으로 둡니다.
@@ -210,24 +443,10 @@ def generate() -> list[Path]:
         **현재 FFT는 temporal zero-context입니다.** 이후 캐시는 이전 query의 layer -2 action hidden을 전달하지만,
         시간 문맥을 사용한 FFT/TBPTT를 구현하거나 원본 AVA 학습을 재현한 것은 아닙니다. 본 실험 채택 전 검토 항목입니다.
         체크포인트/optimizer 저장은 수십 GB가 될 수 있습니다. `COMPLETE`와 training state가 있는 저장만 재개합니다.
-        """, "purpose"), common,
+        """, "purpose"), cell("code", bootstrap(digest, isolated_uv=True), "drive-and-source"),
+        cell("code", ava_install_source(), "install-ava"),
         cell("code", """
-        import tomllib
-        upstream = CODE / 'third_party/ava_vla'
-        dependencies = tomllib.loads((upstream / 'pyproject.toml').read_text())['project']['dependencies']
-        dependencies = [dep for dep in dependencies if not dep.startswith(('transformers @', 'dlimp @', 'huggingface_hub', 'accelerate'))]
-        dependencies += [
-            'transformers @ git+https://github.com/LiAuto-DSR/transformers-avavla.git@a03eee5da1794c45f5a911b60a9a4545e6e0ed1f',
-            'dlimp @ git+https://github.com/moojink/dlimp_openvla.git@040105d256bd28866cc6620621a3d5f7b6b91b46',
-            'numpy==1.26.4', 'tensorflow-metadata==1.15.0', 'bitsandbytes==0.43.3',
-            'huggingface_hub==0.36.2', 'accelerate==1.15.0']
-        AVA_PY = environment('vlade_ava_fft_py311', '3.11', dependencies)
-        run([UV, 'pip', 'install', '--python', AVA_PY, '--no-deps', '-e', upstream])
-        run([AVA_PY, '-c', "import torch,transformers,tensorflow_datasets; assert torch.cuda.is_available(); assert torch.cuda.is_bf16_supported(); print(torch.__version__,transformers.__version__,torch.cuda.get_device_name(0),torch.cuda.get_device_properties(0).total_memory/2**30)"])
-        freeze = subprocess.check_output([str(UV), 'pip', 'freeze', '--python', str(AVA_PY)], text=True)
-        (ROOT / 'ava_environment_freeze.txt').write_text(freeze)
-        """, "install-ava"),
-        cell("code", """
+        require_ava_environment()
         PREPARED = ROOT / 'data/processed/libero_plus_episode80'
         from vlade.data.episode_data import EpisodeData
         from vlade.training.run_control import epoch_budget, require_reports, planned_checkpoint_space, pilot_context
@@ -257,6 +476,7 @@ def generate() -> list[Path]:
         """, "fft-config"),
         cell("markdown", "## 실제 1-step·저장·재로딩 검사\n본 학습과 별도 경로를 사용합니다. 이 1-step 체크포인트를 다른 목표량의 본 실험으로 재개하지 않습니다. 오류가 발생하면 본 학습 셀을 실행하지 마십시오.", "smoke-help"),
         cell("code", """
+        require_ava_environment()
         smoke = json.loads(json.dumps(config))
         SMOKE_OUTPUT = ROOT / 'runs/ava_fft' / (RUN_NAME + '-one-step')
         smoke['fft_defaults'].update(max_steps=1, save_steps=1, grad_accumulation_steps=1)
@@ -270,6 +490,7 @@ def generate() -> list[Path]:
         """, "fft-smoke"),
         cell("markdown", "## 본 학습·다음 날 재개\n고정 1000-step 대신 실제 train query 수 × MAIN_EPOCHS에서 optimizer step을 계산합니다. accumulation 경계로 올림한 여분 query 수를 표시합니다. episode 순서는 seed/epoch로 섞고 내부 시간 순서는 유지하며, prepared-data 재개는 query cursor를 복원합니다. GPU kernel의 bitwise 결정성은 별도 검증 사항입니다. RUN_MAIN_FFT 기본 False이므로 모두 실행만으로 본 학습이 시작되지 않습니다.", "main-help"),
         cell("code", """
+        require_ava_environment()
         checkpoints = completed_checkpoints(OUTPUT)
         latest = checkpoints[-1] if checkpoints else None
         if not RUN_MAIN_FFT:
@@ -348,7 +569,7 @@ def generate() -> list[Path]:
             print('선행 대기: 선택된 T1이 없습니다. 공개 T0/zero-context debug를 대신 저장하지 않습니다.')
         """, "cache")])
     three = notebooks / "colab_03_qwen_task_only.ipynb"
-    notebook(three, [
+    write_selected(three, [
         cell("markdown", """
         # 03 · Qwen3.5-0.8B Task-only 기준선
         01의 동일 episode split·정규화·query 간격 8을 사용합니다. Teacher cache 없이 demonstration L1으로 학습합니다.
@@ -460,11 +681,15 @@ def generate() -> list[Path]:
         print(json.dumps(reports[-1] if reports else {}, indent=2, ensure_ascii=False))
         print('Validation L1은 rollout 성공률이 아닙니다. 환경 평가와 최종 기준 성능 기록은 별도로 진행하십시오.')
         """, "student-main")])
-    return [one, two, three, manifest_path]
+    return ([two] if only_notebook == 2 else [one, two, three]) + [manifest_path]
 
 
-def main() -> None:
-    for path in generate():
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Generate verified Colab source snapshots")
+    parser.add_argument("--source-revision", help="Pinned source commit, retained across derived-output commits")
+    parser.add_argument("--only-notebook", type=int, choices=(2,), help="Update only notebook 02 and the manifest")
+    args = parser.parse_args(argv)
+    for path in generate(source_revision=args.source_revision, only_notebook=args.only_notebook):
         print(path)
 
 
