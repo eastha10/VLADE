@@ -28,6 +28,16 @@ A100 단일 추론은 통과했으며, 실제 benchmark 평가 결과는 아직 
 FFT 실행 방법과 AVA temporal 학습의 제한은
 [`docs/environment/libero_plus_fft_colab.md`](docs/environment/libero_plus_fft_colab.md)에
 정리했습니다.
+현재 `colab_02`는 A100 총 8시간 예산을 사용합니다. 4-step 파일럿의 실제 속도·저장 시간을
+측정한 뒤 최대 1 epoch와 남은 시간에 가능한 학습량 중 작은 값을 사용합니다.
+warm-up 10%/cosine을 적용하며, 마감 시 런타임 반환을 요청합니다. 논문의 LoRA·K=4 TBPTT를
+재현한 설정은 아닙니다. 정책과 차이는 [예산 결정](docs/decisions/0004-ava-a100-budget.md)에 있습니다.
+
+별도 [colab_04_ava_paper_best.ipynb](experiments/colab_04_ava_paper_best.ipynb)는 논문 v4
+Appendix D.1의 최고 보고 설정(사전학습 OpenVLA 초기화·100,000 step·batch 256)을 준비합니다.
+rank 32 LoRA·K=4/2-frame TBPTT·attention 정규화 경로를 별도로 구현했습니다.
+다운로드/설치/파일럿/학습은 기본 미실행이며 실제 GPU·LIBERO(+) 성능은 미검증입니다.
+LIBERO+ 데이터와 세부 구현 차이는 [04 실행 안내](docs/environment/ava_paper_best_colab.md)에 기록합니다.
 
 Colab A100에서 데이터셋 없이 두 공개 체크포인트의 단일 액션 추론을 점검할
 노트북은 [`experiments/colab_inference_smoke.ipynb`](experiments/colab_inference_smoke.ipynb)에
@@ -35,6 +45,12 @@ Colab A100에서 데이터셋 없이 두 공개 체크포인트의 단일 액션
 통과했습니다. 실행 조건과 결과 JSON은 `experiments/runs/inference_smoke/`에
 보관했으며, Colab 런타임 종료와 활성 세션 없음까지 확인했습니다. 이 검사는
 LIBERO(+) 성공률이나 FFT 학습 검증을 포함하지 않습니다.
+
+별도 [colab05](experiments/colab_05_qwen_action_distillation.ipynb)는 02의 전체 T1 action cache를
+사용하는 Qwen 오프라인 액션 증류를 준비합니다. GT L1과 Teacher L1의 가중합, cache/원본 데이터
+대조, 저장·재개를 연결하며 실행 스위치는 모두 기본 False입니다.
+사용 순서는 [액션 증류 안내](docs/environment/qwen_action_distillation_colab.md)에 정리했습니다.
+실제 GPU 증류와 성공률은 아직 검증하지 않았습니다.
 
 ## 소스 받기
 

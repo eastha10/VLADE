@@ -26,6 +26,8 @@ vlade/
 │  ├─ colab_01_*.ipynb      # 데이터·AVA 가중치 준비
 │  ├─ colab_02_*.ipynb      # AVA FFT·T1 선택·cache
 │  ├─ colab_03_*.ipynb      # Qwen Task-only
+│  ├─ colab_04_*.ipynb      # AVA 논문 최고 보고 설정 · K=4 LoRA 준비
+│  ├─ colab_05_*.ipynb      # Qwen 고정 T1 액션 증류 · Task+Action KD
 │  └─ runs/                 # 실제 실행별 기록
 ├─ tests/                   # unit, integration, smoke test
 ├─ docs/                    # 의사결정·프로토콜·환경·논문 메모

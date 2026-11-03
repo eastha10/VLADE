@@ -6,10 +6,31 @@
 train-only 통계를 사용합니다. 아래 기존 upstream RLDS 경로와 분리한 어댑터이며,
 실제 데이터 담당자의 최종 split manifest와 대조하기 전에는 정본 동일성을 주장하지 않습니다.
 
-최신 Colab 실행은 고정 1000-step을 쓰지 않고 실제 train query 수×MAIN_EPOCHS로 예산을
-계산합니다. 공통 episode shuffle/query cursor, 주기 validation, gradient·저장 공간 검사와
-본 학습 기본 미실행 조건을 추가했습니다. 아래 일반 CLI 예시는 legacy JSON 기본값을
-설명하므로 새 Colab 설정과 구분하십시오. GPU 실측은 여전히 미완료입니다.
+최신 `colab_02`는 [8시간 예산 정책](../../configs/experiments/ava_fft_a100_8h.json)을
+사용합니다. 설치·파일럿·재로딩·학습·후속 작업과 대기를 합쳐 첫 시작부터 8시간으로
+제한합니다. 4-step 파일럿에서 첫 step을 제외한 실제 optimizer step, validation,
+Drive checkpoint 저장과 모델 준비 시간을 측정합니다. 가능한 학습량과 1 epoch 중
+작은 값을 max_steps로 사용하며, 1 epoch 완료를 보장하지 않습니다. 세부 근거는
+[논문 대비 예산 결정](../decisions/0004-ava-a100-budget.md)에 있습니다.
+아래 CLI/기본 JSON의 legacy 1000-step 설정과 구분하십시오. 새 정책의 GPU 실측은 미실행입니다.
+
+본 FFT는 LR 2e-5, effective batch 8, warm-up 10%, cosine, clipping 1.0을 사용합니다.
+파일럿에도 동일한 batch/accumulation을 적용하고 파일럿 가중치는 본 학습에 이어 쓰지 않습니다.
+본 학습의 validation(16 query 이하)/저장은 중간·마지막 약 2회로 줄이고 optimizer 상태를
+함께 저장합니다. 불필요한 debug 추론과 대규모 hidden cache는 기본 비활성입니다.
+후속 검증/T1/cache용 1시간과 종료용 최소 5분을 확보하며, 나머지 추정에는 30% 여유를 둡니다.
+이 1시간 안에 전체 rollout·cache가 완료된다는 뜻은 아닙니다. cache도 pilot에서 예상 시간과
+용량을 계산하고 남은 예산이 부족하면 전체 생성을 시작하지 않습니다.
+
+Drive `run-configs/ava-fft-a100-8h-seed42-session.json`에 최초 마감을 보존하므로 셀 재실행으로
+예산을 초기화하지 않습니다. 재개 때 max_steps/LR schedule도 고정합니다. 사용자의 입력을
+기다리는 시간과 런타임을 쓰지 않는 시간도 포함하는 보수적인 wall-clock 상한입니다.
+학습이 예산 경계에 가까워지면 optimizer 경계에서 저장 후 `budget_exhausted`로 기록합니다.
+subprocess에는 종료 타이머를 걸고, 8시간 마감에는 Colab `runtime.unassign()`을 요청합니다.
+Colab 서비스 오류나 kernel 종료 등으로 자동 해제가 실패할 수 있으므로 계정의 사용량을
+확인하고 필요하면 직접 연결 해제·삭제합니다. 작업이 일찍 끝나면 마지막 셀의
+`RELEASE_GPU_NOW=True`로 GPU를 반환합니다. CU/금액은 계정별 실제 소모율로 확인하며
+고정 원화 비용이나 GPU 속도를 가정하지 않습니다.
 
 VLADE의 `scripts/train/run_fft.py`는 upstream의 LoRA 전용 학습 스크립트를
 수정하지 않고 OpenVLA-OFT와 AVA-VLA의 **전체 VLA 가중치**를 학습합니다.

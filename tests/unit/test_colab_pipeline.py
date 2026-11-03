@@ -309,7 +309,7 @@ def test_notebook_run_all_does_not_launch_main_training(tmp_path):
     def forbidden(*args, **kwargs):
         pytest.fail("Main training must remain opt-in")
     env = {"completed_checkpoints": lambda _: [], "OUTPUT": tmp_path, "RUN_MAIN_FFT": False,
-           "run": forbidden}
+           "run": forbidden, "require_ava_environment": lambda: None}
     exec(notebook_cell("colab_02_ava_fft_and_fixed_cache.ipynb", "fft-main"), env)
     env = {"student_config": lambda _: (tmp_path / "config.json", tmp_path), "RUN_MAIN_STUDENT": False,
            "train_student": forbidden, "json": json}

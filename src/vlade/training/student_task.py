@@ -1,4 +1,4 @@
-"""Task-only Qwen BC using the same episode queries and train statistics as T1."""
+"""Qwen task supervision and optional offline action KD on the same queries."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -16,6 +16,8 @@ import torch
 from vlade.data.colab_assets import sha256
 from vlade.data.episode_data import EpisodeData, query_stream, query_count, write_json
 from vlade.models.contracts import masked_action_l1
+from vlade.distillation.action import action_distillation_loss, validate_weights
+from vlade.training.cached_actions import CachedActions
 from vlade.models.students.qwen import HistoryFrame, QwenStudent, StudentConfig, load_processor, prepare_inputs
 from vlade.training.loop import LoopState, make_scheduler, restore_training_state, run_loop, training_state
 from vlade.training.run_control import checkpoint_space, gradient_diagnostics, seal_checkpoint, verify_checkpoint
@@ -30,30 +32,48 @@ def samples(data: EpisodeData, split: str, *, repeat: bool = False,
 
 
 def batches(data: EpisodeData, processor, config: StudentConfig, *, split: str,
-            skip: int = 0, episode_limit: int = 0, seed: int = 42, limit: int = 0):
+            skip: int = 0, episode_limit: int = 0, seed: int = 42, limit: int = 0,
+            teacher: CachedActions | None = None):
     for sample, history in samples(data, split, repeat=split == "train", episode_limit=episode_limit,
                                    seed=seed, skip=skip, limit=limit):
         frames = [HistoryFrame(q["timestep"], data.image(q, "primary"), data.image(q, "wrist")) for q in history]
         inputs = prepare_inputs(processor, config, instruction=sample["instruction"], frames=frames,
                                 current_timestep=sample["timestep"])
-        yield inputs, torch.from_numpy(sample["proprio"])[None], torch.from_numpy(sample["gt_action"])[None], torch.from_numpy(sample["action_valid_mask"])[None]
+        batch = (inputs, torch.from_numpy(sample["proprio"])[None], torch.from_numpy(sample["gt_action"])[None],
+                 torch.from_numpy(sample["action_valid_mask"])[None])
+        if teacher is not None:
+            if split != "train":
+                raise ValueError("Teacher cache may only supervise the train split")
+            batch += (teacher.get(sample)[None],)
+        yield batch
 
 
-def identity(settings: dict, data: EpisodeData) -> dict:
+def identity(settings: dict, data: EpisodeData, teacher: CachedActions | None = None) -> dict:
     paths = [Path(__file__), Path(__file__).with_name("loop.py"),
              Path(__file__).with_name("run_control.py"),
              Path(__file__).parents[1] / "data/episode_data.py",
              Path(__file__).parents[1] / "models/contracts.py",
              Path(__file__).parents[1] / "models/students/qwen.py"]
-    return {"settings": settings, "data_manifest_sha256": sha256(data.root / "manifest.json"),
+    cache_identity = {}
+    if settings.get("method") == "action_kd":
+        teacher = teacher or CachedActions(Path(settings["teacher_cache"]), data,
+                                           episode_limit=settings.get("episode_limit", 0))
+        paths += [Path(__file__).with_name("cached_actions.py"),
+                  Path(__file__).parents[1] / "data/teacher_records.py",
+                  Path(__file__).parents[1] / "distillation/action.py"]
+        cache_identity = {"teacher_cache": teacher.signature}
+    return {**cache_identity, "settings": settings, "data_manifest_sha256": sha256(data.root / "manifest.json"),
             "code_sha256": {path.name: sha256(path) for path in paths},
             "torch": torch.__version__, "transformers": importlib.metadata.version("transformers"),
             "initial_download_manifest_sha256": sha256(Path(settings["initial_checkpoint"]) / "download_manifest.json")}
 
 
 def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) -> None:
-    if settings.get("batch_size") != 1 or settings.get("method") != "task_only":
-        raise ValueError("Task-only path currently supports batch_size=1; use gradient accumulation")
+    if settings.get("batch_size") != 1 or settings.get("method") not in {"task_only", "action_kd"}:
+        raise ValueError("Student supports task_only/action_kd with batch_size=1 and gradient accumulation")
+    kd_enabled = settings["method"] == "action_kd"
+    if kd_enabled:
+        validate_weights(settings["task_weight"], settings["action_kd_weight"])
     if min(settings["max_steps"], settings["save_steps"], settings["accumulation_steps"]) < 1:
         raise ValueError("Training budgets must be positive")
     if settings.get("eval_steps", 100) < 1 or settings.get("validation_queries", 32) < 1:
@@ -72,7 +92,9 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
     for item in downloaded["files"]:
         if sha256(checkpoint / item["path"]) != item["sha256"]:
             raise ValueError(f"Student initial checkpoint changed: {item['path']}")
-    experiment = identity(settings, data)
+    teacher = (CachedActions(Path(settings["teacher_cache"]), data,
+                             episode_limit=settings.get("episode_limit", 0)) if kd_enabled else None)
+    experiment = identity(settings, data, teacher)
     if resume:
         if not (resume / "COMPLETE").is_file():
             raise ValueError("Incomplete Student checkpoint")
@@ -81,7 +103,8 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
         sealed = verify_checkpoint(resume, accumulation=settings["accumulation_steps"])
     if preflight:
         print(json.dumps({"status": "preflight_ok", "counts": data.manifest["counts"],
-                          "model": config.model_id, "gpu_forward_tested": False}))
+                          "model": config.model_id, "gpu_forward_tested": False,
+                          "teacher_cache": teacher.signature if teacher else None}))
         return
     if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
         raise RuntimeError("A BF16 CUDA GPU is required")
@@ -111,10 +134,10 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
     run_id = uuid.uuid4().hex[:12]
     manifest = {"status": "running", "identity": experiment, "seed": seed,
                 "initialization": "pinned_pretrained_backbone_and_seeded_continuous_head",
-                "mode": "single_episode_overfit_pilot" if settings.get("episode_limit", 0) else "task_only",
+                "mode": "single_episode_overfit_pilot" if settings.get("episode_limit", 0) else settings["method"],
                 "gpu": torch.cuda.get_device_name(0), "vram_bytes": torch.cuda.get_device_properties(0).total_memory,
                 "dtype": "float32_parameters_bfloat16_autocast", "rollout_success_rate": None,
-                "kd_enabled": False, "resume_sample_order": "deterministic_query_cursor",
+                "kd_enabled": kd_enabled, "resume_sample_order": "deterministic_query_cursor",
                 "sampler": "seeded_episode_shuffle_causal_queries_v1",
                 "train_queries_per_epoch": query_count(data, episode_limit=settings.get("episode_limit", 0)),
                 "validation_policy": "uniform_query_positions_across_validation_split",
@@ -124,12 +147,20 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
     started = time.monotonic()
     torch.cuda.reset_peak_memory_stats()
 
+    loss_terms = []
+
     def loss_fn(batch, step):
-        inputs, proprio, target, valid = batch
+        inputs, proprio, target, valid = batch[:4]
         inputs = {key: value.to("cuda:0") for key, value in inputs.items()}
         with torch.autocast("cuda", dtype=torch.bfloat16):
             prediction = model(inputs, proprio.to("cuda:0"))
-        return masked_action_l1(prediction, target.to("cuda:0"), valid.to("cuda:0"))
+        target, valid = target.to("cuda:0"), valid.to("cuda:0")
+        if len(batch) == 5:
+            loss, terms = action_distillation_loss(prediction, target, batch[4].to("cuda:0"), valid,
+                task_weight=settings["task_weight"], action_weight=settings["action_kd_weight"])
+            loss_terms.append(terms)
+            return loss
+        return masked_action_l1(prediction, target, valid)
 
     def validation_loss(step):
         from vlade.training.loop import evaluate
@@ -146,6 +177,10 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
     try:
         with (output / f"metrics-{run_id}.jsonl").open("x", encoding="utf-8") as log:
             def on_step(current, metrics):
+                if loss_terms:
+                    metrics.update({key: sum(row[key] for row in loss_terms) / len(loss_terms)
+                                    for key in ("task_l1", "action_kd_l1")})
+                    loss_terms.clear()
                 metrics.update(step=current.step, peak_allocated_bytes=torch.cuda.max_memory_allocated(),
                                elapsed_seconds=time.monotonic() - started)
                 if current.step % settings.get("eval_steps", 100) == 0 or current.step == settings["max_steps"]:
@@ -170,7 +205,7 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
 
             run_loop(modules=[model], optimizer=optimizer, scheduler=scheduler,
                      batches=batches(data, processor, config, split="train", skip=state.microsteps,
-                                     episode_limit=settings.get("episode_limit", 0), seed=seed),
+                                     episode_limit=settings.get("episode_limit", 0), seed=seed, teacher=teacher),
                      loss_fn=loss_fn, max_steps=settings["max_steps"], accumulation_steps=settings["accumulation_steps"],
                      max_grad_norm=1.0, state=state, on_before_step=before_step, on_step=on_step)
         # A bounded held-out loss is recorded separately from rollout success.

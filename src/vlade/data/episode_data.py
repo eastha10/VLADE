@@ -20,6 +20,11 @@ from PIL import Image
 from vlade.data.colab_assets import DATA_REV, sha256
 from vlade.utils.filesystem import publish_directory
 
+# Canonical D identifiers from vlade.data.canonical_split in the validated preparation source.
+CANONICAL_SHA256 = "487d2be1039ba6a4facc3ba44785ba5159245dfe53462a1d5a41ba8230446e80"
+CANONICAL_COUNTS = {"train": 11_477, "validation": 1_428, "test": 1_442}
+CANONICAL_CALIBRATION_EPISODES = 728
+
 CONVENTION = "libero_relative_xyz_axis_angle; model_gripper_1_open_0_closed; proprio_state_first6_last2"
 
 
@@ -189,11 +194,19 @@ class EpisodeData:
         self.stats = json.loads((root / "normalization.json").read_text(encoding="utf-8"))
         self.entries = self.manifest["episodes"]
         splits = json.loads((root / "splits.json").read_text(encoding="utf-8"))
-        keys = ("episode_id", "content_sha256", "split", "steps", "queries")
-        if self.manifest.get("schema_version") != 1 or self.manifest.get("query_interval_steps") != 8:
+        schema = self.manifest.get("schema_version")
+        keys = (("episode_id", "content_sha256", "content_group_id", "split", "is_calibration", "steps", "queries")
+                if schema == 2 else ("episode_id", "content_sha256", "split", "steps", "queries"))
+        if type(schema) is not int or schema not in {1, 2} or self.manifest.get("query_interval_steps") != 8:
             raise ValueError("Unsupported prepared-data schema/query interval")
         if not self.stats.get("train_only") or self.stats.get("split_sha256") != self.manifest["split_sha256"]:
             raise ValueError("Normalization is not bound to the declared train split")
+        if self.manifest.get("canonical_manifest_sha256") is not None:
+            if (self.manifest["canonical_manifest_sha256"] != CANONICAL_SHA256 or
+                    self.stats.get("canonical_manifest_sha256") != CANONICAL_SHA256 or
+                    self.stats.get("canonical_normalization_sha256") !=
+                    self.manifest.get("canonical_normalization_sha256")):
+                raise ValueError("Prepared data is not bound to the canonical manifest/normalization")
         if [{key: entry.get(key) for key in keys} for entry in self.entries] != splits:
             raise ValueError("Episode manifest differs from the sealed split manifest")
         identities, groups = set(), {}
@@ -203,15 +216,27 @@ class EpisodeData:
                     any(char in identifier for char in ("/", "\\", ":"))):
                 raise ValueError("Invalid/duplicate episode identity")
             identities.add(identifier)
+            if schema == 2 and (not isinstance(entry.get("content_group_id"), str) or
+                                not entry["content_group_id"] or type(entry.get("is_calibration")) is not bool):
+                raise ValueError("Invalid episode content group/calibration metadata")
             if (entry["split"] not in {"train", "validation", "test"} or type(entry["steps"]) is not int or
                     entry["steps"] < 1 or type(entry["queries"]) is not int or
                     entry["queries"] != (entry["steps"] + 7) // 8):
                 raise ValueError("Invalid episode split/step/query count")
-            if entry["content_sha256"] in groups and groups[entry["content_sha256"]] != entry["split"]:
+            if entry.get("is_calibration") and entry["split"] != "train":
+                raise ValueError("Calibration episodes must be a subset of Train")
+            assignment = (entry["split"], entry.get("is_calibration", False))
+            group = entry["content_group_id"] if schema == 2 else entry["content_sha256"]
+            if group in groups and groups[group] != assignment:
                 raise ValueError("Duplicate episode content crosses splits")
-            groups[entry["content_sha256"]] = entry["split"]
+            groups[group] = assignment
         if dict(Counter(entry["split"] for entry in self.entries)) != self.manifest.get("counts"):
             raise ValueError("Episode split counts do not match the manifest")
+        if self.manifest.get("canonical_manifest_sha256") is not None:
+            if (self.manifest.get("counts") != CANONICAL_COUNTS or
+                    self.manifest.get("calibration_episodes") != CANONICAL_CALIBRATION_EPISODES or
+                    sum(bool(entry["is_calibration"]) for entry in self.entries) != CANONICAL_CALIBRATION_EPISODES):
+                raise ValueError("Prepared data does not reproduce canonical split/calibration counts")
 
     def episodes(self, split: str, *, order: list[str] | None = None) -> Iterator[tuple[dict, list[dict]]]:
         entries = [entry for entry in self.entries if entry["split"] == split]

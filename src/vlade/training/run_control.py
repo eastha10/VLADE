@@ -60,13 +60,21 @@ def pilot_context(config: Path, checkpoint: Path, data: Path, kind: str, *, poli
         raise ValueError("Unknown pilot kind")
     verify_checkpoint(checkpoint)
     core = Path(__file__).parent
+    cache_context = {}
     paths = [core / name for name in ("run_control.py", "loop.py")]
     paths.append(core.parent / "data/episode_data.py")
     if kind == "fft":
-        paths += [core / name for name in ("fft.py", "prepared_fft.py", "debug_records.py")]
+        paths += [core / name for name in ("fft.py", "prepared_fft.py", "debug_records.py", "compute_budget.py")]
     else:
         paths += [core / "student_task.py", core.parent / "models/students/qwen.py", core.parent / "models/contracts.py"]
-    return {"kind": kind, "configuration_sha256": sha256(config), "data_manifest_sha256": sha256(data / "manifest.json"),
+        settings = json.loads(config.read_text(encoding="utf-8"))
+        if settings.get("method") == "action_kd":
+            paths += [core / "cached_actions.py", core.parent / "data/teacher_records.py",
+                      core.parent / "distillation/action.py"]
+            cache = Path(settings["teacher_cache"])
+            cache_context = {"teacher_cache": {name: sha256(cache / name)
+                             for name in ("cache_config.json", "cache_manifest.json")}}
+    return {**cache_context, "kind": kind, "configuration_sha256": sha256(config), "data_manifest_sha256": sha256(data / "manifest.json"),
             "checkpoint_manifest_sha256": sha256(checkpoint / CHECKPOINT_MANIFEST),
             "code_sha256": code_hashes(paths), "policy": policy or {}}
 

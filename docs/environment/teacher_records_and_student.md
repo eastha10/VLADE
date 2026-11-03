@@ -102,6 +102,14 @@ native vision을 제공하는 Qwen3.5를 우선합니다. 성능·엣지 효율�
   Teacher raw token ID는 Student label로 복사하지 않습니다. representation KD는
   동일 horizon의 의미 feature에 별도 projection을 학습하는 후속 작업입니다.
 
+## 고정 액션 cache의 증류 연결
+
+`colab_05_qwen_action_distillation.ipynb`와 `scripts/train/run_student_kd.py`는
+02의 전체 train cache를 실제 Student 학습 입력에 연결합니다. task L1과 Teacher action L1을
+가중합하며 원본 episode/query·관측·GT·mask·provenance를 검사합니다.
+검증 손실은 held-out GT 기준입니다. 특징 증류는 별도 후속 작업이며 실제 GPU 증류는 미검증입니다.
+실행 스위치·경로·재개 절차는 [05 안내](qwen_action_distillation_colab.md)에 정리했습니다.
+
 ## CoTinyVLA와 구분
 
 이번 구현은 **VLADE의 공통 계약·Task-only 시작점**입니다. 원본 CoTinyVLA의
