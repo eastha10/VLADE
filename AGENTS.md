@@ -104,6 +104,29 @@
 - 대용량 다운로드, 장시간 학습·GPU 점유, 비용이 발생할 수 있는 외부 서비스 호출은 기존 사용자 승인 범위를 확인하고 승인되지 않았다면 실행 전에 확인받습니다.
 - 먼저 최소 입력의 smoke test로 확인하고 큰 실험으로 확장합니다. 검증을 목적으로 공식 실험이나 대규모 환경 설치를 임의로 실행하지 않습니다.
 
+## Hugging Face 가중치·데이터 공유와 협업
+
+- 모든 협업자의 Codex는 이 절과 [Hub 인증·체크포인트·재개 안내](docs/environment/hugging_face_checkpoints.md)를 함께 따릅니다. 코드·설정·문서는 Git과 Drive에, 공유 가중치·데이터 정본은 Hugging Face에 게시합니다. 로컬·Colab SSD는 실행 캐시로 사용하며 기존 Drive 원본은 보존합니다.
+- 가중치와 학습 checkpoint의 기본 대상은 **비공개 model 저장소 `VLADE-konkuk/VLADE-checkpoints`**입니다. 전처리 데이터는 비공개 dataset `VLADE-konkuk/libero-plus-prepared`, 전체 Teacher cache는 비공개 dataset `VLADE-konkuk/vlade-teacher-cache`로 구분합니다. 임의의 개인 저장소나 공개 저장소로 바꾸지 않습니다.
+- 협업자는 각자 조직 저장소 접근 권한이 있는 계정과 해당 저장소 쓰기 권한의 토큰을 준비합니다. Colab은 각 노트북에서 Secrets `HF_TOKEN` 접근을 허용하고, 로컬은 `hf auth login` 또는 외부에서 주입한 `HF_TOKEN`을 사용합니다. 토큰을 공유·출력하거나 코드·명령 인수·Git·Drive·manifest·작업 기록에 넣지 않습니다. 지침을 Git으로 전달해도 계정 권한·인증은 자동 전달되지 않습니다.
+
+### 학습 checkpoint 저장·재개
+
+- 승인된 학습을 준비할 때 기존 FFT·Qwen Task-only/KD·04 AVA·Suite-balanced의 Hub 연결을 사용합니다. 별도 업로더로 학습 루프·손실·optimizer·schedule을 교체하지 않습니다. 새 실행은 협업자·실험·seed 등을 구분하는 고유 run group, 재개는 기존 group과 동일한 output 폴더명을 사용합니다. 같은 group/output에 여러 프로세스가 동시에 쓰지 않습니다.
+- Colab 01~05와 Suite-balanced의 `private-hub` 셀은 `ENABLE_HUB_UPLOAD=True`, `HF_REPO_ID='VLADE-konkuk/VLADE-checkpoints'`, `HF_RUN_GROUP`을 확인합니다. 로컬은 `VLADE_HUB_REPO=VLADE-konkuk/VLADE-checkpoints`와 `VLADE_HUB_RUN_ID=<run group>`을 지정합니다. Suite-balanced는 기존 구현의 `-pilot4`/`-main` 구분을 유지합니다.
+- 로컬 사전 확인은 `python scripts/train/hub_checkpoints.py check --output <실제 학습 output>`을 사용합니다. Colab 01은 기존 `private-hub-check` 셀을 사용합니다. 인증·private 여부 확인과 실제 commit 쓰기 성공을 구분하며, 인증 실패·조직 권한 부족·공개 저장소를 우회하거나 확인 없이 로컬 전용 실행으로 바꾸지 않습니다.
+- 봉인된 파일 목록·크기·SHA256·`COMPLETE`와 재개 상태를 확인한 checkpoint만 `runs/<group>/<output 폴더명>/checkpoints/step-.../`로 게시합니다. 기존 구현처럼 가중치와 `last.json`·해당 `best.json`·`final.json`을 한 commit으로 반영합니다. 목표 step 완료만 final이며, best 기준은 실행별 안내를 따릅니다. 예산 종료·실패·강제 중단을 final이나 최고 성능으로 기록하지 않습니다.
+- 전송 실패 시 실제 output의 `hub_pending.json`과 원본 checkpoint를 보존하고 `python scripts/train/hub_checkpoints.py retry --output <실제 학습 output>`으로 재시도합니다. 원격 pointer·완료 파일·불변 commit SHA를 확인하기 전에는 업로드 성공으로 보고하거나 로컬 원본을 삭제하지 않습니다.
+- 재개는 `python scripts/train/hub_checkpoints.py download --repo VLADE-konkuk/VLADE-checkpoints --run <group>/<output 폴더명> --alias last --revision <commit SHA> --output <새 복구 경로>`로 검증한 뒤 출력된 step 경로를 원래 학습 진입점의 `--resume`에 전달합니다. 필요하면 `best`/`final`을 선택합니다. 기존 코드·설정·데이터·정규화·초기 가중치 identity 검사를 완화하지 않습니다.
+
+### 공유 입력 자료와 완료 보고
+
+- 자료 식별자는 `hfasset://키`, 배포 pin은 `configs/storage/hf_assets.lock.json`, 원격 레지스트리는 model 저장소의 `assets/registry.json`을 사용합니다. 검증 완료 게시물의 불변 commit SHA와 SHA256을 고정하며 다른 모델·suite·데이터를 같은 자료처럼 대체하지 않습니다.
+- 기존 자료는 레지스트리와 원격 파일을 확인해 재사용합니다. 입력은 `scripts/data/hf_assets.py fetch <키>`로 검증하며, 레지스트리 갱신 시 `refresh-registry --output <작업별 런타임 registry 경로>`를 사용합니다. 정식 lock을 변경한 경우 관련 source manifest·노트북 hash와 Drive도 함께 맞춥니다.
+- 기존 Drive 자료 이관은 승인된 범위에서 Colab 01의 기존 이관 셀 또는 `scripts/data/migrate_hf_assets.py`를 사용합니다. 이관 성공 후에도 Drive 원본을 삭제·이름 변경하지 않습니다. 전체 Teacher cache는 실제 full train split 생성·검증 완료 후에만 게시하며 pilot 자료를 전체 자료로 등록하지 않습니다.
+- HF 업로드를 요청받았거나 승인된 학습에서 가중치가 생성되면 원격 게시와 검증까지 같은 작업의 완료 조건으로 처리합니다. 재승인 없이 기존 승인 범위에서 진행하되 이 지침만으로 새 GPU 학습·대용량 다운로드·유료 작업을 시작하지 않습니다.
+- 완료 보고에는 HF 저장소·run 또는 asset 키·step·불변 revision·무결성 확인 결과와 pending 여부를 남깁니다. Git push, Drive 코드 반영, HF 가중치 업로드의 완료 상태를 각각 확인하며 어느 하나의 성공을 다른 작업의 성공으로 간주하지 않습니다. 인증이 필요한 경우 토큰 원문 대신 필요한 권한과 설정 위치만 안내합니다.
+
 ## Git 관리 파일 변경과 Google Drive 동기화
 
 - Git에서 관리하는 정식 소스·설정·문서·노트북에 추가·수정·이동 등 업데이트할 변경이 생기면, 해당 변경의 구현·검증과 Google Drive의 **`내 드라이브/colab/VLADE`** 반영을 같은 작업의 완료 조건으로 처리합니다. 별도의 푸시 요청이 있을 때까지 Drive 갱신을 미루지 않습니다.

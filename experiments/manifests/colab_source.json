@@ -8,7 +8,7 @@
     "third_party/ava_vla": "69ae5dfb90f4eb714259693bd2c222e0b3de6456"
   },
   "files_sha256": {
-    "AGENTS.md": "8921f814c6ba1dbe8228c745f88c9b7579bdaab8f5f89a0f06696c93b2cced02",
+    "AGENTS.md": "66f48942002c1da6e2e5a04bb6a51f1d080215da5c0b4e736ed0c3c3f8362d34",
     "configs/experiments/ava_fft_a100_8h.json": "47a3b6d611cc814e4cfdcbd641f9a912ccbbc8fedf3f7ca680dcd4703cb47072",
     "configs/experiments/ava_paper_best.json": "79723b699102dd6efe951ed24460da2cfdadf5081be44e5b3d0dc5d0f5fc96aa",
     "configs/experiments/libero_plus_fft.json": "dece02e8b0dd41fefb816564ede1129e70957226e064c77533dfa916cdf7a73b",
