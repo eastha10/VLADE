@@ -1,0 +1,67 @@
+{
+  "files": [
+    {
+      "path": "docs/environment/libero_plus_fullframes.md",
+      "id": "1zuZdo-lq1Q4fwSMUUuCjorwatlLXv3yw",
+      "bytes": 6991,
+      "sha256": "1105281f88b91da989354373dd6d0b03c66f3138494ad86d6343d75d687ffa0d"
+    },
+    {
+      "path": "experiments/colab_01_download_data_weights.ipynb",
+      "id": "18ebTvNOxtQ5rnaKMcwlImQlsRpRHMyhg",
+      "bytes": 73512,
+      "sha256": "2bb3e647ef88b8beafd02062112d07ef9f29afa6376d5d8436930bda06c91550"
+    },
+    {
+      "path": "experiments/colab_02_ava_fft_and_fixed_cache.ipynb",
+      "id": "1AUmqOW3Menl2V5Veo9V22at5BlCa1K8b",
+      "bytes": 37922,
+      "sha256": "1725c30572148478634047f3e4133ceb94930ac30a459ab3751014c2ab8e599e"
+    },
+    {
+      "path": "experiments/colab_03_qwen_task_only.ipynb",
+      "id": "1dC8f7xDzFbqoTsf-ZVdnRFBVVVU0DMuy",
+      "bytes": 20322,
+      "sha256": "cd75304487e11e510b9ca6473b18d75895e5e11dbbeddba3579e66b6409d8b2d"
+    },
+    {
+      "path": "experiments/colab_04_ava_paper_best.ipynb",
+      "id": "1ujuZs-jAd5jFOK61bk-CpSrZzdOA-svr",
+      "bytes": 28331,
+      "sha256": "96db29a1a2f08761d9bf8cf5e712a77e699151ba3a6695b441c63a200231c322"
+    },
+    {
+      "path": "experiments/colab_05_qwen_action_distillation.ipynb",
+      "id": "16HUYnZZfc21TmVZWWMY0RGXaEH9Bs-Mu",
+      "bytes": 22878,
+      "sha256": "8be04a65a41a761d3b2cd751f1428abce82229d1114cbf08c7a9ee8bfb96d3f1"
+    },
+    {
+      "path": "experiments/colab_ava_fft_suite_balanced_cu.ipynb",
+      "id": "1MhqgAKh01iVj2oCGgiXX4DHInzmEu7zr",
+      "bytes": 101777,
+      "sha256": "f64155c0406868a2a9170664d8925a9196c6a83b73091de69b323c7df1038201"
+    },
+    {
+      "path": "experiments/manifests/colab_source.json",
+      "id": "1I9FHxnVvbB7teUmPCSOkZP2JhYSOTNI2",
+      "bytes": 27617,
+      "sha256": "dd3804ed2db5fc44b0c443265126afc22be6bb8f515b0c8c319b7bf93c908589"
+    },
+    {
+      "path": "src/vlade/utils/fullframes_notebook.py",
+      "id": "1_ej_uVxQd7XkbI8EOHSpEyeqIZg3fdH4",
+      "bytes": 9418,
+      "sha256": "4bf35227f064fd93bf90e4bf2084e23fda4a53f0fa334ed67106f5c55d06b36d"
+    },
+    {
+      "path": "tests/unit/test_fullframes.py",
+      "id": "1MNPlTTMgDftuyx23MB7oiLl_BhDm2CuC",
+      "bytes": 14469,
+      "sha256": "8a1651082ff5e09a0019ed17906b301e9ec98661d93620fc89cb10e06fd25482"
+    }
+  ],
+  "all_bytes_equal": true,
+  "existing_cells_outputs_metadata_preserved": true,
+  "drive_manifest_sha": "dd3804ed2db5fc44b0c443265126afc22be6bb8f515b0c8c319b7bf93c908589"
+}

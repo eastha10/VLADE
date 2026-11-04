@@ -59,3 +59,24 @@ reports/public-dataset-initialization.json에 이 초기화 결과를 보존합�
 Colab에서 사용자가 새 단일 셀을 실행해야 합니다. 완료는 원격 COMPLETE/manifest/revision과
 전체 counts/hash 검증으로 별도 확인합니다. scratch는 이 진행 작업의 검증/동기화에 사용하며
 대용량 raw manifest·sample·재생성 가능한 검사 산출물은 필요가 끝나면 정리합니다.
+
+## Drive 연결 끊김 복구 (실행 후)
+
+사용자 로그에서 첫 8개 원본 shard/112 episodes/18,414 timestep을 게시·검증한 뒤
+source_shard=8 읽기 시작 시 OSError [Errno 107] Transport endpoint is not connected로 중단됐습니다.
+HF revision 94d1eab32de7c1a21d70c55512b7c48bdd9c3374의 첫 구간 파일 3개
+(514,783,050 bytes)를 원격 size/SHA256으로 재확인했습니다. 전체 COMPLETE는 아직 없습니다.
+reports/export-progress.json은 실제 첫 게시 검증 결과입니다.
+
+- 기존 fullframes_notebook.py의 실행 셀만 수정했습니다. 시작 시 실제 소스 파일 I/O로
+  Drive 연결을 확인하고, 전송 중 구조화된 OSError/Errno107을 감지하면 표준 Colab
+  force_remount 후 동일한 명령을 최대 두 번 재실행합니다. 다른 오류는 재시도하지 않습니다.
+- fullframes.py/tfrecord_frames.py와 게시물의 exporter identity는 바꾸지 않습니다.
+  HF 완료 구간은 기존 방식으로 원격 검증 후 건너뛰며 부분 구간만 다시 처리합니다.
+- CPU 검사 test_fullframes + test_colab_source_files: 28 passed in 3.36s.
+  실제 파일 probe, 정상 연결 유지, errno107 재연결, 권한 오류 전파,
+  단일 복구/두 번 제한/다른 오류 중단/명령 보존/토큰 로그 제거를 모의 검사했습니다.
+- 최신 Drive 노트북을 먼저 읽고 기존 셀 수·outputs·execution_count·metadata를 보존하면서
+  실행 셀과 환경별 소스 digest를 갱신했습니다. Colab의 실제 force_remount 실행은 사용자 재실행 전입니다.
+- Drive 수정 10개를 다시 읽어 bytes 일치·노트북 compile·manifest digest 일치를 확인했습니다.
+  reports/drive-reconnect-verification.json에 결과를 보존합니다. 원본 데이터/완료 구간은 변경하지 않았습니다.

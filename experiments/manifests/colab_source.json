@@ -4,7 +4,7 @@
   "contains_uncommitted_work": true,
   "revision_note": "Submodule reference may be the parent gitlink when metadata is inaccessible; exact ordinary source files are identified by files_sha256.",
   "source_revisions": {
-    ".": "41780a6d6ad7ee3f9302c0b6bcb1139946e1317b",
+    ".": "c0df8b0de39105ea8f94a6053fb647fcf8907c54",
     "third_party/ava_vla": "69ae5dfb90f4eb714259693bd2c222e0b3de6456"
   },
   "files_sha256": {
@@ -249,8 +249,8 @@
     "src/vlade/data/fullframes.py": "9b115ca2605eabadad9f3d3e84b122b7a42d96c80977bb59757f8d5fc58ef301",
     "src/vlade/data/tfrecord_frames.py": "afce3b5f73d553736b6fbe92a658abac2cb161cabc6377d8fef244c9e2862b8b",
     "scripts/data/prepare_fullframes.py": "0dabdcaecda9c3fa1580dda46c9896dd7031d5df383bc0bb731d176101c48152",
-    "src/vlade/utils/fullframes_notebook.py": "14d475eb0efd2a766797bc2160b3425d9706b4a63b0a2aef21db64f94ee60f8a",
-    "tests/unit/test_fullframes.py": "a19f96d49839b6605af7cef8c47ebb8305c7c3bc63b8daecc0f7d18b29ca334c",
-    "docs/environment/libero_plus_fullframes.md": "01c546614ea7e014969f0fcb0c6c9e63d8d5d528b86b09666a22aa295bf4bb23"
+    "src/vlade/utils/fullframes_notebook.py": "4bf35227f064fd93bf90e4bf2084e23fda4a53f0fa334ed67106f5c55d06b36d",
+    "tests/unit/test_fullframes.py": "8a1651082ff5e09a0019ed17906b301e9ec98661d93620fc89cb10e06fd25482",
+    "docs/environment/libero_plus_fullframes.md": "1105281f88b91da989354373dd6d0b03c66f3138494ad86d6343d75d687ffa0d"
   }
 }

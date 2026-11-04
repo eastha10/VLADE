@@ -47,6 +47,10 @@ protobuf 5.29.3, google-crc32c 1.7.1, NumPy 2.2.6으로 고정합니다.
 TFRecord의 length/payload CRC32C, 원본 파일 SHA256, 에피소드 내용 해시·길이·분할,
 Parquet 행 수를 검사합니다. 중단하면 **같은 셀을 다시 실행**하십시오.
 원격 검증이 끝난 구간은 원본을 다시 읽지 않고 이어갑니다.
+`[Errno 107] Transport endpoint is not connected`는 Drive 마운트 연결 끊김입니다.
+기존 셀은 시작 시 실제 파일 읽기로 연결을 확인하며, 전송 중 이 오류가 나면
+표준 `drive.mount(..., force_remount=True)`로 최대 두 번 재연결하고 같은 명령을 재개합니다.
+다른 오류는 자동 재실행하지 않습니다. HF에 검증된 완료 구간은 유지합니다.
 같은 dataset에는 exporter 하나만 실행하십시오. 다른 설정·코드의 export를 섞지 않습니다.
 
 초기 reference commit은 `21a81ee2c9cf120019ed18c5d1cd06bf4336c69e`이며 **완료 데이터 revision이 아닙니다**.

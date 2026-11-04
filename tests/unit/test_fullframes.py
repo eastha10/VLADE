@@ -185,3 +185,49 @@ def test_notebook_update_preserves_user_cells_and_outputs_and_keeps_legacy_folde
     assert "CUDA_VISIBLE_DEVICES=''" in source and 'tensorflow' not in source
     exec(compile(source,'export-cell','exec'),{})
     assert 'RUN_FULLFRAME_EXPORT' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize('error_number',[None,107,13])
+def test_drive_probe_reads_file_and_only_remounts_disconnected_drive(error_number):
+    from io import BytesIO
+    from vlade.utils.fullframes_notebook import connect_drive
+    class Probe:
+        def __init__(self):self.reads=0
+        def __truediv__(self,value):return self
+        def open(self,mode):
+            self.reads+=1
+            if self.reads==1 and error_number:raise OSError(error_number,'probe failed')
+            return BytesIO(b'source')
+    calls=[];drive=SimpleNamespace(mount=lambda *args,**kw:calls.append((args,kw)));probe=Probe()
+    if error_number==13:
+        with pytest.raises(OSError):connect_drive(probe,drive)
+    else:connect_drive(probe,drive)
+    assert len(calls)==(1 if error_number==107 else 0)
+    if calls:assert calls[0][1]['force_remount'] is True and probe.reads==2
+
+
+@pytest.mark.parametrize('failure,expected_runs,expected_remounts',[
+    ('recover',2,1),('persistent',3,2),('other',1,0)])
+def test_transfer_reconnect_is_bounded_and_preserves_command_and_secret(tmp_path,monkeypatch,capsys,failure,expected_runs,expected_remounts):
+    import contextlib,subprocess
+    from vlade.utils import fullframes_notebook as notebook
+    runs=[];remounts=[];secret='hf_never_print_this_token'
+    disconnected=json.dumps({'status':'fullframes_export_failed','error_type':'OSError',
+        'message':'[Errno 107] Transport endpoint is not connected'})+'\n'
+    other=json.dumps({'status':'fullframes_export_failed','error_type':'ValueError','message':'schema mismatch'})+'\n'
+    @contextlib.contextmanager
+    def popen(command,**kw):
+        runs.append(command)
+        success=failure=='recover' and len(runs)>1
+        lines=[secret+'\n',other if failure=='other' else disconnected]
+        if success:lines=['{"status":"unit_reused_verified","unit":0}\n']
+        yield SimpleNamespace(stdout=iter(lines),wait=lambda:0 if success else 1)
+    monkeypatch.setattr(subprocess,'Popen',popen)
+    monkeypatch.setattr(notebook,'connect_drive',lambda root,drive,**kw:remounts.append(kw))
+    command=['python','same-sealed-export.py'];path=tmp_path/'export.log'
+    if failure=='recover':notebook.run_transfer(command,{'HF_TOKEN':secret},path,object(),tmp_path)
+    else:
+        with pytest.raises(RuntimeError):notebook.run_transfer(command,{'HF_TOKEN':secret},path,object(),tmp_path)
+    assert len(runs)==expected_runs and len(remounts)==expected_remounts
+    assert all(run==command for run in runs) and all(kw['force'] is True for kw in remounts)
+    assert secret not in path.read_text('utf-8') and secret not in capsys.readouterr().out

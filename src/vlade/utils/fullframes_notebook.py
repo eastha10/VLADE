@@ -1,9 +1,56 @@
 """One resumable CPU export cell; retain and fold the older preparation sections."""
 from pathlib import Path
 import hashlib
+import inspect
 import json
+import textwrap
 
 REFERENCE_REVISION='21a81ee2c9cf120019ed18c5d1cd06bf4336c69e'
+
+
+def connect_drive(project_root: Path, drive, *, force: bool=False) -> None:
+    """Probe actual file I/O; an existing FUSE directory may be disconnected."""
+    if not force:
+        try:
+            with (project_root/'src/vlade/data/fullframes.py').open('rb') as source:
+                source.read(1)
+            return
+        except OSError as error:
+            if error.errno not in (2,107):
+                raise
+            force=error.errno==107
+    print('Google Drive 연결을 다시 준비합니다.',flush=True)
+    drive.mount('/content/drive',force_remount=force)
+    with (project_root/'src/vlade/data/fullframes.py').open('rb') as source:
+        source.read(1)
+
+
+def run_transfer(command: list, env: dict, log_path: Path, drive, project_root: Path, *, max_reconnects: int=2) -> None:
+    """Restart only after a confirmed Drive transport failure; HF units remain sealed."""
+    import json,re,subprocess
+    for attempt in range(max_reconnects+1):
+        disconnected=False
+        with log_path.open('a',encoding='utf-8') as log:
+            with subprocess.Popen(command,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+                    text=True,encoding='utf-8',errors='replace',bufsize=1) as process:
+                for line in process.stdout:
+                    clean=line.replace(env['HF_TOKEN'],'[REDACTED]') if env.get('HF_TOKEN') else line
+                    clean=re.sub(r'hf_[A-Za-z0-9]{12,}','[REDACTED]',clean)
+                    print(clean,end='',flush=True);log.write(clean);log.flush()
+                    try:
+                        event=json.loads(clean)
+                    except (ValueError,TypeError):
+                        continue
+                    if isinstance(event,dict) and event.get('status')=='fullframes_export_failed' and event.get('error_type')=='OSError':
+                        message=event.get('message','')
+                        disconnected='[Errno 107]' in message or 'Transport endpoint is not connected' in message
+                returncode=process.wait()
+        if returncode==0:
+            return
+        if not disconnected or attempt==max_reconnects:
+            raise RuntimeError('내보내기가 중단되었습니다. 위 fullframes_export_failed 로그를 확인하십시오. 같은 셀로 재개할 수 있습니다.')
+        print(f'Drive 연결 끊김: 재연결 후 완료 구간부터 재개합니다 ({attempt+1}/{max_reconnects}).',flush=True)
+        connect_drive(project_root,drive,force=True)
 
 
 def export_cell(root: Path) -> dict:
@@ -20,8 +67,8 @@ if RUN_FULLFRAME_EXPORT:
     import os, sys, subprocess, hashlib, re
     from google.colab import drive, userdata
     PROJECT_ROOT = Path(globals().get('PROJECT_ROOT', '/content/drive/MyDrive/colab/VLADE'))
-    if not Path('/content/drive/MyDrive').is_dir():
-        drive.mount('/content/drive')
+__RECOVERY__
+    connect_drive(PROJECT_ROOT, drive)
     expected_sources = __HASHES__
     source_id = hashlib.sha256(repr(expected_sources).encode()).hexdigest()[:16]
     source_root = Path('/content/vlade_fullframes_source_'+source_id)
@@ -54,20 +101,11 @@ if RUN_FULLFRAME_EXPORT:
     command = [str(python), '-u', str(source_root/'scripts/data/prepare_fullframes.py'),
         '--tfds-root', str(PROJECT_ROOT/'data/processed/libero_plus_tfds'), '--work-root', str(work_root),
         '--repo-id', 'VLADE-konkuk/libero-plus-fullframes', '--reference-revision', '__REVISION__', '--public']
-    with log_path.open('a', encoding='utf-8') as log:
-        with subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding='utf-8', errors='replace', bufsize=1) as process:
-            for line in process.stdout:
-                clean = line.replace(env['HF_TOKEN'], '[REDACTED]') if env['HF_TOKEN'] else line
-                clean = re.sub(r'hf_[A-Za-z0-9]{12,}', '[REDACTED]', clean)
-                print(clean, end='', flush=True)
-                log.write(clean); log.flush()
-            returncode = process.wait()
-    if returncode:
-        raise RuntimeError('내보내기가 중단되었습니다. 위 fullframes_export_failed 로그를 확인하십시오. 같은 셀로 재개할 수 있습니다.')
+    run_transfer(command, env, log_path, drive, PROJECT_ROOT)
 else:
     print('전체 프레임 내보내기를 실행하려면 이 셀의 RUN_FULLFRAME_EXPORT를 True로 바꾸십시오.')
-'''.replace('__HASHES__',repr(hashes)).replace('__REVISION__',REFERENCE_REVISION)
+'''.replace('__HASHES__',repr(hashes)).replace('__REVISION__',REFERENCE_REVISION).replace('__RECOVERY__',
+    textwrap.indent('\n\n'.join(inspect.getsource(fn) for fn in (connect_drive,run_transfer)),'    '))
     return cell('code',source,'export-fullframes-to-hf')
 
 
