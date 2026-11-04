@@ -492,6 +492,8 @@ def main() -> None:
     parser.add_argument("--tfds-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    from vlade.storage.assets import resolve_input
+    args.tfds_root = resolve_input(args.tfds_root)
     infos = list(args.tfds_root.rglob("dataset_info.json"))
     if len(infos) != 1:
         raise ValueError("Exactly one TFDS dataset_info.json is required")

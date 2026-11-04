@@ -242,8 +242,8 @@ def _frame_function(cfg: dict, components: tuple, data: Any, device: torch.devic
 
 def _resolve(path: str) -> Path:
     if str(path).startswith("hfasset:"):
-        from vlade.storage.assets import resolve_path
-        return resolve_path(path)
+        from vlade.storage.assets import resolve_input
+        return resolve_input(path)
     value = Path(path)
     return value if value.is_absolute() else ROOT/value
 
@@ -251,7 +251,8 @@ def _resolve(path: str) -> Path:
 def preflight(cfg: dict) -> dict:
     from vlade.data.episode_data import EpisodeData
     validate_recipe(cfg)
-    checkpoint = _resolve(cfg["initial_checkpoint"])
+    from vlade.storage.assets import resolve_input
+    checkpoint = resolve_input(cfg["initial_checkpoint"])
     manifest = json.loads((checkpoint/"download_manifest.json").read_text())
     if manifest.get("repository") != cfg["initial_repository"] or manifest.get("revision") != cfg["initial_revision"]:
         raise ValueError("This recipe requires the pinned pretrained OpenVLA, not AVA/OFT weights")
@@ -259,7 +260,7 @@ def preflight(cfg: dict) -> dict:
         path = checkpoint/item["path"]
         if not path.is_file() or path.stat().st_size != item["bytes"]:
             raise ValueError("Incomplete pretrained checkpoint")
-    data = EpisodeData(_resolve(cfg["data"]))
+    data = EpisodeData(resolve_input(cfg["data"]))
     count = sequence_count(data)
     if not count:
         raise ValueError("No full K=4 train windows")
@@ -273,13 +274,12 @@ def _identity(cfg: dict) -> dict:
     data = _resolve(cfg["data"])
     code = [Path(__file__),*(Path(__file__).with_name(name) for name in ("loop.py","run_control.py","compute_budget.py")),
             Path(__file__).parents[1]/"data/episode_data.py"]
-    manifest = ROOT/"experiments/manifests/colab_source.json"
-    source = json.loads(manifest.read_text()) if manifest.is_file() else {}
+    from vlade.training.fft import _git_revision
     return dict(configuration=cfg,code_sha256={p.name:sha256(p) for p in code},
         data_sha256={name:sha256(data/name) for name in ("manifest.json","splits.json","normalization.json")},
         initial_manifest_sha256=sha256(_resolve(cfg["initial_checkpoint"])/"download_manifest.json"),
-        source_revisions=source.get("source_revisions",{}),upstream_sha256={p:h for p,h in source.get("files_sha256",{}).items()
-            if p.startswith("third_party/ava_vla/") or p.endswith("checkpoint-extra-attn.patch")})
+        source_commit=_git_revision(ROOT),
+        upstream_commit=_git_revision(ROOT/"third_party/ava_vla"))
 
 
 def _save(output: Path, identity: dict, components: tuple, optimizer: Any, scheduler: Any, state: Any,

@@ -1,5 +1,7 @@
 # 로컬 자료 준비와 Colab A100 이관
 
+> 2026-11-04 이후 로컬/Git 노트북의 실행 기준은 [Git 소스·HF 입력 안내](hf_inputs_and_git_source.md)입니다. 아래 Drive 기반 절차·실행 기록은 기존 버전의 맥락입니다. 진행 중인 세션은 그대로 유지하며 Drive 배포는 별도 명령 후 수행합니다.
+
 2026-10-04 기준, AVA-VLA와 OpenVLA-OFT 공개 가중치는 로컬에 내려받아
 SHA-256까지 검증했습니다. LIBERO+ 평가 assets와 RLDS 학습자료는 사용자 요청에
 따라 로컬에서 삭제했으며, 필요하면 Colab에서 직접 다시 받습니다. Drive 이관과

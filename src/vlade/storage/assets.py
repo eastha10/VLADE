@@ -1,7 +1,8 @@
 """Resolve portable asset references through an immutable HF registry.
 
-Only completed, hash-verified payloads are published into the local cache. Local
-paths remain accepted so existing training/sampler contracts are unchanged.
+Only completed, hash-verified payloads are published into the local cache.
+External training inputs use resolve_input; resolve_path also accepts new local
+run outputs and internal preprocessing paths.
 """
 from __future__ import annotations
 
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[3]
 REGISTRY_REPO = "VLADE-konkuk/VLADE-checkpoints"
 REGISTRY_FILE = "assets/registry.json"
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+_INPUTS: dict[tuple[str, str], tuple] = {}
 
 
 def sha256(path: Path) -> str:
@@ -159,6 +161,13 @@ def fetch_asset(key: str, *, registry: Path | None = None, cache: Path | None = 
             manifest = json.loads((destination / "download_manifest.json").read_text(encoding="utf-8"))
             _verify_files(destination, {row["path"]:{"bytes":row["bytes"],"sha256":row["sha256"]}
                                         for row in manifest["files"]})
+        elif record["format"] == "rlds_spanned_zip":
+            if not (destination / "COMPLETE").is_file():
+                raise ValueError("Extracted HF RLDS is incomplete")
+            manifest = json.loads((destination / "extraction_manifest.json").read_text("utf-8"))
+            folder = destination / safe_relative(manifest["tfds_directory"])
+            if not (folder / "dataset_info.json").is_file() or not list(folder.glob("*tfrecord*")):
+                raise ValueError("Extracted HF RLDS payload is missing")
         return destination
     if destination.exists():
         raise FileExistsError("Unverified asset cache exists; choose a fresh cache path")
@@ -231,6 +240,53 @@ def resolve_path(value: str | Path, *, registry: Path | None = None) -> Path:
         key = text[len("hfasset:"):].strip("/\\")
         return fetch_asset(key, registry=registry)
     return Path(value)
+
+
+def resolve_input(value: str | Path, *, registry: Path | None = None) -> Path:
+    """Require HF provenance for external inputs, including already cached paths.
+
+    Local paths are accepted only when they point to the exact verified cache
+    directory of a pinned registry entry. New outputs/resume paths use
+    resolve_path instead; they are never mistaken for downloaded initial inputs.
+    """
+    if str(value).startswith("hfasset:"):
+        key = str(value)[len("hfasset:"):].strip("/\\")
+        record = asset_record(key, registry)
+        path = cache_path(key, record).resolve()
+        cache = path.parents[2]
+    else:
+        path = Path(value).expanduser().resolve()
+        if len(path.parents) < 3 or not (path.parent / "verified.json").is_file():
+            raise ValueError("External weights/data must use hfasset:// keys or a verified HF cache path")
+        key = path.parent.parent.name
+        record = asset_record(key, registry)
+        cache = path.parents[2]
+        if cache_path(key, record, cache).resolve() != path:
+            raise ValueError("Local input does not match its pinned HF cache path")
+
+    def stamp():
+        # Share verification only inside this process. Explicit fetch still does a
+        # full integrity check; changed size/timestamps invalidate reuse here.
+        names = set(record.get("files", record.get("identity_files", record.get("metadata_files", {}))))
+        if record["format"] in {"archive", "rlds_spanned_zip", "parquet_frames"}:
+            names.add("COMPLETE")
+        if record["format"] == "upstream_model":
+            names.add("download_manifest.json")
+            names.update(row["path"] for row in json.loads((path / "download_manifest.json").read_text("utf-8"))["files"])
+        if record["format"] == "rlds_spanned_zip":
+            names.add("extraction_manifest.json")
+        paths = [path / safe_relative(name) for name in sorted(names)] + [path.parent / "verified.json"]
+        return tuple((str(p), p.stat().st_size, p.stat().st_mtime_ns, p.stat().st_ctime_ns) for p in paths)
+
+    identity = (str(path), json.dumps(record, sort_keys=True))
+    try:
+        if identity in _INPUTS and _INPUTS[identity] == stamp():
+            return path
+    except (OSError, ValueError, KeyError):
+        _INPUTS.pop(identity, None)
+    result = fetch_asset(key, registry=registry, cache=cache)
+    _INPUTS[identity] = stamp()
+    return result
 
 
 def main() -> None:

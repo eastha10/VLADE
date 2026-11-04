@@ -127,6 +127,7 @@ def test_fft_budget_exit_is_saved_and_not_reported_as_completed(tmp_path, monkey
     monkeypatch.setattr(fft, "save_checkpoint", save)
     cfg = fft.FFTConfig("ava_vla", tmp_path, tmp_path, tmp_path / "run", max_steps=8,
                         grad_accumulation_steps=8, save_steps=4)
+    monkeypatch.setattr("vlade.storage.assets.resolve_input", lambda value: Path(value))
     fft.train(cfg)
     report = json.loads(next(cfg.output_dir.glob('run-*.json')).read_text())
     assert saved == [(1,8)]

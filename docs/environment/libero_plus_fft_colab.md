@@ -1,5 +1,7 @@
 # LIBERO+ FFT 실행 경로 (Colab A100)
 
+> 2026-11-04 이후 로컬/Git 노트북의 실행 기준은 [Git 소스·HF 입력 안내](hf_inputs_and_git_source.md)입니다. 아래 Drive 기반 절차·실행 기록은 기존 버전의 맥락입니다. 진행 중인 세션은 그대로 유지하며 Drive 배포는 별도 명령 후 수행합니다.
+
 2026-10-28에 Drive 다운로드·공통 episode split·FFT/cache·Qwen Task-only를 연결하는
 순서별 Colab 노트북을 추가했습니다. [실행·검토 인계](colab_kanban_handoff.md)를 먼저
 확인하십시오. 해당 노트북은 `prepared_data_root`를 설정해 content-group 80/10/10과

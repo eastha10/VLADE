@@ -346,6 +346,8 @@ def main():
     parser.add_argument('--repo-id',default=REPO);parser.add_argument('--reference-revision',required=True)
     parser.add_argument('--shards-per-unit',type=int,default=8);parser.add_argument('--public',action='store_true')
     args=parser.parse_args()
+    from vlade.storage.assets import resolve_input
+    args.tfds_root = resolve_input(args.tfds_root)
     if not args.public:raise SystemExit('Explicit --public is required for the approved new dataset; existing private assets are never changed')
     configure_http()
     from huggingface_hub import HfApi,hf_hub_download

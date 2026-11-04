@@ -43,6 +43,15 @@ class StudentConfig:
         return config
 
 
+def resolve_pretrained_directory(config: StudentConfig, directory: Path | None = None) -> Path:
+    from vlade.storage.assets import resolve_input
+    path = resolve_input(directory if directory is not None else "hfasset://qwen_initial")
+    manifest = json.loads((path / "download_manifest.json").read_text(encoding="utf-8"))
+    if (manifest["repository"], manifest["revision"]) != (config.model_id, config.revision):
+        raise ValueError("Student initial checkpoint revision mismatch")
+    return path
+
+
 class ContinuousActionHead(nn.Module):
     def __init__(self, config: StudentConfig):
         super().__init__()
@@ -94,7 +103,8 @@ class QwenStudent(nn.Module):
         from transformers import Qwen3_5Model
 
         config.validate()
-        backbone = Qwen3_5Model.from_pretrained(str(directory) if directory else config.model_id, revision=config.revision,
+        directory = resolve_pretrained_directory(config, directory)
+        backbone = Qwen3_5Model.from_pretrained(str(directory), revision=config.revision,
                                                local_files_only=local_files_only, dtype=dtype,
                                                attn_implementation="sdpa", trust_remote_code=False)
         return cls(backbone, config).to(dtype=dtype)
@@ -176,7 +186,8 @@ def load_processor(config: StudentConfig, *, local_files_only: bool = True, dire
     from transformers import AutoProcessor
 
     config.validate()
-    return AutoProcessor.from_pretrained(str(directory) if directory else config.model_id, revision=config.revision,
+    directory = resolve_pretrained_directory(config, directory)
+    return AutoProcessor.from_pretrained(str(directory), revision=config.revision,
                                          local_files_only=local_files_only, trust_remote_code=False,
                                          size={"shortest_edge": min(65536, config.max_pixels_per_image),
                                                "longest_edge": config.max_pixels_per_image})

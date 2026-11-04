@@ -1,5 +1,7 @@
 # Qwen 오프라인 액션 증류 · colab05
 
+> 2026-11-04 이후 로컬/Git 노트북의 실행 기준은 [Git 소스·HF 입력 안내](hf_inputs_and_git_source.md)입니다. 아래 Drive 기반 절차·실행 기록은 기존 버전의 맥락입니다. 진행 중인 세션은 그대로 유지하며 Drive 배포는 별도 명령 후 수행합니다.
+
 `experiments/colab_05_qwen_action_distillation.ipynb`는 02에서 생성한 고정 T1 cache로
 Qwen3.5-0.8B를 학습합니다. 03의 Task-only와 초기 모델 revision, seed, 입력,
 episode shuffle/query cursor, accumulation, LR 및 epoch 예산을 공유하며 실행 결과는 분리합니다.
