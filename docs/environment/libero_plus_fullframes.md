@@ -7,7 +7,16 @@
 사용자 승인에 따라 **새 전체 프레임 데이터만** 공개 dataset
 [`VLADE-konkuk/libero-plus-fullframes`](https://huggingface.co/datasets/VLADE-konkuk/libero-plus-fullframes)에 게시합니다.
 기존 `libero-plus-prepared`와 `VLADE-checkpoints`는 비공개를 유지합니다.
-Drive의 원본 압축본·해제된 TFDS·이전 전처리 데이터는 삭제하거나 변경하지 않습니다.
+초기 이관 때 Drive 원본을 보존했으며, 2026-11-05 사용자 지시에 따라 HF 대체본이 검증된
+중복 자료를 정리합니다. HF에 게시되지 않은 suite map·설정 백업·실행 기록은 보존합니다.
+
+## 검증 완료된 데이터
+
+전체 데이터 게시가 완료되었습니다. 고정 입력은 `hfasset://fullframes_d_seed42`, dataset revision은
+`604e5e64f141d9fb78c33cf47d47540fcfddce49`입니다. `COMPLETE`와 manifest,
+128구간·Parquet 384개·14,347에피소드·2,238,036시점·원격 SHA256을 확인했습니다.
+Parquet 파일 합계는 60,862,121,397 bytes입니다. 기존 희소 학습 입력은 자동 교체하지 않습니다.
+완료 데이터를 사용하려면 고정 HF 입력을 준비하며, 내보내기 셀은 다시 실행할 필요가 없습니다.
 
 원본은 MIT 라이선스의 `Sylvest/libero_plus_rlds` revision
 `fb0c7029b076030d5d57227229e4f7460def1f7c`입니다. 해제된 TFDS는 metadata 기준

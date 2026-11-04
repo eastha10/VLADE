@@ -80,3 +80,18 @@ reports/export-progress.json은 실제 첫 게시 검증 결과입니다.
   실행 셀과 환경별 소스 digest를 갱신했습니다. Colab의 실제 force_remount 실행은 사용자 재실행 전입니다.
 - Drive 수정 10개를 다시 읽어 bytes 일치·노트북 compile·manifest digest 일치를 확인했습니다.
   reports/drive-reconnect-verification.json에 결과를 보존합니다. 원본 데이터/완료 구간은 변경하지 않았습니다.
+
+## 전체 게시 완료 확인 · 2026-11-05
+
+HF dataset revision 604e5e64f141d9fb78c33cf47d47540fcfddce49에서
+128/128 구간, Parquet 384개, 14,347 episodes / 2,238,036 timestep,
+60,862,121,397 bytes를 확인했습니다. Train 1,791,269 / Validation 223,485 / Test 223,282입니다.
+COMPLETE가 가리키는 manifest SHA256, exporter identity, 원격 파일 384개의 size/LFS SHA256,
+모든 구간 receipt의 identity·episode ID 중복 순서/전체 집합·split별 프레임 합을 대조했습니다.
+대용량 Parquet 전체를 이 확인을 위해 다시 다운로드하지 않았습니다.
+
+중앙 비공개 registry revision 64c20b630f1142cef8bdb242f3845c4f21b3762e의
+fullframes_d_seed42가 위 최종 dataset revision을 가리키는 것도 확인했습니다.
+reports/export-status-2026-11-05.json에 실제 조회 결과를 보존합니다.
+전체 데이터 게시·완료 seal·registry 등록이 완료되었습니다. 새 GPU 학습이나 기존 stride 기본값 변경은 수행하지 않았습니다.
+검증과 코드 동기화에 사용한 본 작업의 재생성 가능한 scratch는 완료 후 정리합니다.

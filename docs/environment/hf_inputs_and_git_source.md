@@ -30,7 +30,7 @@ python scripts/data/prepare_episode_data.py --tfds-root hfasset://raw_rlds --out
 - `raw_rlds`: 공식 HF 원본 분할 ZIP을 받아 검증·해제한 RLDS.
 - `prepared_d_seed42`: 등록된 D/seed42 전처리 데이터.
 - `teacher_cache_t1`, `suite_map_seed42` 등은 실제 게시·검증 후 레지스트리에 등록해야 합니다. 없는 키를 다른 데이터나 Drive 경로로 대체하지 않습니다.
-- `fullframes_d_seed42`는 전체 내보내기와 `COMPLETE` 확인 후 등록되는 별도 입력입니다. 기존 희소 prepared 입력을 자동 교체하지 않습니다.
+- `fullframes_d_seed42`는 128구간·14,347에피소드·2,238,036시점 및 `COMPLETE` 검증을 마친 별도 입력입니다. dataset revision `604e5e64f141d9fb78c33cf47d47540fcfddce49`를 고정하며 기존 희소 prepared 입력을 자동 교체하지 않습니다.
 
 새 노트북은 코드에 포함된 lock을 사용합니다. 실행 중 최신 registry로 자동 전환하지 않습니다. 새 자료를 사용할 때는 registry를 별도 경로에 명시적으로 갱신하고 검토한 고정 버전을 Git에 반영하십시오.
 
