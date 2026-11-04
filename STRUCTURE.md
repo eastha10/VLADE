@@ -1,5 +1,7 @@
 # Directory Structure
 
+현재 실행 기준은 [Git 소스·HF 입력 안내](docs/environment/hf_inputs_and_git_source.md)입니다. `src/vlade/utils/source.py`는 불변 Git checkout을, `src/vlade/storage/assets.py`는 외부 입력의 HF 출처와 캐시 검증을 담당합니다. Drive 배포는 별도 사용자 명령이 필요합니다.
+
 `src/vlade/training/hub.py`는 봉인된 checkpoint의 비공개 Hub 전송·best 선택·재전송·다운로드를,
 `scripts/train/hub_checkpoints.py`는 인증 검사와 수동 복구 진입점을 제공합니다.
 사용법과 best 기준은 `docs/environment/hugging_face_checkpoints.md`에 있습니다.
@@ -32,7 +34,7 @@ vlade/
 ├─ experiments/             # baseline, ablation, run manifest
 │  ├─ baselines/            # 외부 원본별 실행 설정(원본 코드는 복제하지 않음)
 │  ├─ ablations/            # 구성요소별 제거·교체 실험
-│  ├─ manifests/            # 원본 소스 기록·colab_source.json의 파일 SHA/revision
+│  ├─ manifests/            # 원본 소스 기록·colab_source.json의 Git 배포 설정
 │  ├─ colab_01_*.ipynb      # 데이터·AVA 가중치 준비
 │  ├─ colab_02_*.ipynb      # AVA FFT·T1 선택·cache
 │  ├─ colab_03_*.ipynb      # Qwen Task-only
@@ -156,9 +158,9 @@ Student 계약 구현은 아래 범위이며 KD trainer는 미구현입니다.
 - `src/vlade/data/colab_assets.py`, `episode_data.py`: Drive 자료 준비·공통 episode split/query/정규화.
 - `src/vlade/training/prepared_fft.py`, `fixed_cache.py`, `student_task.py`: 데이터 어댑터·순차 Teacher cache·Student BC.
 - `scripts/data/`, `scripts/train/`: 해당 기능의 얇은 CLI와 checkpoint 재로딩 검사.
-- `src/vlade/utils/colab_notebooks.py`: 현재 일반 소스 파일을 바탕으로 순서별 노트북과 파일별 SHA/revision manifest 생성.
+- `src/vlade/utils/colab_notebooks.py`: 순서별 노트북과 Git 소스 배포 설정 생성.
 - `scripts/prepare/generate_colab_notebooks.py`: 저장소 루트에서 인자 없이 실행하는 생성 진입점.
-- `experiments/manifests/colab_source.json`: Colab에서 사용할 일반 파일 목록·SHA256·원본 revision을 확인하는 기준.
+- `experiments/manifests/colab_source.json`: Colab에서 사용할 Git 저장소·기본 ref를 설명하는 schema 2 배포 설정.
 - `docs/environment/colab_kanban_handoff.md`: 순서·재개·미검토 목록과 실제 실행 전제.
 
 핵심 데이터·학습 로직은 `src/vlade/`에 있으며 노트북은 실행 순서와 사용자 경로 설정을 제공합니다.
@@ -167,10 +169,9 @@ Student 계약 구현은 아래 범위이며 KD trainer는 미구현입니다.
 `experiments/baselines/`와 원본 소스 manifests도 Colab 파일 목록에 포함합니다. 실제 upstream
 복사 대상은 `third_party/ava_vla/`이며 OpenVLA-OFT 실행 환경은 별도입니다.
 
-Drive에서는 `/content/drive/MyDrive/colab/VLADE` 바로 아래에 저장소 구조를 둡니다. 노트북의
-`ROOT`와 `PROJECT_ROOT`가 이 경로를 가리키며, manifest와 파일 SHA를 확인한 일반 소스만
-`/content`의 실행 디렉터리로 복사합니다. `data/`, `checkpoints/`, `artifacts/`는 각각 실제
-데이터·가중치·실행 결과를 보관합니다. 실행 결과를 수정할 소스 파일의 정본으로 사용하지 않습니다.
+새 노트북은 Git commit별 실행 소스를 `/content/vlade_sources`에 준비합니다. 가중치·데이터는
+HF에서 `/content/vlade_hf_assets`로 받고 현재 실행 출력은 `/content/vlade_runs` 및
+`/content/vlade_asset_work`에 둡니다. Drive의 기존 파일과 실행 중인 세션은 자동 갱신하지 않습니다.
 
 - `src/vlade/training/run_control.py`: epoch/query budget, 파일럿 통과 조건, gradient·checkpoint 공간·T1 보고서 검사.
 - `src/vlade/training/debug_records.py`: 정확한 저장 checkpoint hash에 연결된 bounded 학습 debug 기록.

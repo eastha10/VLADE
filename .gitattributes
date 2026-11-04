@@ -1,2 +1,2 @@
-# Colab source manifests hash exact bytes; preserve them across all checkouts.
+# Preserve existing source and experiment artifact bytes across checkouts.
 * -text whitespace=trailing-space,space-before-tab,cr-at-eol

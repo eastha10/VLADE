@@ -1,5 +1,7 @@
 # VLADE
 
+현재 로컬/Git 버전은 **Git commit 기반 소스 배포 + Hugging Face 가중치·데이터 입력**을 사용합니다. 실행 중인 Colab과 Drive는 자동 갱신하지 않으며, Drive 업로드는 별도 명령이 있을 때 수행합니다. [새 실행 방식](docs/environment/hf_inputs_and_git_source.md)을 먼저 확인하십시오.
+
 학습 중간·검증 best·목표 step의 final을 비공개 Hugging Face Hub에 자동 저장하려면
 [Hub 인증·체크포인트·재개 안내](docs/environment/hugging_face_checkpoints.md)를 참고하십시오.
 기존 FFT/Qwen/논문 AVA 루프를 유지하며 환경 변수로 켭니다. 토큰은 Colab Secrets로 전달합니다.
@@ -188,7 +190,7 @@ Colab에서 사용하는 코드와 노트북은 아래 위치의 일반 파일�
 | `scripts/data/`, `scripts/train/` | 위 구현을 실행하는 명령과 checkpoint 재로딩 검사 |
 | `experiments/colab_01_*.ipynb`부터 `colab_03_*.ipynb` | Colab에서 여는 순서별 실행 노트북 |
 | `configs/` | 모델·데이터·학습 조건과 고정 revision |
-| `experiments/baselines/`, `experiments/manifests/` | 비교 기준과 원본 소스 기록, Colab 파일별 SHA256 manifest |
+| `experiments/baselines/`, `experiments/manifests/` | 비교 기준과 원본 소스 기록, Colab Git 소스 배포 설정 |
 | `docs/`, `tests/` | 실행·연구 검토 안내와 회귀 검사 |
 
 노트북과 `experiments/manifests/colab_source.json`은 저장소 루트에서 아래 명령으로 갱신합니다.
@@ -197,15 +199,12 @@ Colab에서 사용하는 코드와 노트북은 아래 위치의 일반 파일�
 python scripts/prepare/generate_colab_notebooks.py
 ```
 
-생성 구현은 `src/vlade/utils/colab_notebooks.py`에 있습니다. 현재 작업 파일 트리를
-Drive의 `/content/drive/MyDrive/colab/VLADE`에 같은 구조로 배치한 뒤 `experiments/`의 노트북을
-Colab에서 여십시오. 노트북의 `ROOT`와 `PROJECT_ROOT`는 기본적으로 이 같은 경로를 가리키며,
-그 바로 아래에 `src/`, `scripts/`, `configs/`, `third_party/`가 있어야 합니다.
-시작 셀은 manifest와 각 파일의 SHA256을 확인하고 필요한 일반 파일을 `/content`로 복사합니다.
-미커밋 변경도 사용할 파일 트리와 manifest에 포함되어야 합니다. GitHub HEAD만 받은 사본에는
-현재 작업 내용이 빠질 수 있습니다.
+생성 구현은 `src/vlade/utils/colab_notebooks.py`에 있습니다. 노트북 시작 셀은 Git ref를
+불변 commit으로 확정하고 해당 소스와 AVA submodule을 런타임에 준비합니다. 소스 파일별
+SHA256 목록은 관리하지 않습니다. `experiments/manifests/colab_source.json`은 Git 저장소/ref
+설정입니다. 로컬 변경은 먼저 commit·push하고, 재개 시 이전 `SOURCE_COMMIT`을 지정하십시오.
 
-Colab manifest에는 baseline·원본 소스 기록을 포함하지만, 이번 실행에서 사용하는 upstream
+Git checkout에는 baseline·원본 소스 기록이 포함되며, 이번 실행에서 사용하는 upstream
 코드는 `third_party/ava_vla/`입니다. OpenVLA-OFT는 기존 baseline의 별도 환경에서 다룹니다.
 실행·분할 정본·AVA zero-context FFT 제한은 [Colab 인계 문서](docs/environment/colab_kanban_handoff.md)에
 정리했습니다. 일반 파일 전환 후 전체 CPU 회귀 검사 **127개 통과(40.24초)**와 실제 GPU 미검증 범위를 구분하며,
@@ -222,8 +221,8 @@ checkpoint 공간 검사·bounded debug와 T1 비교 보고서 검증을 연결�
 
 ## Hugging Face 자료 참조
 
-데이터·가중치 입력은 `hfasset://키`를 사용하고, `src/vlade/storage/`가 비공개 HF
-레지스트리의 고정 commit과 SHA256을 확인하여 로컬 캐시에 준비합니다. 로컬·Colab·GitHub는
+데이터·가중치 입력은 `hfasset://키`를 사용하고, `src/vlade/storage/`가 HF
+레지스트리의 고정 commit과 SHA256을 확인하여 로컬 캐시에 준비합니다. 학습 진입점은 HF 키 또는 검증된 HF 캐시만 외부 입력으로 받습니다. 로컬·Colab·GitHub는
 같은 참조 설정을 사용합니다. `configs/storage/hf_assets.lock.json`과
 `scripts/data/hf_assets.py`가 입력 버전과 준비를 관리하고, `migrate_hf_assets.py`는
 기존 Drive 자료를 조직 저장소에 이관합니다. Colab 01의 원래 다운로드·전처리 기능은

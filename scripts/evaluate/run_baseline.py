@@ -229,11 +229,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("baseline", choices=available_baselines())
     parser.add_argument("--task-suite", help="평가할 LIBERO task suite")
-    parser.add_argument("--checkpoint", help="설정의 체크포인트 대신 사용할 로컬 경로 또는 Hub 식별자")
+    parser.add_argument("--checkpoint", help="설정 대신 사용할 hfasset:// 키 또는 검증된 HF 캐시 경로")
     parser.add_argument(
         "--use-hub-checkpoint",
         action="store_true",
-        help="로컬 경로 대신 설정에 기록된 Hugging Face 식별자를 사용합니다.",
+        help="설정에 등록된 Hugging Face 자료를 고정 revision으로 준비합니다.",
     )
     parser.add_argument("--num-trials-per-task", type=int)
     parser.add_argument("--seed", type=int)
@@ -267,13 +267,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     position = invocation.command.index("--pretrained_checkpoint") + 1
-    if invocation.command[position].startswith("hfasset:"):
-        sys.path.insert(0, str(REPO_ROOT / "src"))
-        from vlade.storage.assets import resolve_path
-        local = resolve_path(invocation.command[position])
-        command = list(invocation.command)
-        command[position] = str(local)
-        invocation = replace(invocation, command=tuple(command), local_checkpoint=local)
+    sys.path.insert(0, str(REPO_ROOT / "src"))
+    from vlade.storage.assets import resolve_input
+    checkpoint = invocation.command[position]
+    if args.use_hub_checkpoint:
+        suite = args.task_suite or config["benchmark"]["default_task_suite"]
+        checkpoint = "hfasset://" + config["checkpoints"][suite]["hf_asset"]
+    local = resolve_input(checkpoint)
+    command = list(invocation.command)
+    command[position] = str(local)
+    invocation = replace(invocation, command=tuple(command), local_checkpoint=local)
 
     if invocation.local_checkpoint is not None and not invocation.local_checkpoint.is_dir():
         parser.error(

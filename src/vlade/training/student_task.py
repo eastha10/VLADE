@@ -18,7 +18,7 @@ from vlade.data.episode_data import EpisodeData, query_stream, query_count, writ
 from vlade.models.contracts import masked_action_l1
 from vlade.distillation.action import action_distillation_loss, validate_weights
 from vlade.training.cached_actions import CachedActions
-from vlade.models.students.qwen import HistoryFrame, QwenStudent, StudentConfig, load_processor, prepare_inputs
+from vlade.models.students.qwen import HistoryFrame, QwenStudent, StudentConfig, load_processor, prepare_inputs, resolve_pretrained_directory
 from vlade.training.loop import LoopState, make_scheduler, restore_training_state, run_loop, training_state
 from vlade.training.hub import HubCheckpoints
 from vlade.training.run_control import checkpoint_space, gradient_diagnostics, seal_checkpoint, verify_checkpoint
@@ -70,11 +70,11 @@ def identity(settings: dict, data: EpisodeData, teacher: CachedActions | None = 
 
 
 def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) -> None:
-    from vlade.storage.assets import resolve_path
+    from vlade.storage.assets import resolve_path, resolve_input
     settings = dict(settings)
     for key in ("data", "initial_checkpoint", "teacher_cache"):
-        if key in settings and str(settings[key]).startswith("hfasset:"):
-            settings[key] = str(resolve_path(settings[key]))
+        if key in settings:
+            settings[key] = str(resolve_input(settings[key]))
     if resume is not None:
         resume = resolve_path(resume)
     if settings.get("batch_size") != 1 or settings.get("method") not in {"task_only", "action_kd"}:
@@ -91,15 +91,9 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
     config.validate()
     if config.history_queries != 2 or config.query_interval_steps != 8:
         raise ValueError("This shared sampler requires two queries at interval eight")
-    checkpoint = Path(settings["initial_checkpoint"])
+    checkpoint = resolve_pretrained_directory(config, Path(settings["initial_checkpoint"]))
     if not (checkpoint / "model.safetensors").is_file() and not (checkpoint / "model.safetensors.index.json").is_file():
         raise FileNotFoundError("Download the pinned Qwen model before Student training")
-    downloaded = json.loads((checkpoint / "download_manifest.json").read_text(encoding="utf-8"))
-    if (downloaded["repository"], downloaded["revision"]) != (config.model_id, config.revision):
-        raise ValueError("Student initial checkpoint revision mismatch")
-    for item in downloaded["files"]:
-        if sha256(checkpoint / item["path"]) != item["sha256"]:
-            raise ValueError(f"Student initial checkpoint changed: {item['path']}")
     teacher = (CachedActions(Path(settings["teacher_cache"]), data,
                              episode_limit=settings.get("episode_limit", 0)) if kd_enabled else None)
     experiment = identity(settings, data, teacher)

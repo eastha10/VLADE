@@ -261,3 +261,56 @@ def test_valid_mounted_checkpoint_needs_no_colab_api_auth(tmp_path):
     (folder/'checkpoint_manifest.json').write_text(json.dumps({'step':1975,'files':{'trainer_state.pt':row(b'state')}}))
     assert prepare_colab_checkpoint(tmp_path,tmp_path/'work','folder')==folder
     assert not (tmp_path/'work').exists()
+
+
+def test_external_input_requires_hf_origin_and_reuses_verification_only_in_process(tmp_path, monkeypatch):
+    files = {'COMPLETE': b'ok\n', 'weights.bin': b'abcdef'}
+    record = dict(repo_id='test/private', repo_type='dataset', revision='a'*40,
+                  format='directory', prefix='assets/x', local_name='payload',
+                  files={name:row(data) for name,data in files.items()})
+    registry = registry_file(tmp_path, record)
+    monkeypatch.setenv('VLADE_ASSET_CACHE', str(tmp_path/'cache'))
+    mock_download(monkeypatch,tmp_path,{'assets/x/files/'+name:data for name,data in files.items()})
+    with pytest.raises(ValueError, match='hfasset'):
+        assets.resolve_input(tmp_path/'arbitrary-local-data', registry=registry)
+    calls = []
+    original = assets.sha256
+    def counted(path):
+        calls.append(path)
+        return original(path)
+    monkeypatch.setattr(assets, 'sha256', counted)
+    path = assets.resolve_input('hfasset://example', registry=registry)
+    hashes = len(calls)
+    assert hashes == len(files)
+    assert assets.resolve_input(path, registry=registry) == path
+    assert assets.resolve_input('hfasset://example', registry=registry) == path
+    assert len(calls) == hashes
+    (path/'weights.bin').write_bytes(b'xxxxxx')
+    import os
+    stat = (path/'weights.bin').stat()
+    os.utime(path/'weights.bin', ns=(stat.st_atime_ns, stat.st_mtime_ns+1_000_000_000))
+    with pytest.raises(ValueError, match='integrity'):
+        assets.resolve_input(path, registry=registry)
+
+
+def test_local_input_cannot_relabel_another_registry_revision(tmp_path, monkeypatch):
+    files = {'weights.bin': b'weights'}
+    record = dict(repo_id='test/private', repo_type='dataset', revision='a'*40,
+                  format='directory', prefix='assets/x', local_name='payload', files={name:row(data) for name,data in files.items()})
+    registry = registry_file(tmp_path, record)
+    monkeypatch.setenv('VLADE_ASSET_CACHE', str(tmp_path/'cache'))
+    mock_download(monkeypatch,tmp_path,{'assets/x/files/'+name:data for name,data in files.items()})
+    path = assets.resolve_input('hfasset://example', registry=registry)
+    value = json.loads(registry.read_text())
+    value['assets']['example']['revision'] = 'b'*40
+    registry.write_text(json.dumps(value))
+    with pytest.raises(ValueError, match='pinned HF'):
+        assets.resolve_input(path, registry=registry)
+
+
+def test_qwen_input_cannot_silently_use_another_model_revision(tmp_path, monkeypatch):
+    from vlade.models.students.qwen import StudentConfig, resolve_pretrained_directory
+    (tmp_path/'download_manifest.json').write_text(json.dumps({'repository':'Qwen/Qwen3.5-0.8B','revision':'b'*40}))
+    monkeypatch.setattr(assets,'resolve_input',lambda value:tmp_path)
+    with pytest.raises(ValueError,match='revision mismatch'):
+        resolve_pretrained_directory(StudentConfig())

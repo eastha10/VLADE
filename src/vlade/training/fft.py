@@ -156,13 +156,18 @@ def load_component(module: Any, checkpoint: Path, name: str) -> None:
 
 def resolve_config_assets(cfg: FFTConfig, *, download: bool) -> FFTConfig:
     """Keep config inspection/dry preflight free of large implicit downloads."""
-    from vlade.storage.assets import resolve_path, asset_record, cache_path
+    from vlade.storage.assets import resolve_path, resolve_input, asset_record, cache_path
     updates = {}
     for name in ("checkpoint", "data_root", "prepared_data_root", "resume"):
         if name == "data_root" and cfg.prepared_data_root is not None:
             continue
         value = getattr(cfg, name)
-        if value is None or not str(value).startswith("hfasset:"):
+        if value is None:
+            continue
+        if download and name != "resume":
+            updates[name] = resolve_input(value)
+            continue
+        if not str(value).startswith("hfasset:"):
             continue
         if download:
             updates[name] = resolve_path(value)
@@ -398,7 +403,7 @@ def _git_revision(path: Path) -> str | None:
     source_manifest = REPO_ROOT / "experiments/manifests/colab_source.json"
     if source_manifest.is_file():
         relative = "." if path == REPO_ROOT else path.relative_to(REPO_ROOT).as_posix()
-        return json.loads(source_manifest.read_text(encoding="utf-8"))["source_revisions"].get(relative)
+        return json.loads(source_manifest.read_text(encoding="utf-8")).get("source_revisions", {}).get(relative)
     return None
 
 

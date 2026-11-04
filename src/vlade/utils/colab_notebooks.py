@@ -1,4 +1,4 @@
-"""Generate Colab notebooks that load verified ordinary project files from Drive."""
+"""Generate Colab notebooks using Git source and Hugging Face inputs."""
 from __future__ import annotations
 import hashlib
 import inspect
@@ -9,20 +9,6 @@ import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-
-
-def revision(path: Path) -> str | None:
-    process = subprocess.run(["git", "-C", str(path), "rev-parse", "HEAD"], capture_output=True, text=True)
-    if process.returncode == 0:
-        return process.stdout.strip()
-    if path != ROOT:
-        # Some managed workspaces expose the gitlink but deny submodule metadata.
-        reference = subprocess.run(["git", "-C", str(ROOT), "ls-tree", "HEAD", path.relative_to(ROOT).as_posix()],
-                                   capture_output=True, text=True)
-        fields = reference.stdout.split()
-        if reference.returncode == 0 and fields[:2] == ["160000", "commit"]:
-            return fields[2]
-    return None
 
 
 def cell(kind: str, text: str, name: str) -> dict:
@@ -106,64 +92,28 @@ except Exception as error:
     return cell("code", source, "private-hub-check")
 
 
-def stage_source(project_root: Path, scratch_root: Path, expected_manifest_sha256: str) -> Path:
-    """Verify Drive source files and stage them without copying data or weights."""
-    project_root = project_root.resolve()
-    manifest_relative = Path("experiments/manifests/colab_source.json")
-    manifest_path = project_root / manifest_relative
-    if not manifest_path.is_file():
-        raise FileNotFoundError("Drive의 VLADE 폴더에 src/scripts/configs/experiments/third_party 일반 파일 구조를 먼저 복사하십시오: " + str(manifest_path))
-    manifest_bytes = manifest_path.read_bytes()
-    if hashlib.sha256(manifest_bytes).hexdigest() != expected_manifest_sha256:
-        raise ValueError("노트북과 colab_source.json 버전이 다릅니다. 같은 버전의 일반 프로젝트 파일을 사용하십시오.")
-    manifest = json.loads(manifest_bytes)
-    code = scratch_root / ("vlade_colab_" + expected_manifest_sha256[:12])
-    code = code.resolve()
-    if code.is_relative_to(project_root) or project_root.is_relative_to(code):
-        raise ValueError("실행 소스 임시 폴더와 Drive 프로젝트 폴더는 서로 겹칠 수 없습니다.")
-    for relative, expected in manifest["files_sha256"].items():
-        path = Path(relative)
-        if path.is_absolute() or ".." in path.parts or "\\" in relative or ":" in relative:
-            raise ValueError("잘못된 소스 상대 경로: " + relative)
-        source = project_root / path
-        target = code / path
-        if not source.resolve().is_relative_to(project_root) or not target.resolve().is_relative_to(code):
-            raise ValueError("프로젝트 밖의 소스 경로: " + relative)
-        if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != expected:
-            raise ValueError("Drive 소스가 없거나 변경되었습니다: " + relative)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if not target.is_file() or hashlib.sha256(target.read_bytes()).hexdigest() != expected:
-            shutil.copyfile(source, target)
-        if hashlib.sha256(target.read_bytes()).hexdigest() != expected:
-            raise ValueError("복사된 소스 무결성 불일치: " + relative)
-    # Publish the manifest only after every listed source file has been verified.
-    staged_manifest = code / manifest_relative
-    staged_manifest.parent.mkdir(parents=True, exist_ok=True)
-    temporary_manifest = staged_manifest.with_suffix(".json.tmp")
-    temporary_manifest.write_bytes(manifest_bytes)
-    temporary_manifest.replace(staged_manifest)
-    return code
+from vlade.utils.source import stage_source
 
 
-def bootstrap(digest: str, *, isolated_uv: bool = False) -> str:
+def bootstrap(source_ref: str = "main", *, isolated_uv: bool = False) -> str:
     source = '''
 from pathlib import Path
-from google.colab import drive
-import hashlib, json, os, shutil, subprocess, sys
-drive.mount('/content/drive')
-ROOT = Path('/content/drive/MyDrive/colab/VLADE')  # 세 노트북에서 동일한 저장 폴더를 지정하십시오.
+import hashlib, json, os, re, shutil, subprocess, sys, tempfile
+SOURCE_REPOSITORY = 'https://github.com/eastha10/VLADE.git'
+SOURCE_REF = globals().get('SOURCE_REF', ''' + repr(source_ref) + ''')  # 재개 시 이전 SOURCE_COMMIT을 지정하십시오.
+ROOT = Path('/content/vlade_work')
 ROOT.mkdir(parents=True, exist_ok=True)
-PROJECT_ROOT = ROOT  # src/scripts/configs/experiments/third_party가 바로 들어 있는 실제 프로젝트 루트
-EXPECTED_MANIFEST_SHA256 = "''' + digest + '''"
 ''' + inspect.getsource(stage_source) + '''
-CODE = stage_source(PROJECT_ROOT, Path('/content'), EXPECTED_MANIFEST_SHA256)
+CODE = stage_source(SOURCE_REPOSITORY, Path('/content/vlade_sources'), SOURCE_REF)
+PROJECT_ROOT = CODE
+SOURCE_COMMIT = subprocess.check_output(['git', '-C', str(CODE), 'rev-parse', 'HEAD'], text=True).strip()
 for module_name, module in list(sys.modules.items()):
     if module_name == 'vlade' or module_name.startswith('vlade.'):
         filename = getattr(module, '__file__', None)
         if filename and not Path(filename).resolve().is_relative_to(CODE.resolve()):
             raise RuntimeError('다른 버전의 VLADE가 메모리에 있습니다. Colab 런타임을 다시 시작하십시오.')
 sys.path.insert(0, str(CODE / 'src'))
-print('Drive:', ROOT, '\\n실행 소스:', CODE)
+print('실행 소스:', CODE, '\\nGit commit:', SOURCE_COMMIT)
 ENV = os.environ.copy()
 ENV.update(TOKENIZERS_PARALLELISM='false', WANDB_MODE='disabled', TF_CPP_MIN_LOG_LEVEL='2',
            HF_HOME=str(ROOT / 'hf_cache'), HF_TOKEN_PATH='/content/vlade_hf_token')
@@ -279,9 +229,6 @@ def ava_install_source() -> str:
 
         run._vlade_base_run = _VLADE_AVA_BASE_RUN
         patch = CODE / AVA_PATCH_REL
-        source_manifest = json.loads((CODE / 'experiments/manifests/colab_source.json').read_text())
-        if source_manifest['files_sha256'].get(AVA_PATCH_REL) != AVA_PATCH_SHA:
-            raise RuntimeError('Staged source manifest does not pin the approved AVA patch')
         if not patch.is_file() or hashlib.sha256(patch.read_bytes()).hexdigest() != AVA_PATCH_SHA:
             raise RuntimeError('Staged AVA patch is missing or has the wrong SHA')
 
@@ -414,7 +361,7 @@ def apply_fft_budget(path: Path) -> None:
         """)
     replace_cell("smoke-help", "markdown", """
         ## 동일 accumulation의 4-step 파일럿 → 저장·재로딩 검사
-        첫 optimizer step은 속도 산정에서 제외하고 뒤의 3 step, validation 및 Drive 저장 시간을 측정합니다.
+        첫 optimizer step은 속도 산정에서 제외하고 뒤의 3 step, validation 및 checkpoint 저장 시간을 측정합니다.
         파일럿은 본 학습과 같은 batch/accumulation을 사용합니다. 파일럿 가중치는 본 학습 초기값으로 쓰지 않습니다.
         """)
     replace_cell("fft-smoke", "code", """
@@ -507,80 +454,25 @@ def apply_fft_budget(path: Path) -> None:
 
 
 def generate() -> list[Path]:
-    paths = []
     manifest_path = ROOT / "experiments/manifests/colab_source.json"
-    for folder in ("src", "scripts", "configs", "docs", "experiments/baselines", "experiments/manifests", "third_party/ava_vla"):
-        for path in (ROOT / folder).rglob("*"):
-            if path == manifest_path or not path.is_file() or any(part in {".git", "__pycache__", ".pytest_cache", "wandb", "node_modules"} for part in path.parts):
-                continue
-            if path.suffix.lower() in {".py", ".json", ".toml", ".txt", ".md", ".yaml", ".yml", ".patch"} or path.name in {"LICENSE", "NOTICE"}:
-                paths.append(path)
-    paths.extend(ROOT / name for name in ("README.md", "STRUCTURE.md", "AGENTS.md"))
-    manifest = {"schema_version": 1, "built_for": "2026-11-03_colab_01_05_action_kd",
-                "contains_uncommitted_work": True,
-                "revision_note": "Submodule reference may be the parent gitlink when metadata is inaccessible; exact ordinary source files are identified by files_sha256.",
-                "source_revisions": {name: revision(ROOT if name == "." else ROOT / name)
-                                     for name in (".", "third_party/ava_vla")},
-                "files_sha256": {p.relative_to(ROOT).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-                                  for p in sorted(set(paths))}}
+    manifest = {"schema_version": 2, "repository": "https://github.com/eastha10/VLADE.git",
+                "ref": "main", "deployment": "git_checkout", "inputs": "hugging_face"}
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    digest = manifest["ref"]
     common = cell("code", bootstrap(digest), "drive-and-source")
     notebooks = ROOT / "experiments"
     one = notebooks / "colab_01_download_data_weights.ipynb"
-    notebook(one, [
-        cell("markdown", """
-        # 01 · LIBERO Plus 데이터·AVA-VLA 가중치 → Google Drive
-        CPU 런타임에서 시작할 수 있습니다. 저장소의 일반 코드 파일과 폴더를 Drive에 복사하고 공통 프로젝트 루트를 지정하십시오.
-        `src/scripts/configs/docs/experiments/third_party/ava_vla`와 루트 문서 구조를 유지하십시오. 소스 목록과 해시는 `experiments/manifests/colab_source.json`으로 검사합니다.
-        실행 순서: Drive 연결 → 환경 설치 → 공식 고정 revision 다운로드/해시 검증 → 분할 ZIP 결합/CRC 검사·해제 → episode 준비.
-        [데이터 원본](https://huggingface.co/datasets/Sylvest/libero_plus_rlds/tree/fb0c7029b076030d5d57227229e4f7460def1f7c)
-        은 **75.5 GB 분할 ZIP 한 개**입니다. `.z01/.z02/.zip`을 각각 해제하지 마십시오.
-        [AVA 초기 T0](https://huggingface.co/LiAuto-DSR/avavla-libero-4in1/tree/090bf68d234ea13bc78476236f82458b25b797b8)
-        는 backbone·tokenizer·processor·action head·proprio projector·attention generator 전체를 받습니다.
-        Drive에는 압축 원본+추출본+query 이미지+가중치를 둘 공간이, `/content`에는 결합 ZIP 약 75.5 GB가 필요합니다.
-        코드가 실제 파일 크기로 여유 공간을 검사합니다. Drive 계정 할당량은 Drive에서 별도로 확인하십시오.
-        오늘 로컬에서 다운로드/GPU 학습을 실행한 결과가 아닙니다. 각 셀을 실행하면 해당 다운로드·처리가 시작됩니다.
-        """, "purpose"), common,
+    notebook(one, [cell("markdown", "# 01 · Hugging Face 자료 준비", "purpose"), common,
         cell("code", """
         DATA_PY = environment('vlade_data_py311', '3.11', [
             'numpy==1.26.4', 'pillow==10.4.0', 'huggingface_hub==0.36.2',
-            'tensorflow==2.15.0', 'tensorflow-datasets==4.9.3', 'tensorflow-metadata==1.15.0'])
+            'tensorflow==2.15.0', 'tensorflow-datasets==4.9.3', 'tensorflow-metadata==1.15.0',
+            'pyarrow==19.0.1'])
         if shutil.which('zip') is None:
             run(['apt-get', 'update'])
             run(['apt-get', 'install', '-y', 'zip'])
-        """, "install-data"),
-        cell("markdown", "## 공식 파일 다운로드·검증\n중단 후 같은 셀을 실행하면 Hub 다운로드 캐시를 재사용하고 파일 해시를 다시 검사합니다. 대용량 데이터를 로컬 컴퓨터로 거치지 않고 Drive에 저장합니다.", "download-help"),
-        cell("code", """
-        run([DATA_PY, 'scripts/data/prepare_colab_assets.py', 'data', '--root', ROOT])
-        run([DATA_PY, 'scripts/data/prepare_colab_assets.py', 'ava', '--root', ROOT])
-        """, "download"),
-        cell("code", """
-        run([DATA_PY, 'scripts/data/prepare_colab_assets.py', 'extract', '--root', ROOT,
-             '--scratch', '/content/libero_zip_scratch'])
-        """, "extract"),
-        cell("markdown", """
-        ## 공통 episode 분할·정규화·관측 준비
-        80/10/10은 동일 콘텐츠 그룹의 seed 42 해시로 배정합니다. 실제 episode 비율은 근사치입니다.
-        다른 컴퓨터에서 만든 기존 split과 같은 배정이라고 주장하지 않습니다. 기존 manifest를 받으면 비교 후 한 버전으로 고정하십시오.
-        Train의 **전체 timestep**에서 exact q01/q99를 계산합니다. Validation/test는 통계에 넣지 않습니다.
-        Query 간격은 8이며 두 카메라 원본을 query 시점에만 보관합니다. 마지막 chunk의 padding은 loss에서 제외합니다.
-        이 prepared-data 경로는 augmentation 없이 FFT/BC/cache의 입력·정규화를 공유합니다.
-        중단된 `.incomplete`는 완료 데이터로 읽지 않습니다. 전처리 중단 시에는 새 output 경로로 다시 준비하십시오.
-        """, "prepare-help"),
-        cell("code", """
-        PREPARED = ROOT / 'data/processed/libero_plus_episode80'
-        if (PREPARED / 'COMPLETE').is_file():
-            print('준비된 데이터 재사용:', PREPARED)
-        else:
-            run([DATA_PY, 'scripts/data/prepare_episode_data.py',
-                 '--tfds-root', ROOT / 'data/processed/libero_plus_tfds', '--output', PREPARED])
-        manifest = json.loads((PREPARED / 'manifest.json').read_text())
-        print(json.dumps({key: manifest[key] for key in ['counts', 'split_policy', 'split_sha256',
-                                                       'normalization_sha256', 'dataset_revision']}, indent=2))
-        print('다음: 02 Teacher 노트북을 A100 런타임에서 실행하십시오.')
-        """, "prepare")])
+        """, "install-data")])
     two = notebooks / "colab_02_ava_fft_and_fixed_cache.ipynb"
     notebook(two, [
         cell("markdown", """
@@ -667,7 +559,7 @@ def generate() -> list[Path]:
         """, "selection-help"),
         cell("code", """
         T1_CHECKPOINT = ''  # 실제 validation으로 선택한 완료 checkpoint의 Drive 경로
-        VALIDATION_REPORT = ''  # 실제 validation/rollout 보고서의 Drive 경로
+        VALIDATION_REPORT = ''  # 실제 validation/rollout 보고서의 현재 실행 출력 경로
         SELECTION_REASON = ''  # 선택 지표·비교 checkpoint·이유
         SELECTION = ROOT / 'selections/T1.json'
         if T1_CHECKPOINT and VALIDATION_REPORT and SELECTION_REASON:
@@ -740,7 +632,7 @@ def generate() -> list[Path]:
         (ROOT / 'student_environment_freeze.txt').write_text(subprocess.check_output(
             [str(UV), 'pip', 'freeze', '--python', str(STUDENT_PY)], text=True))
         """, "install-student"),
-        cell("markdown", "## Qwen 초기 가중치 준비\n이 셀을 실행하면 공식 고정 revision의 모델 가중치 약 1.75 GB와 processor 자료를 Drive에 받습니다. 기존 로컬 폴더의 processor 자료만으로는 전체 학습을 실행할 수 없습니다. 오늘 다운로드한 것으로 기록하지 않습니다.", "weights-help"),
+        cell("markdown", "## Qwen 초기 가중치 준비\n이 셀을 실행하면 공식 고정 revision의 모델 가중치 약 1.75 GB와 processor 자료를 Hugging Face에서 런타임 캐시로 받습니다. 기존 로컬 폴더의 processor 자료만으로는 전체 학습을 실행할 수 없습니다. 오늘 다운로드한 것으로 기록하지 않습니다.", "weights-help"),
         cell("code", """
         QWEN = ROOT / 'checkpoints/students/qwen3_5_0_8b'
         program = "import sys; from pathlib import Path; sys.path.insert(0,'src'); from vlade.data.colab_assets import download; download('Qwen/Qwen3.5-0.8B','2fc06364715b967f1860aea9cf38778875588b17',Path(sys.argv[1]))"
@@ -837,10 +729,11 @@ def generate() -> list[Path]:
     four = generate_paper_notebook(ROOT,digest)
     from vlade.utils.kd_notebook import generate_kd_notebook
     five = generate_kd_notebook(ROOT, digest)
-    from vlade.utils.hf_notebooks import apply_hf_storage, refresh_suite_sources
+    from vlade.utils.hf_notebooks import apply_hf_storage, refresh_suite_sources, refresh_inference_sources
     for path in (one, two, three, four, five):
         apply_hf_storage(path, ROOT)
     refresh_suite_sources(ROOT/'experiments/colab_ava_fft_suite_balanced_cu.ipynb', ROOT, digest)
+    refresh_inference_sources(ROOT/'experiments/colab_inference_smoke.ipynb')
     return [one, two, three, four, five, manifest_path]
 
 

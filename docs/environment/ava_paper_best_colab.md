@@ -1,5 +1,7 @@
 # 04 · AVA-VLA 최고 보고 설정 준비
 
+> 2026-11-04 이후 로컬/Git 노트북의 실행 기준은 [Git 소스·HF 입력 안내](hf_inputs_and_git_source.md)입니다. 아래 Drive 기반 절차·실행 기록은 기존 버전의 맥락입니다. 진행 중인 세션은 그대로 유지하며 Drive 배포는 별도 명령 후 수행합니다.
+
 2026-10-31: 사용자가 기본 40K/batch64 대신 **최고 보고 성능의 100K/batch256** 설정을 선택했습니다.
 노트북은 `experiments/colab_04_ava_paper_best.ipynb`, 설정은 `configs/experiments/ava_paper_best.json`,
 실행 경로는 `scripts/train/run_paper_ava.py`/`src/vlade/training/paper_ava.py`입니다.

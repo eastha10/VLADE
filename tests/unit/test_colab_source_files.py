@@ -1,147 +1,109 @@
-"""Plain-file Colab source generation, staging and revision regression checks."""
-import hashlib
+"""Git source deployment is immutable and independent of assets/Drive."""
 import json
 from pathlib import Path
-from types import SimpleNamespace
+import subprocess
 import sys
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src'))
 from vlade.utils import colab_notebooks
+from vlade.utils.source import stage_source
 
 
-MANIFEST = Path("experiments/manifests/colab_source.json")
+def git(root, *args):
+    return subprocess.check_output(['git', '-C', str(root), *args], text=True).strip()
 
 
-def write_file(root, relative, contents):
-    path = root / relative
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(contents)
-    return path
+@pytest.fixture
+def repository(tmp_path):
+    root = tmp_path / 'remote'
+    root.mkdir()
+    git(root, 'init', '-b', 'main')
+    (root / 'core.py').write_text('VALUE = 1\n')
+    git(root, 'add', 'core.py')
+    git(root, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'initial')
+    return root
 
 
-def write_manifest(root, files, revisions=None):
-    value = {"schema_version": 1, "files_sha256": files,
-             "source_revisions": revisions or {".": "parent-sha", "third_party/ava_vla": "ava-sha"}}
-    manifest = write_file(root, MANIFEST, (json.dumps(value, sort_keys=True) + "\n").encode())
-    return hashlib.sha256(manifest.read_bytes()).hexdigest()
+def test_stage_pins_commit_and_never_updates_a_running_checkout(tmp_path, repository):
+    commit = git(repository, 'rev-parse', 'HEAD')
+    code = stage_source(str(repository), tmp_path / 'runtime', commit)
+    assert git(code, 'rev-parse', 'HEAD') == commit
+    assert stage_source(str(repository), tmp_path / 'runtime', commit) == code
+    (repository / 'core.py').write_text('VALUE = 2\n')
+    git(repository, 'add', 'core.py')
+    git(repository, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'next')
+    newer = stage_source(str(repository), tmp_path / 'runtime', 'main')
+    assert newer != code
+    assert (code / 'core.py').read_text() == 'VALUE = 1\n'
+    assert (newer / 'core.py').read_text() == 'VALUE = 2\n'
 
 
-def test_generation_keeps_source_structure_without_archive_or_self_reference(tmp_path, monkeypatch):
-    root = tmp_path / "project"
-    included = {
-        "src/vlade/core.py": b"VALUE = 42\n",
-        "scripts/train/run.py": b"print('run')\n",
-        "configs/model.json": b"{}\n",
-        "docs/environment/setup.md": b"setup\n",
-        "third_party/ava_vla/module.py": b"pass\n",
-        "third_party/ava_vla/LICENSE": b"upstream license\n",
-        "experiments/baselines/ava_vla/libero.json": b"{}\n",
-        "experiments/manifests/ava_vla_source.json": b"{}\n",
-        "README.md": b"readme\n", "STRUCTURE.md": b"structure\n", "AGENTS.md": b"instructions\n",
-    }
-    excluded = {
-        "data/secret.json": b"not source",
-        "checkpoints/model.json": b"not source",
-        "artifacts/result.json": b"not source",
-        "src/.git/private.py": b"not source",
-        "src/__pycache__/cached.py": b"not source",
-        "src/credentials.env": b"not source",
-        "third_party/openvla_oft/other.py": b"not this execution environment",
-        "experiments/colab_01_download_data_weights.ipynb": b"old notebook",
-    }
-    # The independent full-frame cell pins the minimal transfer implementation.
-    for relative in ('src/vlade/data/tfrecord_frames.py','src/vlade/data/fullframes.py',
-        'src/vlade/storage/__init__.py','src/vlade/storage/assets.py','src/vlade/storage/migrate.py',
-        'src/vlade/storage/drive_checkpoint.py','scripts/data/prepare_fullframes.py'):
-        included[relative]=b'# source guard fixture\n'
-    for relative, data in {**included, **excluded}.items():
-        write_file(root, relative, data)
-    write_manifest(root, {"old.py": "old"})
-    monkeypatch.setattr(colab_notebooks, "ROOT", root)
-    monkeypatch.setattr(colab_notebooks, "revision", lambda path: "parent-sha" if path == root else "ava-sha")
+@pytest.mark.parametrize('change', ['tracked', 'untracked'])
+def test_changed_cached_source_is_rejected(tmp_path, repository, change):
+    code = stage_source(str(repository), tmp_path / 'runtime')
+    (code / ('core.py' if change == 'tracked' else 'unexpected.py')).write_text('changed')
+    with pytest.raises(ValueError, match='checkout changed'):
+        stage_source(str(repository), tmp_path / 'runtime')
 
+
+@pytest.mark.parametrize('ref', ['--upload-pack=bad', '../main', 'main;command', ''])
+def test_invalid_git_reference_is_rejected_before_fetch(tmp_path, ref):
+    with pytest.raises(ValueError, match='reference'):
+        stage_source('unused', tmp_path, ref)
+
+
+def test_generated_notebooks_use_git_and_hf_without_source_file_hashes(tmp_path, monkeypatch):
+    root = tmp_path / 'project'
+    monkeypatch.setattr(colab_notebooks, 'ROOT', root)
     generated = colab_notebooks.generate()
-    first_manifest = (root / MANIFEST).read_bytes()
-    manifest = json.loads(first_manifest)
-    assert manifest["files_sha256"] == {
-        name: hashlib.sha256(contents).hexdigest() for name, contents in included.items()
-    }
-    assert len(generated) == 6
-    assert {p.parent for p in generated[:5]} == {root / "experiments"}
-    assert generated[-1] == root / MANIFEST
-    digest = hashlib.sha256(first_manifest).hexdigest()
-    for path in generated[:5]:
-        notebook = json.loads(path.read_text(encoding="utf-8"))
-        cells = {cell["id"]: "".join(cell["source"]) for cell in notebook["cells"]}
-        assert digest in cells["drive-and-source"]
-        assert "files.upload" not in cells["drive-and-source"]
-        for cell in notebook["cells"]:
-            if cell["cell_type"] == "code":
-                compile("".join(cell["source"]), path.name, "exec")
+    manifest = json.loads(generated[-1].read_text())
+    assert manifest['schema_version'] == 2 and manifest['deployment'] == 'git_checkout'
+    assert 'files_sha256' not in manifest
+    for path in generated[:-1]:
+        value = json.loads(path.read_text(encoding='utf-8'))
+        sources = '\n'.join(''.join(c['source']) for c in value['cells'] if c['cell_type'] == 'code')
+        assert 'SOURCE_COMMIT' in sources and 'hf_input' in sources
+        assert 'files_sha256' not in sources and 'drive.mount(' not in sources
+        assert '/content/drive' not in sources
+        for c in value['cells']:
+            if c['cell_type'] == 'code':
+                compile(''.join(c['source']), path.name, 'exec')
+    before = generated[-1].read_bytes()
     colab_notebooks.generate()
-    assert (root / MANIFEST).read_bytes() == first_manifest
-    assert not list(root.rglob("*.zip"))
+    assert generated[-1].read_bytes() == before
 
 
-def test_staging_copies_only_listed_files_and_restores_exact_source(tmp_path):
-    root = tmp_path / "drive-project"
-    source = write_file(root, "src/vlade/core.py", b"VALUE = 42\n")
-    write_file(root, "data/large-marker.bin", b"must stay on Drive")
-    digest = write_manifest(root, {"src/vlade/core.py": hashlib.sha256(source.read_bytes()).hexdigest()})
-    code = colab_notebooks.stage_source(root, tmp_path / "runtime", digest)
-    assert (code / "src/vlade/core.py").read_bytes() == source.read_bytes()
-    assert (code / MANIFEST).read_bytes() == (root / MANIFEST).read_bytes()
-    assert not (code / "data").exists()
-    (code / "src/vlade/core.py").write_bytes(b"damaged staged copy")
-    assert colab_notebooks.stage_source(root, tmp_path / "runtime", digest) == code
-    assert (code / "src/vlade/core.py").read_bytes() == source.read_bytes()
+def test_all_shipped_runtime_notebooks_use_hf_and_git():
+    root = Path(__file__).resolve().parents[2]
+    for path in (root/'experiments').glob('colab*.ipynb'):
+        notebook = json.loads(path.read_text(encoding='utf-8-sig'))
+        code = '\n'.join(''.join(c['source']) for c in notebook['cells'] if c['cell_type']=='code')
+        assert 'SOURCE_COMMIT' in code, path.name
+        for removed in ['drive.mount(', 'drive.flush_and_unmount(', '/content/drive',
+                        'files_sha256', 'PREP_WORKER_SOURCE', 'PREP_CACHE_SOURCE',
+                        'CHECKPOINT.relative_to(PROJECT_ROOT)']:
+            assert removed not in code, (path.name, removed)
+        for c in notebook['cells']:
+            if c['cell_type']=='code':
+                compile(''.join(c['source']), path.name, 'exec')
 
 
-@pytest.mark.parametrize("change", ["missing", "modified", "wrong-manifest", "missing-manifest",
-                                    "parent-path", "absolute-path", "backslash-path", "drive-path"])
-def test_staging_rejects_incomplete_or_mismatched_source_before_manifest_publication(tmp_path, change):
-    root = tmp_path / "drive-project"
-    source = write_file(root, "src/vlade/core.py", b"VALUE = 42\n")
-    relative = "src/vlade/core.py"
-    if change == "parent-path":
-        relative = "../outside.py"
-    elif change == "absolute-path":
-        relative = "/outside.py"
-    elif change == "backslash-path":
-        relative = "src\\vlade\\core.py"
-    elif change == "drive-path":
-        relative = "C:/outside.py"
-    digest = write_manifest(root, {relative: hashlib.sha256(source.read_bytes()).hexdigest()})
-    if change == "missing":
-        source.unlink()
-    elif change == "modified":
-        source.write_bytes(b"changed after manifest")
-    elif change == "wrong-manifest":
-        digest = "0" * 64
-    elif change == "missing-manifest":
-        (root / MANIFEST).unlink()
-    scratch = tmp_path / "runtime"
-    with pytest.raises((ValueError, FileNotFoundError)):
-        colab_notebooks.stage_source(root, scratch, digest)
-    assert not list(scratch.rglob("colab_source.json"))
-
-
-def test_staging_rejects_overlapping_project_and_runtime(tmp_path):
-    root = tmp_path / "drive-project"
-    digest = write_manifest(root, {})
-    with pytest.raises(ValueError):
-        colab_notebooks.stage_source(root, root / "runtime", digest)
-
-
-def test_git_revision_falls_back_to_plain_source_manifest(tmp_path, monkeypatch):
-    from vlade.training import fft
-
-    root = tmp_path / "staged-project"
-    write_manifest(root, {}, {".": "parent-sha", "third_party/ava_vla": "ava-sha"})
-    monkeypatch.setattr(fft, "REPO_ROOT", root)
-    monkeypatch.setattr(fft.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=128, stdout=""))
-    assert fft._git_revision(root) == "parent-sha"
-    assert fft._git_revision(root / "third_party/ava_vla") == "ava-sha"
-    assert fft._git_revision(root / "third_party/openvla_oft") is None
+def test_source_checkout_preserves_parent_pinned_submodule(tmp_path, repository, monkeypatch):
+    dependency = tmp_path/'upstream'
+    dependency.mkdir()
+    git(dependency, 'init', '-b', 'main')
+    (dependency/'module.py').write_text('PINNED = True\n')
+    git(dependency, 'add', 'module.py')
+    git(dependency, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-m', 'dependency')
+    expected = git(dependency, 'rev-parse', 'HEAD')
+    monkeypatch.setenv('GIT_ALLOW_PROTOCOL', 'file')
+    git(repository, '-c', 'protocol.file.allow=always', 'submodule', 'add', str(dependency), 'third_party/ava_vla')
+    git(repository, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-am', 'pin dependency')
+    code = stage_source(str(repository), tmp_path/'runtime')
+    assert git(code/'third_party/ava_vla', 'rev-parse', 'HEAD') == expected
+    assert stage_source(str(repository), tmp_path/'runtime') == code
+    (code/'third_party/ava_vla/module.py').write_text('PINNED = False\n')
+    with pytest.raises(ValueError, match='checkout changed'):
+        stage_source(str(repository), tmp_path/'runtime')

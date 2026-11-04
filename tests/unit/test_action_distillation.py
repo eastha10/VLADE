@@ -83,7 +83,9 @@ def test_partial_cache_rejected_for_full_training(prepared, tmp_path):
     assert cache.signature["scope"] == "pilot"
 
 
-def test_preflight_requires_no_gpu_and_resume_rejects_changed_cache(prepared, tmp_path, capsys):
+def test_preflight_requires_no_gpu_and_resume_rejects_changed_cache(prepared, tmp_path, capsys, monkeypatch):
+    # Synthetic fixtures isolate training contracts from HF acquisition.
+    monkeypatch.setattr("vlade.storage.assets.resolve_input", lambda value: Path(value))
     root = make_cache(prepared, tmp_path / "cache")
     checkpoint = tmp_path / "initial"
     checkpoint.mkdir()
