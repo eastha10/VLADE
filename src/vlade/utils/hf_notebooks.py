@@ -64,14 +64,29 @@ if RUN_HF_MIGRATION:
         if hashlib.sha256((PROJECT_ROOT/relative).read_bytes()).hexdigest() != expected:
             raise ValueError('Migration source changed; reopen the matching notebook: '+relative)
     python = Path('/content/vlade_hf_transfer/bin/python')
-    subprocess.run([sys.executable, '-m', 'venv', '--without-pip', str(python.parent.parent)], check=True)
-    subprocess.run([sys.executable, '-m', 'pip', '--python', str(python), 'install',
-                    '--disable-pip-version-check', 'huggingface_hub==0.36.2'], check=True)
+    if not python.is_file():
+        subprocess.run([sys.executable, '-m', 'venv', '--without-pip', str(python.parent.parent)], check=True)
+    installed = subprocess.run([str(python), '-c', "import huggingface_hub; assert huggingface_hub.__version__ == '0.36.2'"], capture_output=True)
+    if installed.returncode:
+        print('HF 이관 환경을 준비합니다.', flush=True)
+        subprocess.run([sys.executable, '-m', 'pip', '--python', str(python), 'install',
+                        '--disable-pip-version-check', 'huggingface_hub==0.36.2'], check=True)
     env = os.environ.copy()
     env.update(HF_TOKEN=userdata.get('HF_TOKEN'), HF_HOME='/content/vlade_hf_migration_cache',
-               HF_TOKEN_PATH='/content/vlade_hf_token', HF_HUB_DISABLE_PROGRESS_BARS='1')
-    subprocess.run([str(python), str(PROJECT_ROOT/'scripts/data/migrate_hf_assets.py'),
-                    '--root', str(PROJECT_ROOT)], env=env, check=True)
+               HF_TOKEN_PATH='/content/vlade_hf_token', HF_HUB_DISABLE_PROGRESS_BARS='1', PYTHONUNBUFFERED='1')
+    log_path = python.parent.parent / 'migration.log'
+    print('이관 진행 로그:', log_path, flush=True)
+    command = [str(python), '-u', str(PROJECT_ROOT/'scripts/data/migrate_hf_assets.py'), '--root', str(PROJECT_ROOT)]
+    with log_path.open('a', encoding='utf-8') as log:
+        with subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, encoding='utf-8', errors='replace', bufsize=1) as process:
+            for line in process.stdout:
+                clean = line.replace(env['HF_TOKEN'], '[REDACTED]') if env['HF_TOKEN'] else line
+                print(clean, end='', flush=True)
+                log.write(clean); log.flush()
+            returncode = process.wait()
+    if returncode:
+        raise RuntimeError('이관이 중단되었습니다. 바로 위 migration_failed의 message와 where를 확인하십시오. 로그: '+str(log_path))
 else:
     print('Existing-asset migration is off. Use the HF input preparation cells when migration is complete.')
 '''.replace('__HASHES__', repr(hashes))

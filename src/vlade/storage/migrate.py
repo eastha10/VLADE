@@ -5,8 +5,11 @@ import argparse
 import hashlib
 import io
 import json
+import os
 import re
 import tarfile
+import traceback
+from urllib.parse import urlsplit, urlunsplit
 from pathlib import Path
 
 from vlade.storage.assets import REGISTRY_FILE, REGISTRY_REPO, configure_http, safe_relative, sha256
@@ -26,6 +29,79 @@ def _private(api, repo: str, kind: str) -> None:
     api.create_repo(repo_id=repo, repo_type=kind, private=True, exist_ok=True)
     if api.repo_info(repo_id=repo, repo_type=kind).private is not True:
         raise ValueError("Migration refuses a public destination repository")
+
+
+def safe_error(error: Exception) -> str:
+    """Keep useful diagnostics while hiding tokens and signed URL queries."""
+    message = str(error)
+    for name in ('HF_TOKEN', 'HUGGING_FACE_HUB_TOKEN', 'HUGGINGFACE_HUB_TOKEN'):
+        secret = os.environ.get(name)
+        if secret:
+            message = message.replace(secret, '[REDACTED]')
+    message = re.sub(r'hf_[A-Za-z0-9]{12,}', '[REDACTED]', message)
+    def redact_url(match):
+        parsed = urlsplit(match.group())
+        host = parsed.netloc.rsplit('@',1)[-1]
+        return urlunsplit((parsed.scheme,host,parsed.path,'',''))
+    return re.sub(r'https?://[^\s<>]+', redact_url, message)[:2000]
+
+
+def published_registry(api) -> dict:
+    from huggingface_hub import hf_hub_download
+    from huggingface_hub.errors import EntryNotFoundError
+    _private(api,REGISTRY_REPO,'model')
+    head=api.model_info(REGISTRY_REPO).sha
+    try:
+        value=json.loads(Path(hf_hub_download(REGISTRY_REPO,REGISTRY_FILE,revision=head)).read_text(encoding='utf-8'))
+    except EntryNotFoundError:
+        value={'schema_version':1,'organization':'VLADE-konkuk','assets':{}}
+    if value.get('schema_version')!=1:
+        raise ValueError('Unsupported published asset registry')
+    return value
+
+
+def reuse_published(api, registry: dict, key: str) -> bool:
+    """Resume from an immutable, remotely verified import without rereading Drive payloads."""
+    from huggingface_hub import hf_hub_download
+    record=registry['assets'].get(key)
+    if record is None:
+        return False
+    print(json.dumps({'asset':key,'status':'checking_published_remote'}),flush=True)
+    expected_repo='VLADE-konkuk/libero-plus-prepared' if key=='prepared_d_seed42' else REGISTRY_REPO
+    kind='dataset' if key=='prepared_d_seed42' else 'model'
+    if (record.get('repo_id')!=expected_repo or record.get('repo_type')!=kind
+            or not re.fullmatch(r'[0-9a-f]{40}',record.get('revision',''))):
+        raise ValueError('Published migration asset has an unexpected repository or revision')
+    if key=='prepared_d_seed42':
+        if record.get('format')!='archive' or {k:v['sha256'] for k,v in record['identity_files'].items()}!=PREPARED_IDENTITY:
+            raise ValueError('Published prepared dataset identity differs from canonical D')
+        files={record['archive_path']:{'bytes':record['archive_bytes'],'sha256':record['archive_sha256']}}
+    else:
+        if record.get('format')!='directory' or record.get('prefix')!='assets/'+key:
+            raise ValueError('Published model asset has an unexpected format or prefix')
+        files={record['prefix']+'/files/'+name:row for name,row in record['files'].items()}
+    if not files:
+        raise ValueError('Published asset contains no payload files')
+    info=api.repo_info(expected_repo,repo_type=kind,revision=record['revision'],files_metadata=True)
+    if info.private is not True:
+        raise ValueError('Published asset repository must stay private')
+    remote={item.rfilename:item for item in info.siblings}
+    for name,row in files.items():
+        safe_relative(name)
+        item=remote.get(name)
+        if item is None or item.size!=row['bytes']:
+            raise ValueError('Published asset file size mismatch: '+name)
+        if item.lfs:
+            digest=getattr(item.lfs,'sha256',None)
+            if digest is None and isinstance(item.lfs,dict):digest=item.lfs.get('sha256')
+        else:
+            if row['bytes']>10*1024**2:
+                raise ValueError('Unexpected large Git asset blob')
+            digest=sha256(Path(hf_hub_download(expected_repo,name,repo_type=kind,revision=record['revision'])))
+        if digest!=row['sha256']:
+            raise ValueError('Published asset hash mismatch: '+name)
+    print(json.dumps({'asset':key,'status':'reused_verified_remote','revision':record['revision']}),flush=True)
+    return True
 
 
 def _verify_remote(api, repo: str, kind: str, revision: str, sources: dict[str, Path], hashes: dict) -> None:
@@ -100,8 +176,10 @@ def publish_files(api, key: str, sources: dict[str, Path], *, repo: str, kind: s
         print(json.dumps({"asset":key,"verified_source":relative,"bytes":row["bytes"]}), flush=True)
     metadata = {"schema_version":1,"key":key,"files":rows}
     operations.append(CommitOperationAdd(path_in_repo=prefix+"/asset_manifest.json", path_or_fileobj=io.BytesIO(_json_bytes(metadata))))
+    print(json.dumps({'asset':key,'status':'uploading','files':len(rows),'bytes':sum(row['bytes'] for row in rows.values())}),flush=True)
     commit = api.create_commit(repo_id=repo, repo_type=kind, operations=operations,
                                commit_message="Import verified VLADE asset " + key)
+    print(json.dumps({'asset':key,'status':'verifying_uploaded_remote','revision':commit.oid}),flush=True)
     _verify_remote(api, repo, kind, commit.oid, remote_sources, hashes)
     record = {"repo_id":repo,"repo_type":kind,"revision":commit.oid,"format":"directory",
               "prefix":prefix,"local_name":local_name,"files":rows}
@@ -132,11 +210,13 @@ def publish_prepared(api, archive: Path) -> dict:
     key = "prepared_d_seed42"
     repo = "VLADE-konkuk/libero-plus-prepared"
     remote = "assets/" + key + "/libero_plus_episode80_d_seed42.tar"
+    print(json.dumps({'asset':key,'status':'hashing_archive'}),flush=True)
     digest = sha256(archive)
     record = {"repo_id":repo,"repo_type":"dataset","format":"archive","archive_path":remote,
         "archive_bytes":archive.stat().st_size,"archive_sha256":digest,"archive_root":"" if root=="." else root,
         "identity_files":identity,"local_name":"libero_plus_episode80_d_seed42"}
     _private(api,repo,"dataset")
+    print(json.dumps({'asset':key,'status':'uploading','bytes':archive.stat().st_size}),flush=True)
     commit = api.create_commit(repo_id=repo,repo_type="dataset",operations=[
         CommitOperationAdd(path_in_repo=remote,path_or_fileobj=str(archive)),
         CommitOperationAdd(path_in_repo="assets/"+key+"/asset_manifest.json",path_or_fileobj=io.BytesIO(_json_bytes(record)))],
@@ -187,26 +267,34 @@ def migrate(root: Path, *, output_registry: Path | None = None, checkpoint: Path
     configure_http()
     from huggingface_hub import HfApi
     api = HfApi()
+    print(json.dumps({'status':'authenticating_hf'}),flush=True)
     account = api.whoami()
     if "VLADE-konkuk" not in {org["name"] for org in account.get("orgs",[])}:
         raise PermissionError("HF token account must belong to VLADE-konkuk")
-    archive = root / "data/splits/libero_plus_episode80_d_seed42.tar"
-    if not archive.is_file(): raise FileNotFoundError("Select the project root containing the canonical D TAR")
-    print(json.dumps({'status':'checking_prepared_archive','bytes':archive.stat().st_size}),flush=True)
-    registry = publish_prepared(api,archive)
+    registry=published_registry(api)
+    if not reuse_published(api,registry,'prepared_d_seed42'):
+        archive = root / "data/splits/libero_plus_episode80_d_seed42.tar"
+        if not archive.is_file(): raise FileNotFoundError("Select the project root containing the canonical D TAR")
+        print(json.dumps({'status':'checking_prepared_archive','bytes':archive.stat().st_size}),flush=True)
+        registry = publish_prepared(api,archive)
     if output_registry:
         output_registry.parent.mkdir(parents=True,exist_ok=True)
         output_registry.write_bytes(_json_bytes(registry))
     teacher = root / "checkpoints/teacher/avavla-libero-4in1"
-    if teacher.is_dir():
+    if not reuse_published(api,registry,'ava_t0'):
+        if not teacher.is_dir():raise FileNotFoundError('AVA initial model directory is missing: '+str(teacher))
+        print(json.dumps({'asset':'ava_t0','status':'checking_source_files'}),flush=True)
         registry = publish_files(api,"ava_t0",model_sources(teacher),repo=REGISTRY_REPO,kind="model",local_name="avavla-libero-4in1")
     checkpoints = [checkpoint] if checkpoint else sorted({p.parent for p in (root/"checkpoints/fft").rglob("checkpoint_manifest.json*")})
+    print(json.dumps({'status':'checkpoint_inventory','directories':[str(p) for p in checkpoints]},ensure_ascii=False),flush=True)
     if not checkpoints: raise FileNotFoundError("No completed FFT checkpoints found under the selected project root")
     for folder in checkpoints:
+        print(json.dumps({'status':'checking_checkpoint_directory','path':str(folder)},ensure_ascii=False),flush=True)
         sources,seal = checkpoint_sources(folder)
         key = "ava_fft_step_"+str(seal["step"])
         if seal['step'] != 1975:
             key += "_" + sha256(sources["checkpoint_manifest.json"])[:8]
+        if reuse_published(api,registry,key):continue
         registry = publish_files(api,key,sources,repo=REGISTRY_REPO,kind="model",
             local_name=f"step-{seal['step']:07d}",expected=seal["files"])
         if output_registry: output_registry.write_bytes(_json_bytes(registry))
@@ -223,7 +311,9 @@ def main() -> None:
     args=parser.parse_args()
     try: migrate(args.root,output_registry=args.output_registry,checkpoint=args.checkpoint)
     except Exception as error:
-        print(json.dumps({"status":"migration_failed","error_type":type(error).__name__}),flush=True)
+        frame=traceback.extract_tb(error.__traceback__)[-1]
+        print(json.dumps({"status":"migration_failed","error_type":type(error).__name__,
+              'message':safe_error(error),'where':Path(frame.filename).name+':'+str(frame.lineno)},ensure_ascii=False),flush=True)
         raise SystemExit(1) from None
 
 

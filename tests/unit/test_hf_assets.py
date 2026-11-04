@@ -102,3 +102,67 @@ def test_incomplete_base_model_is_not_imported_as_complete(tmp_path):
     (tmp_path/'model-00001-of-00002.safetensors').write_bytes(b'one')
     (tmp_path/'model.safetensors.index.json').write_text(json.dumps({'weight_map':{'a':'model-00001-of-00002.safetensors','b':'model-00002-of-00002.safetensors'}}))
     with pytest.raises(ValueError,match='shards'):model_sources(tmp_path)
+
+
+def test_migration_resume_does_not_read_or_reupload_completed_drive_assets(tmp_path,monkeypatch):
+    import huggingface_hub
+    from types import SimpleNamespace
+    from vlade.storage import migrate
+    initial={'schema_version':1,'assets':{'prepared_d_seed42':{},'ava_t0':{}}}
+    monkeypatch.setattr(migrate,'configure_http',lambda:None)
+    monkeypatch.setattr(huggingface_hub,'HfApi',lambda:SimpleNamespace(whoami=lambda:{'orgs':[{'name':'VLADE-konkuk'}]}))
+    monkeypatch.setattr(migrate,'published_registry',lambda api:initial)
+    monkeypatch.setattr(migrate,'reuse_published',lambda api,registry,key:key in registry['assets'])
+    def forbidden(*args,**kwargs):raise AssertionError('Completed Drive payload was read again')
+    monkeypatch.setattr(migrate,'publish_prepared',forbidden)
+    monkeypatch.setattr(migrate,'model_sources',forbidden)
+    checkpoint=tmp_path/'checkpoint';checkpoint.mkdir()
+    (checkpoint/'trainer_state.pt').write_bytes(b'state')
+    (checkpoint/'COMPLETE').write_text('ok')
+    seal={'step':1975,'microsteps':15800,'files':{'trainer_state.pt':row(b'state')}}
+    (checkpoint/'checkpoint_manifest.json').write_text(json.dumps(seal))
+    def publish(api,key,sources,**kwargs):
+        assert key=='ava_fft_step_1975' and kwargs['expected']==seal['files']
+        return {**initial,'assets':{**initial['assets'],key:{}}}
+    monkeypatch.setattr(migrate,'publish_files',publish)
+    migrate.migrate(tmp_path,checkpoint=checkpoint)
+    assert not (tmp_path/'data').exists() and not (tmp_path/'checkpoints').exists()
+
+
+@pytest.mark.parametrize('matching',[True,False])
+def test_remote_reuse_verifies_pinned_lfs_without_reading_drive(tmp_path,monkeypatch,matching):
+    from types import SimpleNamespace
+    from vlade.storage import migrate
+    digest=row(b'abc')['sha256']
+    record={'repo_id':assets.REGISTRY_REPO,'repo_type':'model','revision':'a'*40,
+        'format':'directory','prefix':'assets/ava_t0','files':{'model.safetensors':row(b'abc')}}
+    item=SimpleNamespace(rfilename='assets/ava_t0/files/model.safetensors',size=3,
+        lfs=SimpleNamespace(sha256=digest if matching else 'b'*64))
+    def info(repo,**kwargs):
+        assert repo==assets.REGISTRY_REPO and kwargs['revision']=='a'*40
+        return SimpleNamespace(private=True,siblings=[item])
+    if matching:assert migrate.reuse_published(SimpleNamespace(repo_info=info),{'assets':{'ava_t0':record}},'ava_t0')
+    else:
+        with pytest.raises(ValueError,match='hash mismatch'):
+            migrate.reuse_published(SimpleNamespace(repo_info=info),{'assets':{'ava_t0':record}},'ava_t0')
+
+
+def test_migration_diagnostic_redacts_token_and_signed_url(monkeypatch):
+    from vlade.storage.migrate import safe_error
+    secret='hf_'+'s'*32
+    monkeypatch.setenv('HF_TOKEN',secret)
+    message=safe_error(ValueError('Failed '+secret+' https://user:password@example.com/blob?signature=private&token=hidden'))
+    assert secret not in message and 'password' not in message and 'private' not in message and 'hidden' not in message
+    assert '[REDACTED]' in message and 'https://example.com/blob' in message
+
+
+def test_failed_migration_reports_specific_reason_and_location(monkeypatch,capsys,tmp_path):
+    from vlade.storage import migrate
+    monkeypatch.setattr(sys,'argv',['migrate_hf_assets.py','--root',str(tmp_path)])
+    def failed(*args,**kwargs):raise ValueError('Completed sealed checkpoint required')
+    monkeypatch.setattr(migrate,'migrate',failed)
+    with pytest.raises(SystemExit) as stopped:migrate.main()
+    assert stopped.value.code==1
+    report=json.loads(capsys.readouterr().out)
+    assert report['message']=='Completed sealed checkpoint required' and report['error_type']=='ValueError'
+    assert report['where'].startswith('test_hf_assets.py:')

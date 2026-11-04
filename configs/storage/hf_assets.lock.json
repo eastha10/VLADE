@@ -156,6 +156,133 @@
       "revision": "95220f9a3421a7ff12d4218e73d09ade830fa9a3",
       "format": "upstream_model",
       "local_name": "openvla-7b-oft-finetuned-libero-10"
+    },
+    "prepared_d_seed42": {
+      "repo_id": "VLADE-konkuk/libero-plus-prepared",
+      "repo_type": "dataset",
+      "format": "archive",
+      "archive_path": "assets/prepared_d_seed42/libero_plus_episode80_d_seed42.tar",
+      "archive_bytes": 11371123200,
+      "archive_sha256": "213cad54a461998c58be542085b7d621c2f152006f84a999d3dbd6279b4d45ff",
+      "archive_root": "libero_plus_episode80_d_seed42",
+      "identity_files": {
+        "manifest.json": {
+          "bytes": 65159344,
+          "sha256": "9a09c51dac170cb7452e0f3cd33f563e73429d6fe8f7a880daa8568ec2cf981b"
+        },
+        "normalization.json": {
+          "bytes": 3333,
+          "sha256": "e1dbf29ea83cc2e0fbcb90e68a7ad15660eb210baa5a333d20bd16c80d275af3"
+        },
+        "splits.json": {
+          "bytes": 5167708,
+          "sha256": "379376e5cfb19d0b9d0a5bdd548e01e4c658f09de3fdd1bff178b3aad7ed9900"
+        }
+      },
+      "local_name": "libero_plus_episode80_d_seed42",
+      "revision": "6d2542577647a9e291554524af4e1dd0928e9df6"
+    },
+    "ava_t0": {
+      "repo_id": "VLADE-konkuk/VLADE-checkpoints",
+      "repo_type": "model",
+      "revision": "4c12bf032fdccbede71b0527f27528a8be4f90f6",
+      "format": "directory",
+      "prefix": "assets/ava_t0",
+      "local_name": "avavla-libero-4in1",
+      "files": {
+        "README.md": {
+          "bytes": 1040,
+          "sha256": "d06284170be556de4519ae0355107081c58c409e91eea978b27916ddf06efa11"
+        },
+        "action_head--40000_checkpoint.pt": {
+          "bytes": 302242270,
+          "sha256": "165a2a51a5e8d3f061a15d6ff480a4bf963a913246537758e597b327ba15cba0"
+        },
+        "added_tokens.json": {
+          "bytes": 21,
+          "sha256": "ab43123267b190cb7990bc9f2ae4ad32dcb7ed029fb0fccb1b4e062c6f54a2a1"
+        },
+        "config.json": {
+          "bytes": 61574,
+          "sha256": "22d1258e0e676a53eb0ab531ae4055876f3edbf0dbd14f12a91eaa6392c304d1"
+        },
+        "configuration_prismatic.py": {
+          "bytes": 6005,
+          "sha256": "e13181aec9e6a789f876f51b9edbb65c58fccb0e85acb47304c7824938abfd4c"
+        },
+        "dataset_statistics.json": {
+          "bytes": 11871,
+          "sha256": "6ec6ef68d0d5bae4cb5f9fc9acb715a22b9f4545e9e9b300d0d88695cd7afec3"
+        },
+        "download_manifest.json": {
+          "bytes": 4949,
+          "sha256": "9d8faa7a5946c97e66a0752b4d837ee409c96c4d782fd208fc44391d38db5ca8"
+        },
+        "generation_config.json": {
+          "bytes": 136,
+          "sha256": "67fbe17b12e8beb5be98eb911483971cc78589e51a37ac0cce9cd499d06a8bf1"
+        },
+        "model-00001-of-00004.safetensors": {
+          "bytes": 4925122448,
+          "sha256": "84a8f32f7d5a7bbd8d15fd9fda5d3206d08e70bbe93c8256f98fc0c30f2111eb"
+        },
+        "model-00002-of-00004.safetensors": {
+          "bytes": 4947392496,
+          "sha256": "3e2bb3906a5629869d1521a44c04a1e1523387a186d8050ed713763bc36f7b14"
+        },
+        "model-00003-of-00004.safetensors": {
+          "bytes": 4947417456,
+          "sha256": "75f140702befe90674dfc3a30d29afc3ded0e47ed3f7e657aa2aea4149c99e59"
+        },
+        "model-00004-of-00004.safetensors": {
+          "bytes": 262668432,
+          "sha256": "a877e3fece1feafb80f59f91585ce04379ee39e2bf9a25cb7b4acf237e896e60"
+        },
+        "model.safetensors.index.json": {
+          "bytes": 94764,
+          "sha256": "ca8b53fed8133ee2afcd2fc483de8febf7f5bb0f6bcb09f91189772e59e8f659"
+        },
+        "modeling_prismatic.py": {
+          "bytes": 55413,
+          "sha256": "9c1a50fa37a1e6843ae0eb1be016acc5d61e8d83b06b60b9ef0ce74ebc44ecb7"
+        },
+        "preprocessor_config.json": {
+          "bytes": 1650,
+          "sha256": "bd024783fb785cbdfe35b710b621c5e8678d4c157a9ba625675e67d40d1757da"
+        },
+        "processing_prismatic.py": {
+          "bytes": 12718,
+          "sha256": "06563586bbc73d36501a14a231a3174904ede830d33174d0c625ece8e931ef1e"
+        },
+        "processor_config.json": {
+          "bytes": 130,
+          "sha256": "167e026d8121f6cb0bf5c18310b97ba8139152f970822bb3824213bd37dc7a76"
+        },
+        "proprio_projector--40000_checkpoint.pt": {
+          "bytes": 67275120,
+          "sha256": "59a5f17c51fc4798e28e28e7fa9eb943808e744cfa363c72aa49a4910399ffd1"
+        },
+        "special_tokens_map.json": {
+          "bytes": 552,
+          "sha256": "cb90ee5cf5793aa444039af9795b00db59d3fef8942e7eca9cf1990bab370d61"
+        },
+        "tokenizer.json": {
+          "bytes": 1842976,
+          "sha256": "8f5e2869e1807b8bb3c7717a294539c37e9de5d728ad60e31ef57e83cc5ea527"
+        },
+        "tokenizer.model": {
+          "bytes": 499723,
+          "sha256": "9e556afd44213b6bd1be2b850ebbbd98f5481437a8021afaf58ee7fb1818d347"
+        },
+        "tokenizer_config.json": {
+          "bytes": 1192,
+          "sha256": "f5f1d3ed015ebb71cf11686ff00bc8e0c25957bbf3952f95312cecc9b168fbea"
+        },
+        "vision_attn_weight_generator--40000_checkpoint.pt": {
+          "bytes": 100913314,
+          "sha256": "9cf07e15999695f5e0ffc4089f569dbeffd70f4684a15ada84cf2472d7d45118"
+        }
+      }
     }
   }
 }
