@@ -1,0 +1,147 @@
+{
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "id": "10oTeuqnrn_hQyYAK4LxiSR65k4JzCOJb",
+      "bytes": 22753,
+      "sha256": "891620d9033b911e798b96456ebf8c12be27285d17a91520811223e4c8e2d49d",
+      "mime_type": "text/markdown"
+    },
+    {
+      "path": "README.md",
+      "id": "1mMrtQjmBZ1T-aIcs0QMd10ZhrMi7-9pA",
+      "bytes": 16149,
+      "sha256": "89e05b2e1292115511ba676c8463834d0efae9d0c66d516ee3e7ed0d2473b4f9",
+      "mime_type": "text/markdown"
+    },
+    {
+      "path": "STRUCTURE.md",
+      "id": "17tSMF3m-0Zd7lZF1LzR43p_rVEI3sjbx",
+      "bytes": 16435,
+      "sha256": "2b7536662f81ef82aa8f8a18c8ea8a1880fbfa70b9f15cfe45b91f284a8d369c",
+      "mime_type": "text/markdown"
+    },
+    {
+      "path": "docs/environment/libero_plus_fullframes.md",
+      "id": "1zuZdo-lq1Q4fwSMUUuCjorwatlLXv3yw",
+      "bytes": 6575,
+      "sha256": "01c546614ea7e014969f0fcb0c6c9e63d8d5d528b86b09666a22aa295bf4bb23",
+      "mime_type": "text/markdown"
+    },
+    {
+      "path": "experiments/colab_01_download_data_weights.ipynb",
+      "id": "18ebTvNOxtQ5rnaKMcwlImQlsRpRHMyhg",
+      "bytes": 48506,
+      "sha256": "ea1939d5c337f532e164f16d210a164f7a8caa38e5dadc1b77f79b856302995d",
+      "mime_type": "application/x-ipynb+json"
+    },
+    {
+      "path": "experiments/colab_02_ava_fft_and_fixed_cache.ipynb",
+      "id": "1AUmqOW3Menl2V5Veo9V22at5BlCa1K8b",
+      "bytes": 37922,
+      "sha256": "c6586fafc471f6bd1bb491824c00a0486988d6284bea5a0e120a3492185fbe99",
+      "mime_type": "application/x-ipynb+json"
+    },
+    {
+      "path": "experiments/colab_03_qwen_task_only.ipynb",
+      "id": "1dC8f7xDzFbqoTsf-ZVdnRFBVVVU0DMuy",
+      "bytes": 20322,
+      "sha256": "2faf18c37a0605bccff0e77e627d4a1a23cbf1a3df91f284603456c10e215505",
+      "mime_type": "application/x-ipynb+json"
+    },
+    {
+      "path": "experiments/colab_04_ava_paper_best.ipynb",
+      "id": "1ujuZs-jAd5jFOK61bk-CpSrZzdOA-svr",
+      "bytes": 28331,
+      "sha256": "ec211448745c113fce5a110a9da39a0037d5aff0a5ea8bb81026de3f1d0c47b5",
+      "mime_type": "application/x-ipynb+json"
+    },
+    {
+      "path": "experiments/colab_05_qwen_action_distillation.ipynb",
+      "id": "16HUYnZZfc21TmVZWWMY0RGXaEH9Bs-Mu",
+      "bytes": 22878,
+      "sha256": "19ac33c0424c13de22a22d44f6f094feef09c60097b8a7dbef6e1dbe79b45477",
+      "mime_type": "application/x-ipynb+json"
+    },
+    {
+      "path": "experiments/colab_ava_fft_suite_balanced_cu.ipynb",
+      "id": "1MhqgAKh01iVj2oCGgiXX4DHInzmEu7zr",
+      "bytes": 101777,
+      "sha256": "1b92ef45d4510b95021b6f1dba7af3f1d36faef71a5611fe3137bf211e5cdc84",
+      "mime_type": "application/x-ipynb+json"
+    },
+    {
+      "path": "experiments/manifests/colab_source.json",
+      "id": "1I9FHxnVvbB7teUmPCSOkZP2JhYSOTNI2",
+      "bytes": 27617,
+      "sha256": "369ed16a4f3d174ce55377f447ff4bb5425aeffd895fbfb4c0d37b3d141c75f4",
+      "mime_type": "application/json"
+    },
+    {
+      "path": "scripts/data/prepare_fullframes.py",
+      "id": "128NenQdXpMExRJ4_Aa1BCogKBhXlfnJX",
+      "bytes": 252,
+      "sha256": "0dabdcaecda9c3fa1580dda46c9896dd7031d5df383bc0bb731d176101c48152",
+      "mime_type": "text/x-python"
+    },
+    {
+      "path": "src/vlade/data/fullframes.py",
+      "id": "1-IPK8G7rR5yqjxaK32fsUIOqSUlztGWv",
+      "bytes": 24731,
+      "sha256": "9b115ca2605eabadad9f3d3e84b122b7a42d96c80977bb59757f8d5fc58ef301",
+      "mime_type": "text/x-python"
+    },
+    {
+      "path": "src/vlade/data/tfrecord_frames.py",
+      "id": "1_pCVju2Gy6diOF7wMfhBdDbUSlYkzP3H",
+      "bytes": 7747,
+      "sha256": "afce3b5f73d553736b6fbe92a658abac2cb161cabc6377d8fef244c9e2862b8b",
+      "mime_type": "text/x-python"
+    },
+    {
+      "path": "src/vlade/storage/assets.py",
+      "id": "13iqXL4byG0ZZbaHDNnM7DM-Ouxa7Sj0d",
+      "bytes": 13296,
+      "sha256": "20cab3040f1236d7170d1b2fa55e2b14a7a0d59c2eee4515f80c71a4a7f6302f",
+      "mime_type": "text/x-python"
+    },
+    {
+      "path": "src/vlade/utils/fullframes_notebook.py",
+      "id": "1_ej_uVxQd7XkbI8EOHSpEyeqIZg3fdH4",
+      "bytes": 7502,
+      "sha256": "14d475eb0efd2a766797bc2160b3425d9706b4a63b0a2aef21db64f94ee60f8a",
+      "mime_type": "text/x-python"
+    },
+    {
+      "path": "src/vlade/utils/hf_notebooks.py",
+      "id": "1rrxYbocM5RakIClek2XTurmu9lH4tHML",
+      "bytes": 12372,
+      "sha256": "06617b9c2a59f5aba20ce5a54feca9efe62e41343315a8956d7db6f0d73650ab",
+      "mime_type": "text/x-python"
+    },
+    {
+      "path": "tests/unit/test_colab_source_files.py",
+      "id": "1vtHAibXsF_tZK9XSq76qKiquAsUT79u9",
+      "bytes": 6832,
+      "sha256": "773326336e52e24930e4e9b3e6a71062b470fe19ed25409c6d8c3fce88393baf",
+      "mime_type": "text/x-python"
+    },
+    {
+      "path": "tests/unit/test_fullframes.py",
+      "id": "1MNPlTTMgDftuyx23MB7oiLl_BhDm2CuC",
+      "bytes": 11829,
+      "sha256": "a19f96d49839b6605af7cef8c47ebb8305c7c3bc63b8daecc0f7d18b29ca334c",
+      "mime_type": "text/x-python"
+    },
+    {
+      "path": "tests/unit/test_hf_assets.py",
+      "id": "1BFVxoVG-NSK99GTsHnmR8KCRPggv1Fzv",
+      "bytes": 15145,
+      "sha256": "412bba5838c926f036f9fe7f8480b3dbef723f410e810f0ffa03396299131288",
+      "mime_type": "text/x-python"
+    }
+  ],
+  "all_bytes_equal": true,
+  "notebook_source_digest": "369ed16a4f3d174ce55377f447ff4bb5425aeffd895fbfb4c0d37b3d141c75f4",
+  "existing_outputs_preserved": true
+}

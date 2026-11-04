@@ -4,6 +4,10 @@
 [Hub 인증·체크포인트·재개 안내](docs/environment/hugging_face_checkpoints.md)를 참고하십시오.
 기존 FFT/Qwen/논문 AVA 루프를 유지하며 환경 변수로 켭니다. 토큰은 Colab Secrets로 전달합니다.
 
+원본의 모든 프레임을 별도 공개 HF 데이터셋으로 보존하는 CPU 재처리는
+[전체 프레임 데이터 안내](docs/environment/libero_plus_fullframes.md)를 참고하십시오.
+Colab 01 맨 위의 전용 셀을 사용하며 기존 비공개 자료·학습 기본값은 유지합니다.
+
 **Vision-Language-Action Distillation for Edge Deployment**
 
 VLADE는 대규모 Vision-Language-Action(VLA) 로봇 제어 정책의 시각·언어 이해와 조작 능력을 경량 Student 모델에 전달하여, 제한된 연산 자원을 가진 엣지 디바이스에서도 높은 작업 성공률과 낮은 제어 지연시간을 함께 달성하는 것을 목표로 하는 연구 프로젝트입니다.

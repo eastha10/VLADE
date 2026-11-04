@@ -108,6 +108,7 @@
 
 - 모든 협업자의 Codex는 이 절과 [Hub 인증·체크포인트·재개 안내](docs/environment/hugging_face_checkpoints.md)를 함께 따릅니다. 코드·설정·문서는 Git과 Drive에, 공유 가중치·데이터 정본은 Hugging Face에 게시합니다. 로컬·Colab SSD는 실행 캐시로 사용하며 기존 Drive 원본은 보존합니다.
 - 가중치와 학습 checkpoint의 기본 대상은 **비공개 model 저장소 `VLADE-konkuk/VLADE-checkpoints`**입니다. 전처리 데이터는 비공개 dataset `VLADE-konkuk/libero-plus-prepared`, 전체 Teacher cache는 비공개 dataset `VLADE-konkuk/vlade-teacher-cache`로 구분합니다. 임의의 개인 저장소나 공개 저장소로 바꾸지 않습니다.
+- 명시적으로 승인된 예외: 원본 전체 프레임 D/seed42 재처리 결과는 **공개 dataset `VLADE-konkuk/libero-plus-fullframes`**에 별도로 게시합니다. 기존 비공개 자료는 공개하지 않습니다. Colab 01의 단일 전체 프레임 셀과 `docs/environment/libero_plus_fullframes.md`를 따르며, 전체 검증과 `COMPLETE` 전에는 완료 자료로 등록하거나 기존 학습 입력을 대체하지 않습니다.
 - 협업자는 각자 조직 저장소 접근 권한이 있는 계정과 해당 저장소 쓰기 권한의 토큰을 준비합니다. Colab은 각 노트북에서 Secrets `HF_TOKEN` 접근을 허용하고, 로컬은 `hf auth login` 또는 외부에서 주입한 `HF_TOKEN`을 사용합니다. 토큰을 공유·출력하거나 코드·명령 인수·Git·Drive·manifest·작업 기록에 넣지 않습니다. 지침을 Git으로 전달해도 계정 권한·인증은 자동 전달되지 않습니다.
 
 ### 학습 checkpoint 저장·재개

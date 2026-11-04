@@ -161,6 +161,9 @@ def apply_hf_storage(path: Path, root: Path) -> None:
     if path.name.startswith("colab_01_"):
         original = [item for item in value["cells"] if item.get("id") not in {"hf-migration-purpose", "migrate-existing-assets-to-hf"}]
         intro = cell("markdown", "# 01 · HF 자료 이관과 준비\n기존 자료 이관은 다음 셀에서 실행합니다. 기존 다운로드·전처리 셀은 아래 원래 구역에 보존하고 접어 두었습니다.", "hf-migration-purpose")
+        previous_intro = next((c for c in value['cells'] if c.get('id')=='hf-migration-purpose'),None)
+        if previous_intro:
+            intro['metadata'] = previous_intro.get('metadata', {}).copy()
         previous = next((c for c in value["cells"] if c.get("id")=="migrate-existing-assets-to-hf"), None)
         migrate = migration_cell(root)
         if previous:
@@ -176,3 +179,6 @@ def apply_hf_storage(path: Path, root: Path) -> None:
         metadata = value.setdefault("metadata", {}).setdefault("colab", {})
         metadata["collapsed_sections"] = list(dict.fromkeys([*metadata.get("collapsed_sections", []), "purpose"]))
     path.write_text(json.dumps(value, ensure_ascii=False, indent=1)+"\n", encoding="utf-8")
+    if path.name.startswith('colab_01_'):
+        from vlade.utils.fullframes_notebook import apply_fullframes
+        apply_fullframes(path,root)

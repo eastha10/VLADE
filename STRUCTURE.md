@@ -4,6 +4,12 @@
 `scripts/train/hub_checkpoints.py`는 인증 검사와 수동 복구 진입점을 제공합니다.
 사용법과 best 기준은 `docs/environment/hugging_face_checkpoints.md`에 있습니다.
 
+`src/vlade/data/tfrecord_frames.py`는 원본 CRC 검사와 연속 action query를,
+`src/vlade/data/fullframes.py`는 모든 프레임의 Parquet 변환·구간별 HF 게시·재시작을 담당합니다.
+`scripts/data/prepare_fullframes.py`가 실행 진입점이며
+`src/vlade/utils/fullframes_notebook.py`가 Colab 01의 단일 CPU 내보내기 셀을 관리합니다.
+기존 희소 데이터 어댑터와 구분하며 `docs/environment/libero_plus_fullframes.md`에 사용법을 둡니다.
+
 ```text
 vlade/
 ├─ .harness/

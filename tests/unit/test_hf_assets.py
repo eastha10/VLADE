@@ -50,6 +50,20 @@ def test_directory_asset_download_cache_and_tamper(tmp_path,monkeypatch):
         assets.fetch_asset('example',registry=registry,cache=tmp_path/'cache')
 
 
+def test_fullframe_streaming_descriptor_verifies_seal_without_downloading_images(tmp_path,monkeypatch):
+    manifest=json.dumps({'identity':'export','stored_frame_interval_steps':1,'files':{'data/train.parquet':row(b'large images')}}).encode()
+    files={'dataset_manifest.json':manifest,'COMPLETE':json.dumps({'identity':'export','manifest_sha256':row(manifest)['sha256']}).encode(),
+        'reference/splits.json':b'[]','reference/normalization.json':b'{}'}
+    record=dict(repo_id='test/private',repo_type='dataset',revision='a'*40,format='parquet_frames',
+        local_name='descriptor',metadata_files={k:row(v) for k,v in files.items()})
+    registry=registry_file(tmp_path,record);mock_download(monkeypatch,tmp_path,files)
+    result=assets.fetch_asset('example',registry=registry,cache=tmp_path/'cache')
+    assert not (result/'data').exists()
+    assert assets.fetch_asset('example',registry=registry,cache=tmp_path/'cache')==result
+    (result/'COMPLETE').write_bytes(b'bad seal')
+    with pytest.raises(ValueError,match='integrity'):assets.fetch_asset('example',registry=registry,cache=tmp_path/'cache')
+
+
 def test_archive_roundtrip_preserves_dataset_identity(tmp_path,monkeypatch):
     files={'manifest.json':b'{"split":"sealed"}','splits.json':b'[]','normalization.json':b'{}','COMPLETE':b'ok\n'}
     archive=tmp_path/'prepared.tar'

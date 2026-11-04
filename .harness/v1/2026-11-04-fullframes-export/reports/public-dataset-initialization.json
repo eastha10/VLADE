@@ -1,0 +1,10 @@
+{
+  "episodes": 14347,
+  "export_identity": "d11cb0192dbfce707b8c963c7573ae5b174ba0f14de986c485a4bac8062ac19c",
+  "frames": 2238036,
+  "private": false,
+  "reference_revision": "21a81ee2c9cf120019ed18c5d1cd06bf4336c69e",
+  "repo_id": "VLADE-konkuk/libero-plus-fullframes",
+  "source_tfds_bytes": 83052490137,
+  "status": "PREPARING"
+}

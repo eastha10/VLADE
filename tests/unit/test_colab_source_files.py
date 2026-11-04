@@ -51,6 +51,11 @@ def test_generation_keeps_source_structure_without_archive_or_self_reference(tmp
         "third_party/openvla_oft/other.py": b"not this execution environment",
         "experiments/colab_01_download_data_weights.ipynb": b"old notebook",
     }
+    # The independent full-frame cell pins the minimal transfer implementation.
+    for relative in ('src/vlade/data/tfrecord_frames.py','src/vlade/data/fullframes.py',
+        'src/vlade/storage/__init__.py','src/vlade/storage/assets.py','src/vlade/storage/migrate.py',
+        'src/vlade/storage/drive_checkpoint.py','scripts/data/prepare_fullframes.py'):
+        included[relative]=b'# source guard fixture\n'
     for relative, data in {**included, **excluded}.items():
         write_file(root, relative, data)
     write_manifest(root, {"old.py": "old"})

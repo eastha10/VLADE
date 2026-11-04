@@ -127,6 +127,18 @@ def _extract_archive(archive: Path, stage: Path, expected: dict) -> None:
         raise ValueError("Prepared HF dataset is incomplete")
 
 
+def _verify_frame_metadata(root: Path, record: dict) -> None:
+    """Validate a small streaming descriptor without downloading all image shards."""
+    _verify_files(root, record['metadata_files'])
+    manifest_path = root / 'dataset_manifest.json'
+    manifest = json.loads(manifest_path.read_text('utf-8'))
+    complete = json.loads((root / 'COMPLETE').read_text('utf-8'))
+    if (sha256(manifest_path) != complete.get('manifest_sha256') or
+            manifest.get('identity') != complete.get('identity') or
+            manifest.get('stored_frame_interval_steps') != 1 or not manifest.get('files')):
+        raise ValueError('Full-frame dataset is incomplete or has a mismatched seal')
+
+
 def fetch_asset(key: str, *, registry: Path | None = None, cache: Path | None = None) -> Path:
     record = asset_record(key, registry)
     destination = cache_path(key, record, cache)
@@ -141,6 +153,8 @@ def fetch_asset(key: str, *, registry: Path | None = None, cache: Path | None = 
                 raise ValueError('Prepared HF dataset is incomplete')
         elif record["format"] == "directory":
             _verify_files(destination, record["files"])
+        elif record["format"] == "parquet_frames":
+            _verify_frame_metadata(destination, record)
         elif record["format"] == "upstream_model":
             manifest = json.loads((destination / "download_manifest.json").read_text(encoding="utf-8"))
             _verify_files(destination, {row["path"]:{"bytes":row["bytes"],"sha256":row["sha256"]}
@@ -175,6 +189,15 @@ def fetch_asset(key: str, *, registry: Path | None = None, cache: Path | None = 
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
         _verify_files(stage, record["files"])
+    elif record["format"] == "parquet_frames":
+        stage.mkdir()
+        for relative in record['metadata_files']:
+            target = stage / safe_relative(relative)
+            source = Path(hf_hub_download(record['repo_id'], relative,
+                repo_type=record['repo_type'], revision=record['revision']))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+        _verify_frame_metadata(stage, record)
     elif record["format"] == "archive":
         archive = Path(hf_hub_download(record["repo_id"], record["archive_path"],
             repo_type=record["repo_type"], revision=record["revision"]))
