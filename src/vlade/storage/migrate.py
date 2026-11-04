@@ -13,6 +13,7 @@ from urllib.parse import urlsplit, urlunsplit
 from pathlib import Path
 
 from vlade.storage.assets import REGISTRY_FILE, REGISTRY_REPO, configure_http, safe_relative, sha256
+from vlade.storage.drive_checkpoint import checkpoint_sources
 
 PREPARED_IDENTITY = {
     "manifest.json": "9a09c51dac170cb7452e0f3cd33f563e73429d6fe8f7a880daa8568ec2cf981b",
@@ -226,24 +227,6 @@ def publish_prepared(api, archive: Path) -> dict:
     result = update_registry(api,key,record)
     print(json.dumps({"asset":key,"status":"published_verified","revision":commit.oid}),flush=True)
     return result
-
-
-def checkpoint_sources(directory: Path) -> tuple[dict,dict]:
-    """Restore Drive copy suffixes through the checkpoint seal, without renaming Drive files."""
-    candidates = {}
-    for path in directory.rglob("*"):
-        if not path.is_file(): continue
-        canonical = "/".join(re.sub(r"(?:의 사본| - Copy)$", "", part).rstrip()
-                              for part in path.relative_to(directory).parts)
-        if canonical in candidates: raise ValueError("Ambiguous copied checkpoint file names")
-        candidates[canonical] = path
-    if "checkpoint_manifest.json" not in candidates or "COMPLETE" not in candidates:
-        raise ValueError("Completed sealed checkpoint required")
-    seal = json.loads(candidates["checkpoint_manifest.json"].read_text(encoding="utf-8"))
-    names = set(seal["files"]) | {"checkpoint_manifest.json","COMPLETE"}
-    if not names <= set(candidates): raise ValueError("Copied checkpoint is missing sealed files")
-    if not {"trainer_state.pt","state.pt"} & names: raise ValueError("Resumable checkpoint state required")
-    return {name:candidates[name] for name in names},seal
 
 
 def model_sources(directory: Path) -> dict[str,Path]:

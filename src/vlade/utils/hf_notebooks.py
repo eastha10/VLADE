@@ -46,7 +46,7 @@ def hf_path(value, python=None, *, fetch=True):
 
 def migration_cell(root: Path) -> dict:
     from vlade.utils.colab_notebooks import cell
-    names = ("src/vlade/storage/__init__.py", "src/vlade/storage/assets.py", "src/vlade/storage/migrate.py",
+    names = ("src/vlade/storage/__init__.py", "src/vlade/storage/assets.py", "src/vlade/storage/migrate.py", "src/vlade/storage/drive_checkpoint.py",
              "scripts/data/hf_assets.py", "scripts/data/migrate_hf_assets.py")
     hashes = {name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in names if (root/name).is_file()}
     source = '''
@@ -74,9 +74,15 @@ if RUN_HF_MIGRATION:
     env = os.environ.copy()
     env.update(HF_TOKEN=userdata.get('HF_TOKEN'), HF_HOME='/content/vlade_hf_migration_cache',
                HF_TOKEN_PATH='/content/vlade_hf_token', HF_HUB_DISABLE_PROGRESS_BARS='1', PYTHONUNBUFFERED='1')
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('vlade_drive_checkpoint', PROJECT_ROOT/'src/vlade/storage/drive_checkpoint.py')
+    checkpoint_io = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checkpoint_io)
+    checkpoint = checkpoint_io.prepare_colab_checkpoint(PROJECT_ROOT, python.parent.parent/'checkpoint-source',
+        '1YF8pC6rg55KIQrLWAVE5lcvdXAvAhHCB', expected_step=1975)
     log_path = python.parent.parent / 'migration.log'
     print('이관 진행 로그:', log_path, flush=True)
-    command = [str(python), '-u', str(PROJECT_ROOT/'scripts/data/migrate_hf_assets.py'), '--root', str(PROJECT_ROOT)]
+    command = [str(python), '-u', str(PROJECT_ROOT/'scripts/data/migrate_hf_assets.py'), '--root', str(PROJECT_ROOT), '--checkpoint', str(checkpoint)]
     with log_path.open('a', encoding='utf-8') as log:
         with subprocess.Popen(command, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               text=True, encoding='utf-8', errors='replace', bufsize=1) as process:

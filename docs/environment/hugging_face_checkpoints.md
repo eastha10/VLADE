@@ -164,6 +164,13 @@ Drive 파일은 이름을 바꾸거나 삭제하지 않습니다. 기존 step-19
 포함하여 보관하되 이번 코드와 fingerprint가 다르면 기존 재개 검사에서 거부됩니다.
 확인되지 않은 과거 checkpoint를 최고 성능으로 지정하지 않습니다.
 
+Drive 마운트에서 복사본 완료 표시를 인식하지 못하면 기존 이관 셀이 파일 ID로 원본을
+읽는 경로로 전환합니다. 이때 표준 Colab Google 인증이 한 번 필요할 수 있으며 Drive에는
+읽기 요청만 보냅니다. HF_TOKEN을 Google 인증에 사용하지 않습니다. 체크포인트는
+`/content/vlade_hf_transfer/checkpoint-source/`에 준비하고 원래 seal의 크기·SHA256과 완료
+표시를 모두 확인한 뒤 업로드합니다. 다운로드 진행 바이트가 출력되며 완료된 파일과
+중단된 부분 파일을 재사용합니다. 원본 Drive 이름이나 완료 표시는 수정하지 않습니다.
+
 Suite-balanced notebook은 원래 audited `suite_map.json`이 전처리 자료 안에 있거나
 `suite_map_seed42`로 별도 게시되어 있어야 합니다. 없으면 준비 단계에서 중단합니다.
 레이블을 instruction 문장으로 추측하여 생성하지 않습니다. 전체 Teacher cache는 실제

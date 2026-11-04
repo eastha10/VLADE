@@ -166,3 +166,84 @@ def test_failed_migration_reports_specific_reason_and_location(monkeypatch,capsy
     report=json.loads(capsys.readouterr().out)
     assert report['message']=='Completed sealed checkpoint required' and report['error_type']=='ValueError'
     assert report['where'].startswith('test_hf_assets.py:')
+
+
+def test_copied_checkpoint_names_accept_unicode_normalization_and_whitespace(tmp_path):
+    import unicodedata
+    payload={'trainer_state.pt':b'state','tokenizer.json':b'{}'}
+    seal={'step':1975,'microsteps':15800,'files':{k:row(v) for k,v in payload.items()}}
+    for name,data in {**payload,'checkpoint_manifest.json':json.dumps(seal).encode(),'COMPLETE':b'ok\n'}.items():
+        (tmp_path/unicodedata.normalize('NFD',name+'의  사본\u00a0')).write_bytes(data)
+    sources,found=checkpoint_sources(tmp_path)
+    assert found==seal and set(payload)<=set(sources)
+
+
+def test_ambiguous_normalized_checkpoint_names_remain_rejected(tmp_path):
+    (tmp_path/'COMPLETE의 사본').write_bytes(b'ok')
+    (tmp_path/'COMPLETE - Copy').write_bytes(b'ok')
+    with pytest.raises(ValueError,match='Ambiguous'):checkpoint_sources(tmp_path)
+
+
+def drive_session(payload,seal,*,corrupt=False,complete=True):
+    all_files={**payload,'checkpoint_manifest.json':json.dumps(seal).encode(),'COMPLETE':b'ok\n'}
+    rows=[{'id':str(i),'name':name+'의 사본','size':str(len(data)),'mimeType':'application/octet-stream'}
+          for i,(name,data) in enumerate(all_files.items()) if complete or name!='COMPLETE']
+    by_id={str(i):(name,data) for i,(name,data) in enumerate(all_files.items())}
+    class Response:
+        def __init__(self,data=b'',listing=None,offset=None,total=None):
+            self.content=data;self.listing=listing;self.status_code=206 if offset is not None else 200
+            self.headers={} if offset is None else {'Content-Range':f'bytes {offset}-{total-1}/{total}'}
+        def raise_for_status(self):pass
+        def json(self):return self.listing
+        def iter_content(self,size):yield self.content
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+    class Session:
+        def __init__(self):self.ranges=[]
+        def get(self,url,params,**kwargs):
+            if 'q' in params:return Response(listing={'files':rows})
+            name,data=by_id[url.rsplit('/',1)[-1]]
+            if corrupt and name=='trainer_state.pt':data=b'x'*len(data)
+            requested=kwargs.get('headers',{}).get('Range')
+            offset=int(requested[6:-1]) if requested else None
+            if offset is not None:self.ranges.append((name,offset))
+            return Response(data=data[offset or 0:],offset=offset,total=len(data))
+    return Session(),all_files
+
+
+def test_drive_id_staging_resumes_partial_and_preserves_seal(tmp_path,monkeypatch):
+    from vlade.storage.drive_checkpoint import stage_drive_checkpoint
+    from vlade.storage import drive_checkpoint
+    from types import SimpleNamespace
+    payload={'trainer_state.pt':b'resumable optimizer state','tokenizer.json':b'{}'}
+    seal={'step':1975,'microsteps':15800,'files':{k:row(v) for k,v in payload.items()}}
+    session,all_files=drive_session(payload,seal)
+    cache=tmp_path/'folder'/hashlib.sha256(all_files['checkpoint_manifest.json']).hexdigest()[:16]
+    cache.mkdir(parents=True);(cache/'.trainer_state.pt.partial').write_bytes(payload['trainer_state.pt'][:4])
+    remaining=sum(len(data) for name,data in all_files.items() if name!='COMPLETE')-4
+    monkeypatch.setattr(drive_checkpoint.shutil,'disk_usage',lambda path:SimpleNamespace(free=remaining+2*1024**3))
+    result=stage_drive_checkpoint(session,'folder',tmp_path)
+    sources,found=checkpoint_sources(result)
+    assert found==seal and all(sources[name].read_bytes()==data for name,data in all_files.items())
+    assert ('trainer_state.pt',4) in session.ranges
+    session.ranges.clear();assert stage_drive_checkpoint(session,'folder',tmp_path)==result
+    assert not session.ranges
+
+
+@pytest.mark.parametrize('reason',['missing_complete','wrong_hash'])
+def test_drive_id_staging_never_marks_invalid_payload_complete(tmp_path,reason):
+    from vlade.storage.drive_checkpoint import stage_drive_checkpoint
+    payload={'trainer_state.pt':b'state'}
+    seal={'step':1975,'microsteps':15800,'files':{k:row(v) for k,v in payload.items()}}
+    session,_=drive_session(payload,seal,complete=reason!='missing_complete',corrupt=reason=='wrong_hash')
+    with pytest.raises(ValueError):stage_drive_checkpoint(session,'folder',tmp_path)
+    assert not list(tmp_path.rglob('COMPLETE'))
+
+
+def test_valid_mounted_checkpoint_needs_no_colab_api_auth(tmp_path):
+    from vlade.storage.drive_checkpoint import prepare_colab_checkpoint
+    folder=tmp_path/'checkpoints/fft/step-0001975';folder.mkdir(parents=True)
+    (folder/'trainer_state.pt').write_bytes(b'state');(folder/'COMPLETE').write_text('ok')
+    (folder/'checkpoint_manifest.json').write_text(json.dumps({'step':1975,'files':{'trainer_state.pt':row(b'state')}}))
+    assert prepare_colab_checkpoint(tmp_path,tmp_path/'work','folder')==folder
+    assert not (tmp_path/'work').exists()
