@@ -34,7 +34,8 @@ def bundle_hash(directory: Path) -> str:
 
 
 def validate_selection(selection: dict, data: EpisodeData) -> Path:
-    checkpoint = Path(selection["checkpoint"])
+    from vlade.storage.assets import resolve_path
+    checkpoint = resolve_path(selection["checkpoint"])
     if not (checkpoint / "COMPLETE").is_file() or not (checkpoint / "vlade_fft.json").is_file():
         raise ValueError("T1 must be a completed VLADE FFT checkpoint; public T0 is not T1")
     verify_checkpoint(checkpoint)
@@ -65,6 +66,8 @@ def validate_selection(selection: dict, data: EpisodeData) -> Path:
 
 class SequentialTeacher:
     def __init__(self, checkpoint: Path):
+        from vlade.storage.assets import resolve_path
+        checkpoint = resolve_path(checkpoint)
         from vlade.training.fft import FFTConfig, _activate_upstream, _make_model_and_components
         configure_tensorflow_cpu()
         _activate_upstream("ava_vla")

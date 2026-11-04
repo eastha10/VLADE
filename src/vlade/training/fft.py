@@ -11,11 +11,13 @@ import hashlib
 import importlib.metadata
 import json
 import math
+import os
 import platform
 import random
 import shutil
 import subprocess
 import sys
+import time
 import uuid
 from datetime import datetime, timezone
 from dataclasses import asdict, dataclass, replace
@@ -68,11 +70,14 @@ class FFTConfig:
         common = raw["fft_defaults"]
         merged = {**common, **settings, "model": model, "config_path": path.resolve()}
         for key in ("checkpoint", "data_root", "output_dir"):
+            if key != "output_dir" and str(merged[key]).startswith("hfasset:"):
+                merged[key] = Path(merged[key])
+                continue
             value = Path(merged[key]).expanduser()
             merged[key] = value if value.is_absolute() else REPO_ROOT / value
         if merged.get("prepared_data_root") is not None:
             value = Path(merged["prepared_data_root"]).expanduser()
-            merged["prepared_data_root"] = value if value.is_absolute() else REPO_ROOT / value
+            merged["prepared_data_root"] = value if value.is_absolute() or str(value).startswith("hfasset:") else REPO_ROOT / value
         cfg = cls(**merged)
         cfg.validate()
         return cfg
@@ -149,7 +154,30 @@ def load_component(module: Any, checkpoint: Path, name: str) -> None:
     module.load_state_dict({key.removeprefix("module."): val for key, val in state.items()}, strict=True)
 
 
+def resolve_config_assets(cfg: FFTConfig, *, download: bool) -> FFTConfig:
+    """Keep config inspection/dry preflight free of large implicit downloads."""
+    from vlade.storage.assets import resolve_path, asset_record, cache_path
+    updates = {}
+    for name in ("checkpoint", "data_root", "prepared_data_root", "resume"):
+        if name == "data_root" and cfg.prepared_data_root is not None:
+            continue
+        value = getattr(cfg, name)
+        if value is None or not str(value).startswith("hfasset:"):
+            continue
+        if download:
+            updates[name] = resolve_path(value)
+        else:
+            key = str(value)[len("hfasset:"):].strip("/\\")
+            record = asset_record(key)
+            cached = cache_path(key, record)
+            if not cached.is_dir() or not (cached.parent / "verified.json").is_file():
+                raise FileNotFoundError(f"Fetch HF asset {key} before preflight: python scripts/data/hf_assets.py fetch {key}")
+            updates[name] = cached
+    return replace(cfg, **updates)
+
+
 def preflight(cfg: FFTConfig) -> None:
+    cfg = resolve_config_assets(cfg, download=False)
     cfg.validate()
     source = REPO_ROOT / SOURCES[cfg.model]
     if not (source / "prismatic").is_dir():
@@ -375,7 +403,7 @@ def _git_revision(path: Path) -> str | None:
 
 
 def _code_fingerprint() -> dict[str, str]:
-    paths = [Path(__file__).with_name(name) for name in ("fft.py", "loop.py", "prepared_fft.py", "run_control.py", "debug_records.py")]
+    paths = [Path(__file__).with_name(name) for name in ("fft.py", "loop.py", "prepared_fft.py", "run_control.py", "debug_records.py", "compute_budget.py")]
     paths.append(Path(__file__).parents[1] / "data/episode_data.py")
     return {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
 
@@ -401,7 +429,8 @@ def _software_versions() -> dict[str, str | None]:
 
 def save_checkpoint(cfg: FFTConfig, step: int, model: Any, processor: Any, head: Any,
                     proprio: Any, generator: Any, optimizer: Any, dataset: Any,
-                    *, scheduler: Any = None, loop_state: Any = None) -> Path:
+                    *, scheduler: Any = None, loop_state: Any = None,
+                    hub: Any = None, metrics: dict | None = None) -> Path:
     """Save a reloadable full model and separate continuous-action components."""
     import torch
     from prismatic.vla.datasets.rlds.utils.data_utils import save_dataset_statistics
@@ -447,6 +476,8 @@ def save_checkpoint(cfg: FFTConfig, step: int, model: Any, processor: Any, head:
         "ava_temporal_training": "zero_context" if generator is not None else None,
     }, indent=2), encoding="utf-8")
     from vlade.training.run_control import seal_checkpoint
+    if hub is not None:
+        hub.prepare(path, step, metrics or {})
     seal_checkpoint(path, step, loop_state.microsteps if loop_state is not None else step * cfg.grad_accumulation_steps)
     (path / "COMPLETE").write_text("ok\n", encoding="utf-8")
     from vlade.utils.filesystem import publish_directory
@@ -492,9 +523,23 @@ def validate_resume(cfg: FFTConfig) -> dict[str, Any]:
 
 def train(cfg: FFTConfig) -> None:
     import torch
+    from vlade.training.hub import HubCheckpoints
+    cfg = resolve_config_assets(cfg, download=True)
     from vlade.training.loop import LoopState, evaluate, make_scheduler, restore_training_state, run_loop
+    from vlade.training.compute_budget import BudgetExhausted, should_stop
 
+    started = time.monotonic()
+    deadline = float(os.environ.get("VLADE_TRAIN_DEADLINE_UNIX", os.environ.get("VLADE_DEADLINE_UNIX", "0")))
+    save_reserve = float(os.environ.get("VLADE_SAVE_RESERVE_SECONDS", "300"))
+    if not math.isfinite(deadline) or not math.isfinite(save_reserve) or save_reserve <= 0:
+        raise ValueError("Invalid wall-time budget")
+    if deadline and time.time() + save_reserve >= deadline:
+        raise RuntimeError("Insufficient session budget to load and save the FFT model")
+
+    if os.environ.get("VLADE_HUB_REPO"):
+        cfg = replace(cfg, save_optimizer_state=True)
     preflight(cfg)
+    hub = HubCheckpoints(cfg.output_dir, resume=cfg.resume, metric="val_l1")
     if not torch.cuda.is_available():
         raise RuntimeError("FFT requires a CUDA GPU with BF16 support")
     device = torch.device(cfg.device)
@@ -529,6 +574,8 @@ def train(cfg: FFTConfig) -> None:
         "ava_temporal_training": "zero_context" if cfg.model == "ava_vla" else None,
         "resume_data_stream": ("deterministic_query_cursor" if cfg.prepared_data_root else "restarted_not_bitwise_exact") if cfg.resume else None,
         "sampler": "seeded_episode_shuffle_causal_queries_v1" if cfg.prepared_data_root else "upstream_rlds",
+        "deadline_unix": deadline or None,
+        "save_reserve_seconds": save_reserve,
     }
 
     def record_manifest() -> None:
@@ -559,6 +606,9 @@ def train(cfg: FFTConfig) -> None:
             print("Resumed optimizer/scheduler/RNG; prepared queries restore their cursor; raw RLDS restarts.", flush=True)
         num_patches = model.vision_backbone.get_num_patches() * cfg.num_images_in_input + 1
         torch.cuda.reset_peak_memory_stats(device)
+        torch.cuda.synchronize(device)
+        manifest["startup_seconds"] = time.monotonic() - started
+        step_started = time.monotonic()
 
         last_training_batch = None
         def loss_fn(batch: Any, step: int) -> Any:
@@ -578,39 +628,60 @@ def train(cfg: FFTConfig) -> None:
 
         with metrics_path.open("x", encoding="utf-8") as metrics_file:
             def on_step(current: Any, metrics: dict[str, float]) -> None:
+                nonlocal step_started
+                torch.cuda.synchronize(device)
+                metrics["optimizer_step_seconds"] = time.monotonic() - step_started
                 metrics["peak_allocated_bytes"] = torch.cuda.max_memory_allocated(device)
-                if validation is not None and (current.step % cfg.eval_steps == 0 or current.step == cfg.max_steps):
+                budget_stop = bool(deadline and should_stop(deadline - time.time(), save_reserve,
+                                                             metrics["optimizer_step_seconds"]))
+                if not budget_stop and validation is not None and (current.step % cfg.eval_steps == 0 or current.step == cfg.max_steps):
+                    evaluation_started = time.monotonic()
                     metrics["val_l1"] = evaluate(modules, validation, loss_fn, current.step, cfg.max_eval_batches)
-                metrics_file.write(json.dumps({"step": current.step, "microsteps": current.microsteps,
-                                               **metrics}) + "\n")
-                metrics_file.flush()
+                    torch.cuda.synchronize(device)
+                    metrics["validation_seconds"] = time.monotonic() - evaluation_started
+                    budget_stop = bool(deadline and should_stop(deadline - time.time(), save_reserve,
+                                                                 metrics["optimizer_step_seconds"]))
                 if current.step == 1 or current.step % cfg.log_steps == 0:
                     print(f"step={current.step} loss={metrics['loss']:.5f} lr={metrics['lr']:.3g}", flush=True)
-                if current.step % cfg.save_steps == 0 or current.step == cfg.max_steps:
+                if budget_stop or current.step % cfg.save_steps == 0 or current.step == cfg.max_steps or hub.is_best(metrics):
+                    save_started = time.monotonic()
                     from vlade.training.run_control import checkpoint_space
                     manifest["checkpoint_estimated_bytes"] = checkpoint_space(cfg.output_dir, modules, optimizer)
                     saved_path = save_checkpoint(cfg, current.step, model, processor, head, proprio,
                                                  generator, optimizer, dataset,
-                                                 scheduler=scheduler, loop_state=current)
+                                                 scheduler=scheduler, loop_state=current, hub=hub, metrics=metrics)
+                    hub.publish(saved_path, final=current.step == cfg.max_steps)
                     print(f"Saved {saved_path}", flush=True)
-                    if cfg.debug_records and last_training_batch is not None:
+                    if not budget_stop and cfg.debug_records and last_training_batch is not None:
                         from vlade.training.debug_records import emit_checkpoint_debug
                         emit_checkpoint_debug(cfg, saved_path, current.step, modules, last_training_batch,
                                               lambda capture: compute_loss(model, head, proprio, generator,
                                                   last_training_batch, device, num_patches, current.step, capture=capture))
+                    metrics["checkpoint_seconds"] = time.monotonic() - save_started
+                metrics_file.write(json.dumps({"step": current.step, "microsteps": current.microsteps,
+                                               **metrics}) + "\n")
+                metrics_file.flush()
                 manifest["step"] = current.step
                 record_manifest()
+                if budget_stop and current.step < cfg.max_steps:
+                    raise BudgetExhausted("Saved optimizer boundary before the training deadline")
+                step_started = time.monotonic()
 
             run_loop(modules=modules, optimizer=optimizer, scheduler=scheduler, batches=loader,
                      loss_fn=loss_fn, max_steps=cfg.max_steps,
                      accumulation_steps=cfg.grad_accumulation_steps, max_grad_norm=cfg.max_grad_norm,
                      state=state, on_before_step=before_step, on_step=on_step)
         manifest["status"] = "completed"
+    except BudgetExhausted:
+        manifest.update(status="budget_exhausted", step=state.step)
+        print("Time budget reached; a completed resumable checkpoint was saved.", flush=True)
     except BaseException as exc:
         manifest.update(status="interrupted" if isinstance(exc, KeyboardInterrupt) else "failed",
                         step=state.step, error_type=type(exc).__name__, error=str(exc))
         raise
     finally:
+        hub.flush()
+        manifest["elapsed_seconds"] = time.monotonic() - started
         record_manifest()
 
 
@@ -629,7 +700,8 @@ def main(argv: list[str] | None = None) -> int:
     cfg = replace(cfg, **{key: value for key, value in {
         "max_steps": args.max_steps, "save_steps": args.save_steps,
     }.items() if value is not None})
-    cfg = replace(cfg, resume=args.resume.resolve() if args.resume else None,
+    from vlade.storage.assets import resolve_path
+    cfg = replace(cfg, resume=resolve_path(args.resume).resolve() if args.resume else None,
                   output_dir=args.output_dir.resolve() if args.output_dir else cfg.output_dir,
                   save_optimizer_state=cfg.save_optimizer_state or args.save_training_state)
     cfg.validate()

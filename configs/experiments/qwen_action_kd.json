@@ -1,0 +1,7 @@
+{
+  "method": "action_kd",
+  "teacher_cache": "hfasset://teacher_cache_t1",
+  "task_weight": 1.0,
+  "action_kd_weight": 1.0,
+  "description": "Masked normalized L1: task_weight * demonstration + action_kd_weight * frozen T1. Weights are configurable starting values, not tuned results. Hidden features are not used."
+}

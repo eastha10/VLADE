@@ -16,6 +16,9 @@ parser.add_argument("--data", type=Path, required=True)
 parser.add_argument("--report", type=Path, required=True)
 parser.add_argument("--config", type=Path, required=True)
 args = parser.parse_args()
+from vlade.storage.assets import resolve_path
+args.checkpoint = resolve_path(args.checkpoint)
+args.data = resolve_path(args.data)
 if not (args.checkpoint / "COMPLETE").is_file() or not (args.checkpoint / "trainer_state.pt").is_file():
     raise ValueError("A completed checkpoint with training state is required")
 data = EpisodeData(args.data)

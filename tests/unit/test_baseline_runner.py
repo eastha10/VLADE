@@ -28,8 +28,9 @@ class BaselineRunnerTest(unittest.TestCase):
 
         self.assertIn("--multi_frame.temporal_strategy", invocation.command)
         self.assertIn("attn_weight", invocation.command)
-        self.assertEqual(invocation.checkpoint_source, "local")
-        self.assertTrue(str(invocation.local_checkpoint).endswith("avavla-libero-4in1"))
+        self.assertEqual(invocation.checkpoint_source, "hugging_face_asset")
+        self.assertIn("hfasset://ava_t0", invocation.command)
+        self.assertIsNone(invocation.local_checkpoint)
 
     def test_openvla_oft_uses_suite_specific_checkpoint(self) -> None:
         config = RUNNER.load_baseline_config("openvla_oft")

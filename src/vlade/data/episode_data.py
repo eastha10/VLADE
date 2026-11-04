@@ -27,6 +27,16 @@ CANONICAL_CALIBRATION_EPISODES = 728
 
 CONVENTION = "libero_relative_xyz_axis_angle; model_gripper_1_open_0_closed; proprio_state_first6_last2"
 
+# Only training sampling uses these labels. No suite labels are inferred from text.
+SUITES = ("spatial", "goal", "object", "libero_10")
+SUITE_ALIASES = {
+    "spatial": "spatial", "libero_spatial": "spatial",
+    "goal": "goal", "libero_goal": "goal",
+    "object": "object", "libero_object": "object",
+    "libero_10": "libero_10", "libero10": "libero_10", "10": "libero_10",
+}
+
+
 
 def write_json(path: Path, value: Any) -> None:
     import os
@@ -184,6 +194,8 @@ def normalize(values: np.ndarray, stats: dict) -> np.ndarray:
 
 class EpisodeData:
     def __init__(self, root: Path):
+        from vlade.storage.assets import resolve_path
+        root = resolve_path(root)
         self.root = root
         if not (root / "COMPLETE").is_file():
             raise ValueError("Prepared dataset is incomplete")
@@ -300,21 +312,161 @@ def query_count(data: EpisodeData, split: str = "train", *, episode_limit: int =
     return sum(entry["queries"] for entry in entries)
 
 
-def query_stream(data: EpisodeData, split: str, *, seed: int = 42, repeat: bool = False,
-                 skip: int = 0, episode_limit: int = 0, limit: int = 0) -> Iterator[tuple[dict, list[dict]]]:
-    """Shuffle episodes per epoch, retain causal queries, resume at a query cursor.
+def _canonical_suite(label: Any) -> str:
+    if not isinstance(label, str):
+        raise ValueError(f"Suite must be a string, got: {label!r}")
+    key = label.strip().lower().replace("-", "_")
+    if key not in SUITE_ALIASES:
+        raise ValueError(f"Unknown LIBERO suite: {label!r}; expected one of {SUITES}")
+    return SUITE_ALIASES[key]
 
-    A bounded validation subset is spread uniformly over the complete split's
-    query positions. It is deterministic and does not read the test split.
+
+def _read_suite_mapping(data: EpisodeData, suite_map: dict | Path | None) -> tuple[dict, dict]:
+    """Load trusted, explicit labels without changing the sealed split manifest.
+
+    Optional <prepared-root>/suite_map.json format:
+      {"by_episode_id": {"episode-0000000": "goal"},
+       "by_instruction": {"exact task instruction": "spatial"}}
+
+    A flat {episode_id: suite} mapping is also accepted for convenience.
+    """
+    if suite_map is None:
+        source = data.root / "suite_map.json"
+        suite_map = source if source.is_file() else {}
+    if isinstance(suite_map, (str, Path)):
+        suite_map = json.loads(Path(suite_map).read_text(encoding="utf-8"))
+    if not isinstance(suite_map, dict):
+        raise ValueError("suite_map must be a dict or a JSON file path")
+    if "by_episode_id" in suite_map or "by_instruction" in suite_map:
+        if set(suite_map) - {"by_episode_id", "by_instruction"}:
+            raise ValueError("Unknown suite mapping fields")
+        by_episode = suite_map.get("by_episode_id", {})
+        by_instruction = suite_map.get("by_instruction", {})
+    else:
+        by_episode, by_instruction = suite_map, {}
+    if not isinstance(by_episode, dict) or not isinstance(by_instruction, dict):
+        raise ValueError("Suite mappings must be objects mapping identifiers to suite names")
+    return ({key: _canonical_suite(value) for key, value in by_episode.items()},
+            {key: _canonical_suite(value) for key, value in by_instruction.items()})
+
+
+def _episode_suite(entry: dict, queries: list[dict], by_episode: dict, by_instruction: dict) -> str:
+    episode_id = entry["episode_id"]
+    labels = []
+    if entry.get("suite") is not None:
+        labels.append(_canonical_suite(entry["suite"]))
+    if episode_id in by_episode:
+        labels.append(by_episode[episode_id])
+    if by_instruction:
+        instructions = {query["instruction"] for query in queries}
+        if len(instructions) != 1:
+            raise ValueError(f"Episode {episode_id} does not have a single stable task instruction")
+        instruction = next(iter(instructions))
+        if instruction in by_instruction:
+            labels.append(by_instruction[instruction])
+    if not labels:
+        raise ValueError(f"Suite mapping missing for train episode {episode_id}; "
+                         "provide suite_map.json with verified labels")
+    if len(set(labels)) != 1:
+        raise ValueError(f"Conflicting suite labels for train episode {episode_id}: {labels}")
+    return labels[0]
+
+
+def _balanced_query_stream(data: EpisodeData, entries: list[dict], *, seed: int,
+                           repeat: bool, skip: int, suite_map: dict | Path | None
+                           ) -> Iterator[tuple[dict, list[dict]]]:
+    """Select equal suite quotas *before* a deterministic constrained query shuffle.
+
+    A virtual epoch has the same Query count as the original train stream.
+    Underrepresented suites are repeated with replacement only after all of
+    their unique Queries have been selected. Abundant suites are subsampled.
+    Shuffle suites in groups of four so every completed group is 25% each,
+    even if a time-limited run stops partway through an epoch.
+    """
+    by_episode, by_instruction = _read_suite_mapping(data, suite_map)
+    if (not by_episode and not by_instruction and
+            any(entry.get("suite") is None for entry in entries)):
+        raise ValueError("The prepared manifest has no suite labels. Supply verified "
+                         "<prepared-root>/suite_map.json or the suite_map argument")
+
+    buckets: dict[str, list[tuple[dict, dict | None]]] = {suite: [] for suite in SUITES}
+    # Materialize numeric Query samples once, never load camera images into RAM.
+    # This avoids re-opening thousands of episode files for every shuffled Query.
+    for entry, queries in data.episodes("train", order=[item["episode_id"] for item in entries]):
+        suite = _episode_suite(entry, queries, by_episode, by_instruction)
+        previous = None
+        for sample in queries:
+            sample["suite"] = suite
+            buckets[suite].append((sample, previous))
+            previous = sample
+    missing = [suite for suite in SUITES if not buckets[suite]]
+    if missing:
+        raise ValueError(f"Cannot balance train: empty suite(s) {missing}")
+
+    total = sum(map(len, buckets.values()))
+    epoch, cursor = divmod(skip, total) if repeat else (0, skip)
+    while True:
+        rng = random.Random(seed + epoch * 1000003)
+        remainder_order = list(SUITES)
+        rng.shuffle(remainder_order)
+        base, remainder = divmod(total, len(SUITES))
+        quotas = {suite: base + (suite in remainder_order[:remainder]) for suite in SUITES}
+        selected: dict[str, list[tuple[dict, dict | None]]] = {}
+        for suite in SUITES:
+            pool, count = buckets[suite], quotas[suite]
+            if count <= len(pool):
+                indices = rng.sample(range(len(pool)), count)
+            else:
+                indices = list(range(len(pool)))
+                indices.extend(rng.randrange(len(pool)) for _ in range(count - len(pool)))
+                rng.shuffle(indices)
+            selected[suite] = [pool[index] for index in indices]
+
+        # Constrained shuffle: shuffle all Query orders within each suite,
+        # then randomly shuffle suite order each round. Every four consecutive
+        # queries contain one from each suite until final (<4) remainder.
+        positions = {suite: 0 for suite in SUITES}
+        emitted = 0
+        while emitted < total:
+            suite_order = [suite for suite in SUITES if positions[suite] < quotas[suite]]
+            rng.shuffle(suite_order)
+            for suite in suite_order:
+                sample, previous = selected[suite][positions[suite]]
+                positions[suite] += 1
+                if emitted >= cursor:
+                    yield sample, [sample] if previous is None else [previous, sample]
+                emitted += 1
+        if not repeat:
+            return
+        epoch += 1
+        cursor = 0
+
+
+def query_stream(data: EpisodeData, split: str, *, seed: int = 42, repeat: bool = False,
+                 skip: int = 0, episode_limit: int = 0, limit: int = 0,
+                 sampling: str = "episode", suite_map: dict | Path | None = None
+                 ) -> Iterator[tuple[dict, list[dict]]]:
+    """Emit Queries in legacy episode order or opt-in suite-balanced order.
+
+    Bounded validation remains deterministic and unaffected. Balanced training
+    uses verified suite labels, and preserves Query interval/action chunk size.
     """
     if split not in {"train", "validation"} or min(skip, episode_limit, limit) < 0:
         raise ValueError("Invalid stream settings; test is sealed from training/selection")
+    if sampling not in {"episode", "suite_balanced"}:
+        raise ValueError(f"Unknown Query sampling strategy: {sampling}")
     entries = [entry for entry in data.entries if entry["split"] == split]
     if episode_limit:
         entries = entries[:episode_limit]
     total = sum(entry["queries"] for entry in entries)
     if not total:
         raise ValueError(f"Empty {split} split")
+    if sampling == "suite_balanced":
+        if split != "train" or limit:
+            raise ValueError("Suite-balanced sampling is train-only and does not accept limit")
+        yield from _balanced_query_stream(data, entries, seed=seed, repeat=repeat,
+                                          skip=skip, suite_map=suite_map)
+        return
     if limit and repeat:
         raise ValueError("Bounded evaluation cannot repeat")
     epoch, cursor = divmod(skip, total) if repeat else (0, skip)

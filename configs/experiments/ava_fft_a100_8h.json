@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "paper": "https://arxiv.org/html/2511.18960v4",
+  "mode": "budgeted_fft_adaptation_not_paper_reproduction",
+  "total_hours": 8,
+  "pilot_steps": 4,
+  "batch_size": 1,
+  "accumulation_steps": 8,
+  "max_epochs": 1,
+  "learning_rate": 0.00002,
+  "lr_schedule": "cosine",
+  "warmup_ratio": 0.1,
+  "max_grad_norm": 1.0,
+  "validation_batches": 16,
+  "safety_factor": 1.3,
+  "downstream_reserve_seconds": 3600,
+  "shutdown_reserve_seconds": 300,
+  "checkpoint_policy": "midpoint_and_final_or_budget_stop_no_automatic_deletion",
+  "temporal_training": "zero_context",
+  "compute_units_per_hour": null,
+  "cost_note": "No monetary price assumed; use actual Colab account unit consumption."
+}
