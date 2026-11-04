@@ -8,7 +8,7 @@ import os
 import shlex
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -160,6 +160,9 @@ def build_invocation(
     if checkpoint_override:
         checkpoint = checkpoint_override
         checkpoint_source = "override"
+    elif checkpoint_config.get("hf_asset") and not use_hub_checkpoint:
+        checkpoint = "hfasset://" + checkpoint_config["hf_asset"]
+        checkpoint_source = "hugging_face_asset"
     elif use_hub_checkpoint:
         checkpoint = checkpoint_config["hub_repository"]
         checkpoint_source = "hugging_face"
@@ -262,6 +265,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(format_invocation(invocation))
     if args.dry_run:
         return 0
+
+    position = invocation.command.index("--pretrained_checkpoint") + 1
+    if invocation.command[position].startswith("hfasset:"):
+        sys.path.insert(0, str(REPO_ROOT / "src"))
+        from vlade.storage.assets import resolve_path
+        local = resolve_path(invocation.command[position])
+        command = list(invocation.command)
+        command[position] = str(local)
+        invocation = replace(invocation, command=tuple(command), local_checkpoint=local)
 
     if invocation.local_checkpoint is not None and not invocation.local_checkpoint.is_dir():
         parser.error(

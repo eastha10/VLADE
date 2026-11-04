@@ -8,8 +8,8 @@
   "dataset_adaptation": "LIBERO+ prepared train split; not an exact paper reproduction",
   "initial_repository": "openvla/openvla-7b",
   "initial_revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
-  "initial_checkpoint": "checkpoints/pretrained/openvla-7b",
-  "data": "data/processed/libero_plus_episode80",
+  "initial_checkpoint": "hfasset://openvla_pretrained",
+  "data": "hfasset://prepared_d_seed42",
   "output": "runs/ava_paper_best/seed42",
   "seed": 42,
   "max_steps": 100000,
@@ -32,7 +32,10 @@
   "weight_decay": 0.01,
   "attention_lambda": 1.0,
   "attention_target_mean": 0.6,
-  "attention_gamma": [1.9, 0.1],
+  "attention_gamma": [
+    1.9,
+    0.1
+  ],
   "temporal_feature_layer": -2,
   "gradient_checkpointing": true,
   "image_aug": false,

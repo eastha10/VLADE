@@ -35,10 +35,75 @@ def cell(kind: str, text: str, name: str) -> dict:
 
 
 def notebook(path: Path, cells: list[dict]) -> None:
+    if any(item.get("id") == "drive-and-source" for item in cells):
+        index = next(i for i, item in enumerate(cells) if item.get("id") == "drive-and-source")
+        cells = [item for item in cells if item.get("id") != "private-hub"]
+        cells.insert(index + 1, hub_cell())
+    if any(item.get("id") == "install-data" for item in cells):
+        cells = [item for item in cells if item.get("id") != "private-hub-check"]
+        index = next(i for i, item in enumerate(cells) if item.get("id") == "install-data")
+        cells.insert(index + 1, hub_check_cell())
     value = {"nbformat": 4, "nbformat_minor": 5, "cells": cells,
              "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
                           "language_info": {"name": "python"}, "colab": {"name": path.name, "provenance": []}}}
     path.write_text(json.dumps(value, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+
+
+def hub_cell() -> dict:
+    """Optional Secrets-based authentication; never write a token into Drive."""
+    return cell("code", '''
+        # HF 설정 후 기존 학습 셀을 실행하면 checkpoint 저장 시 자동 전송합니다.
+        # 저장소는 HF 웹에서 Private로 먼저 만들고 해당 저장소 쓰기 토큰을 Secrets에 등록하십시오.
+        if 'ENV' not in globals():
+            ENV = os.environ.copy()
+        from google.colab import userdata
+        os.environ['HF_TOKEN'] = userdata.get('HF_TOKEN')
+        ENV['HF_TOKEN'] = os.environ['HF_TOKEN']
+        import datetime, uuid
+        ENABLE_HUB_UPLOAD = globals().get('ENABLE_HUB_UPLOAD', True)
+        HF_REPO_ID = 'VLADE-konkuk/VLADE-checkpoints'  # 조직 저장소; 이전 런타임 값도 갱신합니다.
+        HF_RUN_GROUP = globals().get('HF_RUN_GROUP', datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8])  # 재개 시 기존 group 지정
+        if ENABLE_HUB_UPLOAD:
+            if not HF_RUN_GROUP:
+                raise ValueError('HF_RUN_GROUP을 지정하십시오. pilot/main은 출력 폴더명으로 구분합니다.')
+            os.environ['VLADE_HUB_REPO'] = HF_REPO_ID
+            os.environ['VLADE_HUB_RUN_ID'] = HF_RUN_GROUP
+            os.environ['HF_TOKEN_PATH'] = '/content/vlade_hf_token'
+            # 모델 캐시는 기존 위치를 유지하고 토큰 파일은 런타임 로컬에만 둡니다.
+            ENV.update(HF_TOKEN=os.environ['HF_TOKEN'], VLADE_HUB_REPO=HF_REPO_ID,
+                       VLADE_HUB_RUN_ID=HF_RUN_GROUP, HF_TOKEN_PATH='/content/vlade_hf_token')
+            print('Private Hub 업로드 설정:', HF_REPO_ID, HF_RUN_GROUP)
+        else:
+            for key in ('VLADE_HUB_REPO', 'VLADE_HUB_RUN_ID'):
+                ENV.pop(key, None)
+                os.environ.pop(key, None)
+            print('Hub 업로드 꺼짐: HF_RUN_GROUP 설정 후 ENABLE_HUB_UPLOAD=True로 이 셀을 다시 실행하십시오.')
+        ''', "private-hub")
+
+
+def hub_check_cell() -> dict:
+    """01 can verify Secrets/repository access using its existing CPU data env."""
+    program = '''
+import json, sys
+from huggingface_hub import HfApi
+try:
+    api = HfApi()
+    account = api.whoami()
+    api.create_repo(repo_id=sys.argv[1], repo_type='model', private=True, exist_ok=True)
+    info = api.model_info(sys.argv[1])
+    if info.private is not True:
+        raise ValueError('Private repository required')
+    print(json.dumps({'authenticated_user': account['name'], 'repo_id': sys.argv[1],
+                      'private': info.private, 'status': 'connection_verified'}))
+except Exception as error:
+    print('HF connection failed:', type(error).__name__)
+    raise SystemExit(1)
+'''.strip()
+    source = "# 인증·조직 저장소 접근 확인만 수행합니다. 모델·데이터 업로드나 학습은 실행하지 않습니다.\n"
+    source += "if ENABLE_HUB_UPLOAD:\n"
+    source += "    run([DATA_PY, '-c', " + repr(program) + ", HF_REPO_ID], env=ENV)\n"
+    source += "else:\n    print('먼저 private-hub 셀에서 업로드 설정을 켜십시오.')"
+    return cell("code", source, "private-hub-check")
 
 
 def stage_source(project_root: Path, scratch_root: Path, expected_manifest_sha256: str) -> Path:
@@ -101,7 +166,7 @@ sys.path.insert(0, str(CODE / 'src'))
 print('Drive:', ROOT, '\\n실행 소스:', CODE)
 ENV = os.environ.copy()
 ENV.update(TOKENIZERS_PARALLELISM='false', WANDB_MODE='disabled', TF_CPP_MIN_LOG_LEVEL='2',
-           HF_HOME=str(ROOT / 'hf_cache'))
+           HF_HOME=str(ROOT / 'hf_cache'), HF_TOKEN_PATH='/content/vlade_hf_token')
 def run(args, env=None):
     import signal, threading, time
     deadline = float((env or ENV).get('VLADE_DEADLINE_UNIX', '0'))
@@ -772,6 +837,10 @@ def generate() -> list[Path]:
     four = generate_paper_notebook(ROOT,digest)
     from vlade.utils.kd_notebook import generate_kd_notebook
     five = generate_kd_notebook(ROOT, digest)
+    from vlade.utils.hf_notebooks import apply_hf_storage, refresh_suite_sources
+    for path in (one, two, three, four, five):
+        apply_hf_storage(path, ROOT)
+    refresh_suite_sources(ROOT/'experiments/colab_ava_fft_suite_balanced_cu.ipynb', ROOT, digest)
     return [one, two, three, four, five, manifest_path]
 
 

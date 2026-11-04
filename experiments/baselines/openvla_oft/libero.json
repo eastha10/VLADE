@@ -37,23 +37,27 @@
   "checkpoints": {
     "libero_spatial": {
       "hub_repository": "moojink/openvla-7b-oft-finetuned-libero-spatial",
-      "local_directory": "checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-spatial",
-      "revision": null
+      "local_directory": "hfasset://openvla_oft_libero_spatial",
+      "revision": "6d0231af0e48c5985f1ff86908f4674b84bc049b",
+      "hf_asset": "openvla_oft_libero_spatial"
     },
     "libero_object": {
       "hub_repository": "moojink/openvla-7b-oft-finetuned-libero-object",
-      "local_directory": "checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-object",
-      "revision": null
+      "local_directory": "hfasset://openvla_oft_libero_object",
+      "revision": "4c89574e1c538b6c102f43f0526d60a9d3650148",
+      "hf_asset": "openvla_oft_libero_object"
     },
     "libero_goal": {
       "hub_repository": "moojink/openvla-7b-oft-finetuned-libero-goal",
-      "local_directory": "checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-goal",
-      "revision": null
+      "local_directory": "hfasset://openvla_oft_libero_goal",
+      "revision": "c2d0f9fbbd82674683b397ff923168a12f6a307b",
+      "hf_asset": "openvla_oft_libero_goal"
     },
     "libero_10": {
       "hub_repository": "moojink/openvla-7b-oft-finetuned-libero-10",
-      "local_directory": "checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-10",
-      "revision": null
+      "local_directory": "hfasset://openvla_oft_libero_10",
+      "revision": "95220f9a3421a7ff12d4218e73d09ade830fa9a3",
+      "hf_asset": "openvla_oft_libero_10"
     }
   },
   "evaluation": {

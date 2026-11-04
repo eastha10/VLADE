@@ -241,6 +241,9 @@ def _frame_function(cfg: dict, components: tuple, data: Any, device: torch.devic
 
 
 def _resolve(path: str) -> Path:
+    if str(path).startswith("hfasset:"):
+        from vlade.storage.assets import resolve_path
+        return resolve_path(path)
     value = Path(path)
     return value if value.is_absolute() else ROOT/value
 
@@ -279,7 +282,8 @@ def _identity(cfg: dict) -> dict:
             if p.startswith("third_party/ava_vla/") or p.endswith("checkpoint-extra-attn.patch")})
 
 
-def _save(output: Path, identity: dict, components: tuple, optimizer: Any, scheduler: Any, state: Any) -> Path:
+def _save(output: Path, identity: dict, components: tuple, optimizer: Any, scheduler: Any, state: Any,
+          *, hub: Any = None, metrics: dict | None = None) -> Path:
     from vlade.training.loop import training_state
     from vlade.training.run_control import seal_checkpoint
     from vlade.utils.filesystem import publish_directory
@@ -309,6 +313,8 @@ def _save(output: Path, identity: dict, components: tuple, optimizer: Any, sched
     processor.save_pretrained(stage)
     (stage/"paper_ava.json").write_text(json.dumps(dict(identity=identity,step=state.step,
         format="native_lora_components_not_merged_fft",sequence_cursor=state.microsteps),indent=2))
+    if hub is not None:
+        hub.prepare(stage, state.step, metrics or {})
     seal_checkpoint(stage,state.step,state.microsteps)
     (stage/"COMPLETE").write_text("ok\n")
     publish_directory(stage,destination)
@@ -356,6 +362,9 @@ def require_pilot(cfg: dict) -> dict:
 
 
 def train(cfg: dict, *, resume: Path | None = None, pilot: bool = False) -> None:
+    from vlade.training.hub import HubCheckpoints
+    if resume is not None:
+        resume = _resolve(str(resume))
     from vlade.data.episode_data import EpisodeData
     from vlade.data.colab_assets import sha256
     from vlade.training.fft import set_seed
@@ -394,6 +403,7 @@ def train(cfg: dict, *, resume: Path | None = None, pilot: bool = False) -> None
     identity = _identity(cfg)
     identity["pilot"] = pilot
     output = _resolve(cfg["output"]+('-pilot' if pilot else ''))
+    hub = HubCheckpoints(output, resume=resume, metric="mae")
     output.mkdir(parents=True,exist_ok=True)
     if not resume and any(output.glob("step-*")):
         raise FileExistsError("Use --resume or a new output path")
@@ -442,7 +452,8 @@ def train(cfg: dict, *, resume: Path | None = None, pilot: bool = False) -> None
                 print(json.dumps(row),flush=True)
                 if stop or state.step == 1 or state.step%cfg["save_steps"] == 0 or state.step == target:
                     save_started = time.monotonic()
-                    saved = _save(output,identity,components,optimizer,scheduler,state)
+                    saved = _save(output,identity,components,optimizer,scheduler,state,hub=hub,metrics=row)
+                    hub.publish(saved, final=state.step == target)
                     save_reserve = max(save_reserve,(time.monotonic()-save_started)*1.3)
                     stop = stop or should_stop(deadline-time.monotonic(),save_reserve,elapsed)
                     if pilot:
@@ -464,6 +475,7 @@ def train(cfg: dict, *, resume: Path | None = None, pilot: bool = False) -> None
         report.update(status="failed",error_type=type(error).__name__,error=str(error),step=state.step)
         raise
     finally:
+        hub.flush()
         report["elapsed_seconds"] = time.monotonic()-started
         write_report()
 

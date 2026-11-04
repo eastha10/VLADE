@@ -19,7 +19,8 @@ class CachedActions:
     """
 
     def __init__(self, root: Path, data: EpisodeData, *, episode_limit: int = 0):
-        self.root = Path(root)
+        from vlade.storage.assets import resolve_path
+        self.root = resolve_path(root)
         if not (self.root / "COMPLETE").is_file():
             raise ValueError("A completed Teacher cache is required")
         manifest = json.loads((self.root / "cache_manifest.json").read_text(encoding="utf-8"))

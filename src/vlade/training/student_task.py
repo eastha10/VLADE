@@ -20,6 +20,7 @@ from vlade.distillation.action import action_distillation_loss, validate_weights
 from vlade.training.cached_actions import CachedActions
 from vlade.models.students.qwen import HistoryFrame, QwenStudent, StudentConfig, load_processor, prepare_inputs
 from vlade.training.loop import LoopState, make_scheduler, restore_training_state, run_loop, training_state
+from vlade.training.hub import HubCheckpoints
 from vlade.training.run_control import checkpoint_space, gradient_diagnostics, seal_checkpoint, verify_checkpoint
 from vlade.utils.filesystem import publish_directory
 
@@ -69,6 +70,13 @@ def identity(settings: dict, data: EpisodeData, teacher: CachedActions | None = 
 
 
 def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) -> None:
+    from vlade.storage.assets import resolve_path
+    settings = dict(settings)
+    for key in ("data", "initial_checkpoint", "teacher_cache"):
+        if key in settings and str(settings[key]).startswith("hfasset:"):
+            settings[key] = str(resolve_path(settings[key]))
+    if resume is not None:
+        resume = resolve_path(resume)
     if settings.get("batch_size") != 1 or settings.get("method") not in {"task_only", "action_kd"}:
         raise ValueError("Student supports task_only/action_kd with batch_size=1 and gradient accumulation")
     kd_enabled = settings["method"] == "action_kd"
@@ -106,6 +114,7 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
                           "model": config.model_id, "gpu_forward_tested": False,
                           "teacher_cache": teacher.signature if teacher else None}))
         return
+    hub = HubCheckpoints(Path(settings["output"]), resume=resume, metric="validation_l1")
     if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
         raise RuntimeError("A BF16 CUDA GPU is required")
     seed = settings["seed"]
@@ -189,7 +198,7 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
                 log.write(json.dumps(metrics) + "\n")
                 log.flush()
                 print(json.dumps(metrics), flush=True)
-                if current.step % settings["save_steps"] == 0 or current.step == settings["max_steps"]:
+                if current.step % settings["save_steps"] == 0 or current.step == settings["max_steps"] or hub.is_best(metrics):
                     manifest["checkpoint_estimated_bytes"] = checkpoint_space(output, [model], optimizer)
                     stage = output / f".step-{current.step:07d}-{uuid.uuid4().hex}.incomplete"
                     stage.mkdir()
@@ -197,9 +206,11 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
                     processor.save_pretrained(stage / "processor")
                     torch.save(training_state(current, optimizer, scheduler), stage / "trainer_state.pt")
                     write_json(stage / "identity.json", experiment)
+                    hub.prepare(stage, current.step, metrics)
                     seal_checkpoint(stage, current.step, current.microsteps)
                     (stage / "COMPLETE").write_text("ok\n", encoding="utf-8")
                     publish_directory(stage, output / f"step-{current.step:07d}")
+                    hub.publish(output / f"step-{current.step:07d}", final=current.step == settings["max_steps"])
                 manifest["step"] = current.step
                 write_json(manifest_path, manifest)
 
@@ -217,6 +228,7 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
                         error_type=type(exc).__name__, error=str(exc))
         raise
     finally:
+        hub.flush()
         manifest.update(step=state.step, invocation_seconds=time.monotonic() - started)
         write_json(manifest_path, manifest)
 

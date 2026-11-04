@@ -1,5 +1,9 @@
 # Directory Structure
 
+`src/vlade/training/hub.py`는 봉인된 checkpoint의 비공개 Hub 전송·best 선택·재전송·다운로드를,
+`scripts/train/hub_checkpoints.py`는 인증 검사와 수동 복구 진입점을 제공합니다.
+사용법과 best 기준은 `docs/environment/hugging_face_checkpoints.md`에 있습니다.
+
 ```text
 vlade/
 ├─ .harness/
@@ -127,6 +131,7 @@ Student 계약 구현은 아래 범위이며 KD trainer는 미구현입니다.
 
 ## Teacher 저장·Student·집필 준비
 
+- `src/vlade/models/students/skeleton.py`: 논문 검토 후 사용자가 구조를 결정할 Student 뼈대. 입력·출력 인터페이스만 있으며 학습에는 연결하지 않음.
 - `src/vlade/data/teacher_records.py`: 제한된 debug 기록과 고정 Teacher cache 저장·검증·로드
 - `src/vlade/models/contracts.py`: 정규화 액션 `[B,8,7]` 및 horizon feature 공통 출력·mask loss
 - `src/vlade/models/students/qwen.py`: 별도 Qwen3.5 VLM 연결·processor·연속 query action head
@@ -166,3 +171,15 @@ Drive에서는 `/content/drive/MyDrive/colab/VLADE` 바로 아래에 저장소 �
 - `src/vlade/utils/filesystem.py`: 같은 parent의 완료 staging을 덮어쓰기 없이 게시하고 일시적인 잠금만 제한 재시도.
 - `tests/unit/test_final_{data,cache,run}_review.py`: split/part/checkpoint/report/추출 재시작의 변조·실패 회귀 검사.
 - `tests/unit/test_colab_source_files.py`: 일반 소스 파일 manifest·복사·누락/변조 거부와 revision 복원 검사.
+
+
+## Hugging Face 자료 참조
+
+데이터·가중치 입력은 `hfasset://키`를 사용하고, `src/vlade/storage/`가 비공개 HF
+레지스트리의 고정 commit과 SHA256을 확인하여 로컬 캐시에 준비합니다. 로컬·Colab·GitHub는
+같은 참조 설정을 사용합니다. `configs/storage/hf_assets.lock.json`과
+`scripts/data/hf_assets.py`가 입력 버전과 준비를 관리하고, `migrate_hf_assets.py`는
+기존 Drive 자료를 조직 저장소에 이관합니다. Colab 01의 원래 다운로드·전처리 기능은
+접힌 구역에 보존합니다. 새 Colab 실험 출력은 `/content/vlade_runs`에 저장하고 봉인된
+중간·best·final checkpoint를 HF에 전송합니다. 원본 Drive 자료는 자동 삭제하지 않습니다.
+자세한 인증·이관·재개 방법은 [HF 안내](docs/environment/hugging_face_checkpoints.md)를 참조하십시오.

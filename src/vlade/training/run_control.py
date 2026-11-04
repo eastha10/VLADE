@@ -71,7 +71,8 @@ def pilot_context(config: Path, checkpoint: Path, data: Path, kind: str, *, poli
         if settings.get("method") == "action_kd":
             paths += [core / "cached_actions.py", core.parent / "data/teacher_records.py",
                       core.parent / "distillation/action.py"]
-            cache = Path(settings["teacher_cache"])
+            from vlade.storage.assets import resolve_path
+            cache = resolve_path(settings["teacher_cache"])
             cache_context = {"teacher_cache": {name: sha256(cache / name)
                              for name in ("cache_config.json", "cache_manifest.json")}}
     return {**cache_context, "kind": kind, "configuration_sha256": sha256(config), "data_manifest_sha256": sha256(data / "manifest.json"),

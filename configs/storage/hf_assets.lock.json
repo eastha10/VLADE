@@ -1,0 +1,161 @@
+{
+  "schema_version": 1,
+  "organization": "VLADE-konkuk",
+  "assets": {
+    "qwen_initial": {
+      "repo_id": "Qwen/Qwen3.5-0.8B",
+      "repo_type": "model",
+      "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+      "format": "upstream_model",
+      "local_name": "qwen3_5_0_8b"
+    },
+    "openvla_pretrained": {
+      "repo_id": "openvla/openvla-7b",
+      "repo_type": "model",
+      "revision": "47a0ec7fc4ec123775a391911046cf33cf9ed83f",
+      "format": "upstream_model",
+      "local_name": "openvla-7b"
+    },
+    "openvla_oft_t0": {
+      "repo_id": "VLADE-konkuk/VLADE-checkpoints",
+      "repo_type": "model",
+      "revision": "f98f6a23f28e62aee95b9b6ed6b976fbe2f5db93",
+      "format": "directory",
+      "prefix": "assets/openvla_oft_t0",
+      "local_name": "openvla-7b-oft-finetuned-libero-spatial-object-goal-10",
+      "files": {
+        "README.md": {
+          "bytes": 2953,
+          "sha256": "8855f7d4f2021a75326b6ee8c7d819f1baaf77afb3c58bc1872a1f400695b85b"
+        },
+        "action_head--300000_checkpoint.pt": {
+          "bytes": 302242674,
+          "sha256": "f9647226ca9a1ee64ff8ed1ec380c89110afc6fc2bf6d0ae463cc4023165b4dc"
+        },
+        "added_tokens.json": {
+          "bytes": 21,
+          "sha256": "ab43123267b190cb7990bc9f2ae4ad32dcb7ed029fb0fccb1b4e062c6f54a2a1"
+        },
+        "config.json": {
+          "bytes": 60712,
+          "sha256": "edd5c5cf6d7927e07465cf086ebe41f7b3ec8f3b128a51f71d6db14dad7ad8b1"
+        },
+        "configuration_prismatic.py": {
+          "bytes": 5865,
+          "sha256": "68cc5ae34f1b46af3168d8d479cb81bb776965653453fd904aa8eefb6c8f9f68"
+        },
+        "dataset_statistics.json": {
+          "bytes": 11871,
+          "sha256": "6ec6ef68d0d5bae4cb5f9fc9acb715a22b9f4545e9e9b300d0d88695cd7afec3"
+        },
+        "generation_config.json": {
+          "bytes": 136,
+          "sha256": "67fbe17b12e8beb5be98eb911483971cc78589e51a37ac0cce9cd499d06a8bf1"
+        },
+        "lora_adapter/README.md": {
+          "bytes": 5034,
+          "sha256": "1acb533904cd9931276014499b51c98c0fc8e3eab8962de7b971547116068383"
+        },
+        "lora_adapter/adapter_config.json": {
+          "bytes": 813,
+          "sha256": "dfcbad210b6c953252f5c959c694a033c2df9a0092e14ef67ee4e24c0256c5a7"
+        },
+        "lora_adapter/adapter_model.safetensors": {
+          "bytes": 484458600,
+          "sha256": "2e895d13475d45fa79b9d8a71c952b526fa1ba23dfe15c73b8c0518351d660e7"
+        },
+        "model-00001-of-00004.safetensors": {
+          "bytes": 4925122448,
+          "sha256": "8b30a7951e68703e1731957190d9f1d6e1eaa82f05b53909608eb0510875b11d"
+        },
+        "model-00002-of-00004.safetensors": {
+          "bytes": 4947392496,
+          "sha256": "af4773166950ddda1da6b3c5367796a52e7d5e7216f97041d9ad0721a25e53fe"
+        },
+        "model-00003-of-00004.safetensors": {
+          "bytes": 4947417456,
+          "sha256": "5a62791dd46ec4a85b353920aa07eff3582ceb5e9b6b853ad0f38de36fcab75d"
+        },
+        "model-00004-of-00004.safetensors": {
+          "bytes": 262668432,
+          "sha256": "a877e3fece1feafb80f59f91585ce04379ee39e2bf9a25cb7b4acf237e896e60"
+        },
+        "model.safetensors.index.json": {
+          "bytes": 94764,
+          "sha256": "ca8b53fed8133ee2afcd2fc483de8febf7f5bb0f6bcb09f91189772e59e8f659"
+        },
+        "modeling_prismatic.py": {
+          "bytes": 49029,
+          "sha256": "f40ee7883e16aab1a2d89b6e8f31cc81f6b8055120b1fefe169e05c7031098fa"
+        },
+        "preprocessor_config.json": {
+          "bytes": 1650,
+          "sha256": "bd024783fb785cbdfe35b710b621c5e8678d4c157a9ba625675e67d40d1757da"
+        },
+        "processing_prismatic.py": {
+          "bytes": 12718,
+          "sha256": "06563586bbc73d36501a14a231a3174904ede830d33174d0c625ece8e931ef1e"
+        },
+        "processor_config.json": {
+          "bytes": 130,
+          "sha256": "167e026d8121f6cb0bf5c18310b97ba8139152f970822bb3824213bd37dc7a76"
+        },
+        "proprio_projector--300000_checkpoint.pt": {
+          "bytes": 67275256,
+          "sha256": "1792c6e19381d3c7c814e2d49836a855d3a38b0693919416f52b3c5af39505c8"
+        },
+        "special_tokens_map.json": {
+          "bytes": 552,
+          "sha256": "cb90ee5cf5793aa444039af9795b00db59d3fef8942e7eca9cf1990bab370d61"
+        },
+        "tokenizer.json": {
+          "bytes": 1842976,
+          "sha256": "8f5e2869e1807b8bb3c7717a294539c37e9de5d728ad60e31ef57e83cc5ea527"
+        },
+        "tokenizer.model": {
+          "bytes": 499723,
+          "sha256": "9e556afd44213b6bd1be2b850ebbbd98f5481437a8021afaf58ee7fb1818d347"
+        },
+        "tokenizer_config.json": {
+          "bytes": 1192,
+          "sha256": "f5f1d3ed015ebb71cf11686ff00bc8e0c25957bbf3952f95312cecc9b168fbea"
+        }
+      }
+    },
+    "raw_rlds": {
+      "repo_id": "Sylvest/libero_plus_rlds",
+      "repo_type": "dataset",
+      "revision": "fb0c7029b076030d5d57227229e4f7460def1f7c",
+      "format": "rlds_spanned_zip",
+      "local_name": "libero_plus_tfds"
+    },
+    "openvla_oft_libero_spatial": {
+      "repo_id": "moojink/openvla-7b-oft-finetuned-libero-spatial",
+      "repo_type": "model",
+      "revision": "6d0231af0e48c5985f1ff86908f4674b84bc049b",
+      "format": "upstream_model",
+      "local_name": "openvla-7b-oft-finetuned-libero-spatial"
+    },
+    "openvla_oft_libero_object": {
+      "repo_id": "moojink/openvla-7b-oft-finetuned-libero-object",
+      "repo_type": "model",
+      "revision": "4c89574e1c538b6c102f43f0526d60a9d3650148",
+      "format": "upstream_model",
+      "local_name": "openvla-7b-oft-finetuned-libero-object"
+    },
+    "openvla_oft_libero_goal": {
+      "repo_id": "moojink/openvla-7b-oft-finetuned-libero-goal",
+      "repo_type": "model",
+      "revision": "c2d0f9fbbd82674683b397ff923168a12f6a307b",
+      "format": "upstream_model",
+      "local_name": "openvla-7b-oft-finetuned-libero-goal"
+    },
+    "openvla_oft_libero_10": {
+      "repo_id": "moojink/openvla-7b-oft-finetuned-libero-10",
+      "repo_type": "model",
+      "revision": "95220f9a3421a7ff12d4218e73d09ade830fa9a3",
+      "format": "upstream_model",
+      "local_name": "openvla-7b-oft-finetuned-libero-10"
+    }
+  }
+}

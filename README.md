@@ -1,5 +1,9 @@
 # VLADE
 
+학습 중간·검증 best·목표 step의 final을 비공개 Hugging Face Hub에 자동 저장하려면
+[Hub 인증·체크포인트·재개 안내](docs/environment/hugging_face_checkpoints.md)를 참고하십시오.
+기존 FFT/Qwen/논문 AVA 루프를 유지하며 환경 변수로 켭니다. 토큰은 Colab Secrets로 전달합니다.
+
 **Vision-Language-Action Distillation for Edge Deployment**
 
 VLADE는 대규모 Vision-Language-Action(VLA) 로봇 제어 정책의 시각·언어 이해와 조작 능력을 경량 Student 모델에 전달하여, 제한된 연산 자원을 가진 엣지 디바이스에서도 높은 작업 성공률과 낮은 제어 지연시간을 함께 달성하는 것을 목표로 하는 연구 프로젝트입니다.
@@ -136,6 +140,15 @@ Qwen3.5, SmolVLM2/SmolVLA, Llama 3.2, Gemma 4의 호환성과 계산량 검토�
 [backbone 검토](docs/decisions/0003-backbone-review.md)에 정리했습니다.
 이는 후보 우선순위이며 Student 구현·모델 교체나 VLA 성능 검증을 의미하지 않습니다.
 
+## Student 설계 보류 · 뼈대 (2026-11-04)
+
+사용자가 논문 검토 후 구조를 판단하고 구현하기로 하여,
+[`StudentSkeleton`](src/vlade/models/students/skeleton.py)에 입력·출력 인터페이스와
+구현할 자리만 마련했습니다. 백본, 관측 인코딩, 시간 이력, proprio 융합, 액션 헤드와
+증류 목적은 미정입니다. 현재 공통 `PolicyOutput` 형식만 참조하며 호출 시
+`NotImplementedError`를 냅니다. 학습 진입점에는 연결하지 않았습니다.
+기존 Qwen 초안과 관련 실행 코드는 보존하며, 최종 Student 구조의 확정을 뜻하지 않습니다.
+
 ## Teacher 저장·Student 계약·집필 준비 (2026-10-26)
 
 Teacher action/GT token/hidden-state 저장·로드와 provenance·episode 순서·용량 검사를
@@ -201,3 +214,15 @@ checkpoint 공간 검사·bounded debug와 T1 비교 보고서 검증을 연결�
 
 추가 교차 검토 후 split manifest 정합성, checkpoint 파일·step 봉인, cache source/feature 대조,
 파일럿 보고서 identity와 기존 T1 선택 충돌 검사, 소유한 추출 임시 파일의 재시작도 보완했습니다.
+
+
+## Hugging Face 자료 참조
+
+데이터·가중치 입력은 `hfasset://키`를 사용하고, `src/vlade/storage/`가 비공개 HF
+레지스트리의 고정 commit과 SHA256을 확인하여 로컬 캐시에 준비합니다. 로컬·Colab·GitHub는
+같은 참조 설정을 사용합니다. `configs/storage/hf_assets.lock.json`과
+`scripts/data/hf_assets.py`가 입력 버전과 준비를 관리하고, `migrate_hf_assets.py`는
+기존 Drive 자료를 조직 저장소에 이관합니다. Colab 01의 원래 다운로드·전처리 기능은
+접힌 구역에 보존합니다. 새 Colab 실험 출력은 `/content/vlade_runs`에 저장하고 봉인된
+중간·best·final checkpoint를 HF에 전송합니다. 원본 Drive 자료는 자동 삭제하지 않습니다.
+자세한 인증·이관·재개 방법은 [HF 안내](docs/environment/hugging_face_checkpoints.md)를 참조하십시오.

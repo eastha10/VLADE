@@ -28,7 +28,7 @@
     "abbreviation": "FFT",
     "dataset_repository": "Sylvest/libero_plus_rlds",
     "dataset_revision": "fb0c7029b076030d5d57227229e4f7460def1f7c",
-    "dataset_archive_directory": "data/raw/libero_plus_rlds",
+    "dataset_archive_directory": "hfasset://raw_rlds",
     "trainable_scope": "all_model_parameters",
     "hyperparameters_status": "provisional_smoke_defaults_not_validated",
     "upstream_training_support": "lora_only",
@@ -37,7 +37,7 @@
     "trainer_validation_status": "cpu_unit_and_synthetic_smoke_passed; real_gpu_not_run"
   },
   "fft_defaults": {
-    "data_root": "data/processed/libero_plus_rlds",
+    "data_root": "hfasset://raw_rlds",
     "output_dir": "artifacts/training/libero_plus_fft",
     "dataset_name": "libero_plus_mixdata",
     "max_steps": 1000,
@@ -63,11 +63,11 @@
   },
   "fft_runs": {
     "ava_vla": {
-      "checkpoint": "checkpoints/teacher/avavla-libero-4in1",
+      "checkpoint": "hfasset://ava_t0",
       "output_dir": "artifacts/training/libero_plus_fft/ava_vla"
     },
     "openvla_oft": {
-      "checkpoint": "checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-spatial-object-goal-10",
+      "checkpoint": "hfasset://openvla_oft_t0",
       "output_dir": "artifacts/training/libero_plus_fft/openvla_oft"
     }
   },
@@ -81,12 +81,12 @@
     "ava_vla": {
       "repository": "LiAuto-DSR/avavla-libero-4in1",
       "revision": "090bf68d234ea13bc78476236f82458b25b797b8",
-      "local_directory": "checkpoints/teacher/avavla-libero-4in1"
+      "local_directory": "hfasset://ava_t0"
     },
     "openvla_oft": {
       "repository": "moojink/openvla-7b-oft-finetuned-libero-spatial-object-goal-10",
       "revision": "638918f3d1c2e43a39a8a20772bdb8b91835e4b7",
-      "local_directory": "checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-spatial-object-goal-10"
+      "local_directory": "hfasset://openvla_oft_t0"
     }
   },
   "baseline_inputs": [

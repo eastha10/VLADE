@@ -36,23 +36,27 @@
   "checkpoints": {
     "libero_spatial": {
       "hub_repository": "LiAuto-DSR/avavla-libero-4in1",
-      "local_directory": "checkpoints/teacher/avavla-libero-4in1",
-      "revision": null
+      "local_directory": "hfasset://ava_t0",
+      "revision": null,
+      "hf_asset": "ava_t0"
     },
     "libero_object": {
       "hub_repository": "LiAuto-DSR/avavla-libero-4in1",
-      "local_directory": "checkpoints/teacher/avavla-libero-4in1",
-      "revision": null
+      "local_directory": "hfasset://ava_t0",
+      "revision": null,
+      "hf_asset": "ava_t0"
     },
     "libero_goal": {
       "hub_repository": "LiAuto-DSR/avavla-libero-4in1",
-      "local_directory": "checkpoints/teacher/avavla-libero-4in1",
-      "revision": null
+      "local_directory": "hfasset://ava_t0",
+      "revision": null,
+      "hf_asset": "ava_t0"
     },
     "libero_10": {
       "hub_repository": "LiAuto-DSR/avavla-libero-4in1",
-      "local_directory": "checkpoints/teacher/avavla-libero-4in1",
-      "revision": null
+      "local_directory": "hfasset://ava_t0",
+      "revision": null,
+      "hf_asset": "ava_t0"
     }
   },
   "evaluation": {

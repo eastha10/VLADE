@@ -19,12 +19,12 @@
     "download_status": "local_sha256_verified_not_in_git",
     "libero": {
       "hub_repository": "LiAuto-DSR/avavla-libero-4in1",
-      "local_directory": "checkpoints/teacher/avavla-libero-4in1",
+      "local_directory": "hfasset://ava_t0",
       "revision": "090bf68d234ea13bc78476236f82458b25b797b8"
     },
     "calvin": {
       "hub_repository": "LiAuto-DSR/avavla-calvin-abc2d",
-      "local_directory": "checkpoints/teacher/avavla-calvin-abc2d",
+      "local_directory": "hfasset://ava_calvin_t0",
       "revision": null
     },
     "component_patterns_to_review": [
