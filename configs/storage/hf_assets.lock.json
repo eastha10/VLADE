@@ -409,6 +409,33 @@
           "sha256": "1e1c1f466fb628d4a3ac4587fde62bfda290fac71209124c4531e81d87f1403f"
         }
       }
+    },
+    "fullframes_d_seed42": {
+      "repo_id": "VLADE-konkuk/libero-plus-fullframes",
+      "repo_type": "dataset",
+      "revision": "604e5e64f141d9fb78c33cf47d47540fcfddce49",
+      "format": "parquet_frames",
+      "local_name": "fullframes_d_seed42",
+      "metadata_files": {
+        "dataset_manifest.json": {
+          "bytes": 87450,
+          "sha256": "dd2167380aeff80a0b527eb81e7c5607f98a1d2b91f73316ada7464c9f5a0013"
+        },
+        "COMPLETE": {
+          "bytes": 174,
+          "sha256": "5e6904b7df4562196e2e774307a87c7ab0632667e8ad354b4b666a39be02f616"
+        },
+        "reference/splits.json": {
+          "bytes": 5167708,
+          "sha256": "379376e5cfb19d0b9d0a5bdd548e01e4c658f09de3fdd1bff178b3aad7ed9900"
+        },
+        "reference/normalization.json": {
+          "bytes": 3333,
+          "sha256": "e1dbf29ea83cc2e0fbcb90e68a7ad15660eb210baa5a333d20bd16c80d275af3"
+        }
+      },
+      "stored_frame_interval_steps": 1,
+      "action_horizon": 8
     }
   }
 }

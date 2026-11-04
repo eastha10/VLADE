@@ -1,0 +1,18 @@
+[
+  {
+    "number": 1,
+    "title": "AVA checkpoint attention 패치와 고정 소스 Colab 배포 연동",
+    "html_url": "https://github.com/eastha10/VLADE/pull/1",
+    "state": "open",
+    "draft": false,
+    "mergeable": null,
+    "mergeable_state": "unknown",
+    "body": "AVA의 고정 Transformers fork에서 gradient checkpointing 사용 시 누락되는 extra_attn_weights 전달을 관리형 패치로 적용하여 attention generator의 action loss gradient 경로를 복구합니다. Colab 02 설치 셀은 고정 revision·패치 SHA를 검증하고 패치된 wheel을 AVA 전용 venv에 설치한 뒤 실제 설치 파일을 검사하며, 실패하면 FFT를 차단합니다.\n\n소스 clean 판정은 고정 revision과 실제 Git 소스를 비교하며 manifest·02 노트북만 Git clean 판정에서 제외합니다. 실제 소스 SHA 검증은 유지합니다. 커밋 A에 소스를 고정하고 B에 manifest·02 노트북만 생성했습니다. 두 산출물은 SHA 일치를 위해 생성된 CRLF 바이트를 Git에도 그대로 보존했습니다.\n\n검증:\n- 커밋 A의 관련 CPU 단위 테스트 33건 통과(기존 검증 결과).\n- 고정 AVA submodule, 전체 소스 165개 SHA, 로컬 staging 복사본, 노트북 예상 manifest SHA 및 7개 코드 셀 compile 확인.\n- B 이후 A 기준 재생성 결과와 Git blob 바이트 일치, contains_uncommitted_work=false 및 격리 worktree clean 확인.\n- source revision: 8715afb2f86f0417b06911525bd1ecb4f54af09d\n- manifest SHA256: cd56db73f031558d8a8d2091249eb5e7591d9f4493d5c1e59a1dacda08566f54\n\nColab/GPU 실행과 공유 Drive 반영은 수행하지 않았습니다. 기존 로컬 main과 사용자 미커밋 작업을 보존했습니다.",
+    "changed_files": 5,
+    "additions": 1067,
+    "deletions": 533,
+    "head": "codex/ava-transformers-patch-a",
+    "head_sha": "deb8bec447e8963159c357c362bad22070b9db7e",
+    "base": "main"
+  }
+]

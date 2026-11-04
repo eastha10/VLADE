@@ -1,0 +1,19 @@
+{
+  "fullframes_revision": "604e5e64f141d9fb78c33cf47d47540fcfddce49",
+  "registry_revision": "64c20b630f1142cef8bdb242f3845c4f21b3762e",
+  "fullframes_frames": 2238036,
+  "fullframes_episodes": 14347,
+  "fullframes_bytes": 60862121397,
+  "verified_assets": [
+    "fullframes_d_seed42",
+    "prepared_d_seed42",
+    "ava_t0",
+    "ava_fft_step_1975",
+    "openvla_oft_t0"
+  ],
+  "private_flags": {
+    "VLADE-konkuk/libero-plus-fullframes": false,
+    "VLADE-konkuk/libero-plus-prepared": false,
+    "VLADE-konkuk/VLADE-checkpoints": true
+  }
+}
