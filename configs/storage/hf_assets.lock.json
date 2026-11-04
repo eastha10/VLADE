@@ -283,6 +283,132 @@
           "sha256": "9cf07e15999695f5e0ffc4089f569dbeffd70f4684a15ada84cf2472d7d45118"
         }
       }
+    },
+    "ava_fft_step_1975": {
+      "repo_id": "VLADE-konkuk/VLADE-checkpoints",
+      "repo_type": "model",
+      "revision": "c685b31d7593128ac2f45ff91cf4629e57ba266a",
+      "format": "directory",
+      "prefix": "assets/ava_fft_step_1975",
+      "local_name": "step-0001975",
+      "files": {
+        "COMPLETE": {
+          "bytes": 3,
+          "sha256": "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22"
+        },
+        "action_head--1975_checkpoint.pt": {
+          "bytes": 302242378,
+          "sha256": "1578713b6f397573e1aa5963d2e45b4da1626fccfcc5e2c6f53500f29c8dce8d"
+        },
+        "added_tokens.json": {
+          "bytes": 21,
+          "sha256": "ab43123267b190cb7990bc9f2ae4ad32dcb7ed029fb0fccb1b4e062c6f54a2a1"
+        },
+        "checkpoint_manifest.json": {
+          "bytes": 4112,
+          "sha256": "ccbd836b83d8ee1f93f226237cadf0b81449a9d6a28bb31f73b74f284d04faf2"
+        },
+        "config.json": {
+          "bytes": 61603,
+          "sha256": "ad44d42ca864f5322f001d192e5f14300d8c5674636d869a5b9ac3c3f5e1a47b"
+        },
+        "configuration_prismatic.py": {
+          "bytes": 5865,
+          "sha256": "68cc5ae34f1b46af3168d8d479cb81bb776965653453fd904aa8eefb6c8f9f68"
+        },
+        "dataset_statistics.json": {
+          "bytes": 3507,
+          "sha256": "4a518ce550faf8173d68f72fe70743e251ef94bb8e9bd666f011667fdf02ae3b"
+        },
+        "generation_config.json": {
+          "bytes": 136,
+          "sha256": "67fbe17b12e8beb5be98eb911483971cc78589e51a37ac0cce9cd499d06a8bf1"
+        },
+        "model-00001-of-00008.safetensors": {
+          "bytes": 1968014408,
+          "sha256": "e933dd5d3b01d399a0f7f7f4c69eaff099fcd21ed8cf54553d3d5642dc5f0a60"
+        },
+        "model-00002-of-00008.safetensors": {
+          "bytes": 1990284904,
+          "sha256": "6aebe504db4a16b9c4d92c2970add892dd2bac658dc841b63c9f3236925686e4"
+        },
+        "model-00003-of-00008.safetensors": {
+          "bytes": 1990284912,
+          "sha256": "940b0b78d77c5d62779f78e154d3a3cac673fc90d0357efd8e039a0149f200b8"
+        },
+        "model-00004-of-00008.safetensors": {
+          "bytes": 1990284944,
+          "sha256": "e3985bfdc6dd91eca2a4db3788ea04d9907bae1fc811b5f93d8f1f858870c425"
+        },
+        "model-00005-of-00008.safetensors": {
+          "bytes": 1933645200,
+          "sha256": "e2fecc5c9956a9aaa3a24b8f22ce2a4cb624d1b404f62a29ce7361fe17da6571"
+        },
+        "model-00006-of-00008.safetensors": {
+          "bytes": 1933661840,
+          "sha256": "000e381d2694bbc96452bbaf2fe4074000777199089eb588efd49554f26286f0"
+        },
+        "model-00007-of-00008.safetensors": {
+          "bytes": 1933661840,
+          "sha256": "96f7a785994d13b576e8e8670ee61e0b862c32dbb3448d6fdee9ec5c093d2548"
+        },
+        "model-00008-of-00008.safetensors": {
+          "bytes": 1342762152,
+          "sha256": "c639e40f7e55572c5aa59373010fd964e160be963d13af8b7365bc2474c9d699"
+        },
+        "model.safetensors.index.json": {
+          "bytes": 94764,
+          "sha256": "9440e4e79c07490fc6d3704038a0ca79ed7567f507a6b3de44ecf8e75400908b"
+        },
+        "modeling_prismatic.py": {
+          "bytes": 54233,
+          "sha256": "ad464d540f93e4ac1971aac3af9346a5b572c5b9c0fcbea8da3bf78b6b261597"
+        },
+        "preprocessor_config.json": {
+          "bytes": 1650,
+          "sha256": "bd024783fb785cbdfe35b710b621c5e8678d4c157a9ba625675e67d40d1757da"
+        },
+        "processing_prismatic.py": {
+          "bytes": 12718,
+          "sha256": "06563586bbc73d36501a14a231a3174904ede830d33174d0c625ece8e931ef1e"
+        },
+        "processor_config.json": {
+          "bytes": 130,
+          "sha256": "167e026d8121f6cb0bf5c18310b97ba8139152f970822bb3824213bd37dc7a76"
+        },
+        "proprio_projector--1975_checkpoint.pt": {
+          "bytes": 33638760,
+          "sha256": "eb86ceea25598709236f197754d34b03084218a0aab3c0347357687a7eb99e19"
+        },
+        "special_tokens_map.json": {
+          "bytes": 552,
+          "sha256": "cb90ee5cf5793aa444039af9795b00db59d3fef8942e7eca9cf1990bab370d61"
+        },
+        "tokenizer.json": {
+          "bytes": 1842976,
+          "sha256": "8f5e2869e1807b8bb3c7717a294539c37e9de5d728ad60e31ef57e83cc5ea527"
+        },
+        "tokenizer.model": {
+          "bytes": 499723,
+          "sha256": "9e556afd44213b6bd1be2b850ebbbd98f5481437a8021afaf58ee7fb1818d347"
+        },
+        "tokenizer_config.json": {
+          "bytes": 1192,
+          "sha256": "f5f1d3ed015ebb71cf11686ff00bc8e0c25957bbf3952f95312cecc9b168fbea"
+        },
+        "trainer_state.pt": {
+          "bytes": 15169581840,
+          "sha256": "4a0dc5bb0933048b0460ed19bba2455c43da52d709178c4f78978939df112fd7"
+        },
+        "vision_attn_weight_generator--1975_checkpoint.pt": {
+          "bytes": 100912802,
+          "sha256": "51969bd3cc8081169cf21ff09262ead1a9f88bc55079a0e68aebb118b310a4b7"
+        },
+        "vlade_fft.json": {
+          "bytes": 2959,
+          "sha256": "1e1c1f466fb628d4a3ac4587fde62bfda290fac71209124c4531e81d87f1403f"
+        }
+      }
     }
   }
 }

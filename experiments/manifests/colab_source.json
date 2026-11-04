@@ -199,7 +199,7 @@
     "src/vlade/utils/hf_notebooks.py": "6b38408e608f4353dd144130734240836c79d30e3bc66c42d19c9c2f08eae648",
     "scripts/data/hf_assets.py": "d2a650f99b81df8ae8e807a764b6239e79a57cc98644216b7677949dec7ae9cf",
     "scripts/data/migrate_hf_assets.py": "4f07b200d70d562435f74689afdfadd82498c1ff42ef59303343261a2e032330",
-    "configs/storage/hf_assets.lock.json": "739f0e12fcf608cd55b97d1d0b9823992858bab9d1e33b4dcaab6afd6ddce640",
+    "configs/storage/hf_assets.lock.json": "221b10cb5ca21d5500c96c6d5273a8b77c85f66eea2d96390733330161bd341c",
     "tests/integration/.gitkeep": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
     "tests/smoke/.gitkeep": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
     "tests/unit/.gitkeep": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
