@@ -1,0 +1,48 @@
+# LIBERO+ 전처리 코드와 AVA 실행 노트북
+
+## 전처리 진입점
+
+`scripts/data/prepare_episode_data.py`가 `vlade.data.episode_data.main()`을 호출합니다.
+`src/vlade/data/canonical_split.py`는 기존 Canonical D/seed42 manifest를 검증하고
+episode별 split을 배정합니다. `canonical_normalization.py`는 별도의 통계 생성
+모듈이며, 전체 전처리 실행에서는 이미 생성된 정규화 JSON을 입력으로 받습니다.
+
+2026-10-30 CPU 전처리는 `--resume --min-free-gib 20`과 기존 로컬 TFDS,
+canonical manifest, 외부 정규화 JSON 및 각 SHA256을 지정해 실행했습니다.
+결과는 Train 11,477 / Validation 1,428 / Test 1,442 episode였습니다.
+이번 반영에서는 당시 사용한 `_preparation_source()`를 가져와
+`extraction_manifest.json`이 없는 기존 로컬 TFDS도 읽을 수 있도록 했습니다.
+기존 단일 Train episode 준비 API와 loader 검증은 유지합니다.
+
+외부 정규화 원본과 저장소에 있는 정규화 JSON은 바이트 SHA가 다를 수 있습니다.
+실제로 선택한 파일의 SHA를 지정해야 하며 과거 입력의 SHA와 혼동하지 않습니다.
+기존 데이터와 완료된 출력은 덮어쓰지 않습니다.
+
+```bash
+python -B scripts/data/prepare_episode_data.py \
+  --tfds-root /path/to/existing-tfds \
+  --output /path/to/new-prepared-output \
+  --canonical-manifest experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz \
+  --canonical-normalization /path/to/normalization_train_d_seed42.json \
+  --canonical-normalization-sha256 <selected-file-sha256> \
+  --min-free-gib 20
+```
+
+전체 action/proprio trajectory를 NPZ로 저장하고, 카메라 이미지와 지시문은
+t=0,8,16,... query에 연결합니다. 이미지는 RLDS에 저장된 방향을 유지합니다.
+Train 전체 transition의 정규화 통계를 사용하며, loader가 query별 8×7 action
+chunk와 tail mask를 구성합니다. 재개할 때만 같은 입력·출력 계약으로 `--resume`을
+추가합니다. 데이터·가중치·전처리 결과는 이번 Git 변경에 포함하지 않습니다.
+
+## 첨부 노트북 보관
+
+- `experiments/colab_ava_fft_suite_balanced_cu.ipynb`: 사용자가 전달한
+  `colab_ava_fft_suite_balanced_cu_(1) (4).ipynb`의 코드·설명 셀입니다.
+- `experiments/colab_ava_libero_plus_paired_rollout_hf.ipynb`: 사용자가 전달한
+  `colab_ava_libero_plus_paired_rollout_hf_ipynb_json.ipynb`의 코드·설명 셀입니다.
+
+실행 출력·실행 횟수·출력 관련 metadata는 제거했습니다. 코드 셀의 경로, 실행 플래그,
+HF 저장소, 내장 소스와 resume 식별자는 첨부본 그대로이며 이 Git 브랜치에 맞춰
+자동 변경하지 않았습니다. FFT 첨부본은 `RUN_MAIN_FFT=True`, paired rollout은
+`RUN_EVALUATION=False`입니다. 실행 전 사용할 입력과 실행 설정을 확인하십시오.
+이 반영 작업에서 Colab 학습·GPU·rollout을 실행하지 않았습니다.

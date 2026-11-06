@@ -103,3 +103,7 @@ Drive에서는 `/content/drive/MyDrive/VLADE` 바로 아래에 저장소 구조�
 - `src/vlade/utils/filesystem.py`: 같은 parent의 완료 staging을 덮어쓰기 없이 게시하고 일시적인 잠금만 제한 재시도.
 - `tests/unit/test_final_{data,cache,run}_review.py`: split/part/checkpoint/report/추출 재시작의 변조·실패 회귀 검사.
 - `tests/unit/test_colab_source_files.py`: 일반 소스 파일 manifest·복사·누락/변조 거부와 revision 복원 검사.
+
+- `experiments/colab_ava_fft_suite_balanced_cu.ipynb`: 첨부 AVA Suite-balanced FFT 실행 소스.
+- `experiments/colab_ava_libero_plus_paired_rollout_hf.ipynb`: 첨부 LIBERO+ paired rollout 실행 소스.
+- `docs/environment/libero_plus_preprocessing_handoff.md`: 전처리 진입점·입력·첨부본 실행 설정 안내.

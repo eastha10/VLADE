@@ -194,3 +194,6 @@ AVA 전용 1-step 노트북은 전체 Episode 전처리와 본 학습을 수행�
 순서대로 읽다가 첫 canonical Train Episode를 확인한 즉시 중단하고 sealed full-Train
 normalization을 그대로 사용합니다. A100 실측값은 Colab에서 실제 실행한 뒤 생성되는
 `reload_report.json`만 근거로 삼으며, 이 저장소 변경 자체는 GPU 통과를 뜻하지 않습니다.
+
+전처리 진입점과 첨부 AVA Suite-balanced FFT·paired rollout 노트북은
+[전처리 및 노트북 안내](docs/environment/libero_plus_preprocessing_handoff.md)를 참고하십시오.

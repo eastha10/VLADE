@@ -651,6 +651,57 @@ def query_stream(data: EpisodeData, split: str, *, seed: int = 42, repeat: bool 
         cursor = 0
 
 
+def _preparation_source(tfds_root: Path) -> tuple[Path, dict]:
+    """Locate TFDS without writing to it; retain archive provenance when present."""
+    if not tfds_root.is_dir():
+        raise ValueError("TFDS root must be an existing directory")
+    infos = list(tfds_root.rglob("dataset_info.json"))
+    if len(infos) != 1:
+        raise ValueError("Exactly one TFDS dataset_info.json is required")
+    info_path = infos[0]
+    info = json.loads(info_path.read_text(encoding="utf-8"))
+    extraction = tfds_root / "extraction_manifest.json"
+    source = {"dataset_info": info, "dataset_info_sha256": sha256(info_path),
+              "extraction_manifest": None}
+    if extraction.exists():
+        source["extraction_manifest"] = json.loads(extraction.read_text(encoding="utf-8"))
+        return info_path.parent, source
+
+    directory = info_path.parent.resolve()
+    if (not directory.is_relative_to(tfds_root.resolve()) or
+            directory.name != "1.0.0" or directory.parent.name != "libero_mix" or
+            info_path.resolve().parent != directory):
+        raise ValueError("Local TFDS must resolve inside the supplied root at libero_mix/1.0.0")
+    if (info.get("name") != "libero_mix" or info.get("version") != "1.0.0" or
+            info.get("fileFormat", "tfrecord") != "tfrecord"):
+        raise ValueError("Expected local LIBERO+ TFDS libero_mix/1.0.0 in TFRecord format")
+    splits = info.get("splits")
+    if not isinstance(splits, list) or len(splits) != 1 or splits[0].get("name") != "train":
+        raise ValueError("Local TFDS must declare exactly the original train split")
+    split = splits[0]
+    try:
+        lengths = [int(value) for value in split["shardLengths"]]
+        payload_bytes = int(split["numBytes"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError("Invalid local TFDS shardLengths/numBytes metadata") from error
+    if (not lengths or any(value <= 0 for value in lengths) or
+            sum(lengths) != 14_347 or payload_bytes <= 0):
+        raise ValueError("Local TFDS must describe all 14,347 source episodes")
+    features = directory / "features.json"
+    if not features.is_file() or features.resolve().parent != directory:
+        raise ValueError("Local TFDS requires features.json inside its dataset directory")
+    expected = {f"libero_mix-train.tfrecord-{index:05d}-of-{len(lengths):05d}"
+                for index in range(len(lengths))}
+    shards = list(directory.glob("*.tfrecord*"))
+    if {path.name for path in shards} != expected or any(
+            not path.is_file() or path.resolve().parent != directory for path in shards):
+        raise ValueError("Local TFDS shard inventory differs from dataset_info.json")
+    # Each uncompressed TFRecord contributes an 8-byte length and two 4-byte CRCs.
+    if sum(path.stat().st_size for path in shards) != payload_bytes + 16 * sum(lengths):
+        raise ValueError("Local TFDS shard sizes differ from dataset_info.json")
+    return directory, source
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tfds-root", type=Path, required=True)
@@ -673,12 +724,7 @@ def main() -> None:
     parser.add_argument("--canonical-normalization", type=Path, required=True)
     parser.add_argument("--canonical-normalization-sha256", required=True)
     args = parser.parse_args()
-    infos = list(args.tfds_root.rglob("dataset_info.json"))
-    if len(infos) != 1:
-        raise ValueError("Exactly one TFDS dataset_info.json is required")
-    source = {"dataset_info": json.loads(infos[0].read_text(encoding="utf-8")),
-              "dataset_info_sha256": sha256(infos[0]),
-              "extraction_manifest": json.loads((args.tfds_root / "extraction_manifest.json").read_text(encoding="utf-8"))}
+    directory, source = _preparation_source(args.tfds_root)
     canonical = load_canonical_split(args.canonical_manifest, args.canonical_sha256)
     actual_normalization_sha256 = sha256(args.canonical_normalization)
     if actual_normalization_sha256 != args.canonical_normalization_sha256.lower():
@@ -702,7 +748,7 @@ def main() -> None:
     if args.restore_backups:
         report = restore_episode_archives(args.backup_dir, stage, contract)
         print(json.dumps({"episode_backup_restore": report}, indent=2), flush=True)
-    prepare(tfds_episodes(infos[0].parent), args.output, source=source,
+    prepare(tfds_episodes(directory), args.output, source=source,
             seed=CANONICAL_SEED, canonical=canonical,
             canonical_normalization=canonical_normalization,
             canonical_normalization_sha256=actual_normalization_sha256,
