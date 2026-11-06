@@ -33,3 +33,27 @@ Drive 배포, HF 자료 게시는 실행하지 않았습니다.
 검증 명령은 `python -B -m pytest ... -q --tb=short -p no:cacheprovider`와
 작업별 고유 `scratch/pytest-*` basetemp를 사용했습니다. 재생성 가능한 fixture·의존성·worktree는
 병합 후 정리하며, 원격 병합 결과는 작업 루트의 `reports/merged-pr.json`으로 확인합니다.
+
+## 기존 지시 위반 후속 수정
+
+사용자가 점검 결과의 두 위반 사항 수정, 재발 방지 지침 명시와 Git 푸시를 지시했습니다.
+
+- `src/vlade/data/episode_data.py`의 공통 입력 경계에서 HF 키와 로컬 캐시 경로를 모두
+  `resolve_input`으로 검증합니다. 일반 로컬 TFDS의 검증 생략 분기를 제거했습니다.
+- `src/vlade/data/canonical_normalization.py`도 같은 경계를 사용하여 외부 원본을 읽기 전에
+  검증합니다. HF 캐시 루트에서 실제 TFDS 디렉터리를 찾아 정규화를 계산합니다.
+- 입력 안내 두 문서의 전처리·정규화 실행 예제를 고정 HF 키와 필수 canonical 인자로 맞췄습니다.
+- 이번 병합으로 추가된 과거 기록만 `legacy-canonical-split-2026-10-28.md`로 이동했습니다.
+  원래 경로는 `.harness/v0/2026-10-28-libero-plus-canonical-split/README.md`, 원본 커밋은
+  `783ef78`입니다. 내용은 바이트 단위로 보존했고, v0 트리가 PR 이전 main `e9d30b7`과
+  일치함을 확인했습니다. 다른 과거 기록은 수정하지 않았습니다.
+- `AGENTS.md`에 PR 병합 허가의 범위, 이전 정책 재유입 점검, HF 입력의 무조건 검증,
+  v0 동결의 병합 적용, 테스트 통과와 지시 준수의 구분을 명시했습니다.
+- `test_episode_data_input.py`와 `test_hf_assets.py`: **49 passed in 6.18s**.
+  미등록 로컬 입력·변조된 HF 캐시 거부, 고정 키·검증된 캐시의 읽기 전용 재사용,
+  canonical hash 검사와 정규화 진입점 검증을 합성 자료로 확인했습니다.
+  테스트는 `python -B -m pytest ... -q --tb=short -p no:cacheprovider`와 고유
+  `scratch/pytest-policy-fix-01` basetemp를 사용했습니다.
+- 변경 Python 3개 AST 검사, `git diff --check`, 기록 원문 보존 확인을 통과했습니다.
+  전체 회귀 검사는 재실행하지 않았으며, 실제 데이터 다운로드·전처리·GPU 학습·Drive 변경은
+  실행하지 않았습니다. 기존 사용자 미추적 파일과 HF lock·submodule 고정값은 보존했습니다.

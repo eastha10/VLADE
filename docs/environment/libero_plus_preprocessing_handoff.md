@@ -10,9 +10,11 @@ episode별 split을 배정합니다. `canonical_normalization.py`는 별도의 �
 2026-10-30 CPU 전처리는 `--resume --min-free-gib 20`과 기존 로컬 TFDS,
 canonical manifest, 외부 정규화 JSON 및 각 SHA256을 지정해 실행했습니다.
 결과는 Train 11,477 / Validation 1,428 / Test 1,442 episode였습니다.
-이번 반영에서는 당시 사용한 `_preparation_source()`를 가져와
-`extraction_manifest.json`이 없는 기존 로컬 TFDS도 읽을 수 있도록 했습니다.
-기존 단일 Train episode 준비 API와 loader 검증은 유지합니다.
+위 내용은 당시 실행 기록입니다. 현재 `_preparation_source()`는 먼저 공통 HF 출처·무결성
+검증을 수행합니다. 전처리와 정규화 생성 모두 `hfasset://raw_rlds` 또는 같은 고정
+레지스트리에서 받은 정확한 HF 캐시 루트만 입력으로 받습니다. 미등록 로컬 TFDS나
+Drive 경로는 TFDS 읽기·출력 생성 전에 거부합니다. 기존 단일 Train episode 준비
+API와 loader 검증은 유지합니다.
 
 외부 정규화 원본과 저장소에 있는 정규화 JSON은 바이트 SHA가 다를 수 있습니다.
 실제로 선택한 파일의 SHA를 지정해야 하며 과거 입력의 SHA와 혼동하지 않습니다.
@@ -25,12 +27,22 @@ prepared identity는 checkpoint와 재개 계약에 그대로 남으며 새 값�
 
 ```bash
 python -B scripts/data/prepare_episode_data.py \
-  --tfds-root /path/to/existing-tfds \
+  --tfds-root hfasset://raw_rlds \
   --output /path/to/new-prepared-output \
   --canonical-manifest experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz \
-  --canonical-normalization /path/to/normalization_train_d_seed42.json \
-  --canonical-normalization-sha256 <selected-file-sha256> \
+  --canonical-normalization experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json \
+  --canonical-normalization-sha256 eac95bcc81b6182b90a2bd030096df6e3e408cb88923d0a1d57dc6c81e297c67 \
   --min-free-gib 20
+```
+
+정규화 통계를 재계산할 때도 동일한 검증된 HF 원본을 사용합니다. 아래 명령은 전체
+원본을 읽는 작업이므로 실제 재계산이 필요한 승인된 실행에서만 사용합니다.
+
+```bash
+python -B scripts/data/compute_libero_plus_normalization.py \
+  --data-dir hfasset://raw_rlds \
+  --canonical-manifest experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz \
+  --output /path/to/new-normalization.json
 ```
 
 전체 action/proprio trajectory를 NPZ로 저장하고, 카메라 이미지와 지시문은
