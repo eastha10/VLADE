@@ -29,6 +29,47 @@ def test_config_loads_distinct_runs():
     assert ava.dataset_name == "libero_plus_mixdata"
 
 
+@pytest.mark.parametrize("normalization_hash,damaged", [("reference", False), ("original", False), ("original", True)])
+def test_preflight_preserves_pinned_hf_normalization_serializations(tmp_path, monkeypatch, normalization_hash, damaged):
+    import copy
+    import hashlib
+    import vlade.training.fft as fft
+    import vlade.data.episode_data as episode_data
+    import vlade.storage.assets as assets
+    from vlade.data.canonical_split import CANONICAL_SHA256
+
+    checkpoint = tmp_path / "checkpoint"
+    checkpoint.mkdir()
+    for name in ("config.json", "model.safetensors", "configuration_prismatic.py", "modeling_prismatic.py",
+                 "processing_prismatic.py", "action_head--1_checkpoint.pt", "proprio_projector--1_checkpoint.pt",
+                 "vision_attn_weight_generator--1_checkpoint.pt"):
+        (checkpoint / name).touch()
+    (tmp_path / "third_party/ava_vla/prismatic").mkdir(parents=True)
+    normalization = ROOT / "experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json"
+    reference_sha = hashlib.sha256(normalization.read_bytes()).hexdigest()
+    stats = json.loads(normalization.read_text(encoding="utf-8"))
+    prepared = tmp_path / "prepared"
+    data = SimpleNamespace(root=prepared, stats=copy.deepcopy(stats), manifest={
+        "canonical_manifest_sha256": CANONICAL_SHA256,
+        "canonical_normalization_sha256": reference_sha if normalization_hash == "reference" else "a" * 64})
+    if damaged:
+        data.stats["action"]["q01"][0] += 1
+    verified = []
+    monkeypatch.setattr(fft, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(episode_data, "EpisodeData", lambda _: data)
+    monkeypatch.setattr(assets, "resolve_input", lambda path: verified.append(path) or path)
+    cfg = FFTConfig("ava_vla", checkpoint, tmp_path, tmp_path / "out", prepared_data_root=prepared,
+        canonical_split_manifest=ROOT / "experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz",
+        canonical_split_sha256=CANONICAL_SHA256, canonical_normalization=normalization,
+        canonical_normalization_sha256=reference_sha)
+    if damaged:
+        with pytest.raises(ValueError, match="normalization statistics differ"):
+            preflight(cfg)
+    else:
+        preflight(cfg)
+        assert verified == ([prepared] if normalization_hash == "original" else [])
+
+
 def test_preflight_requires_component_checkpoints(tmp_path):
     checkpoint = tmp_path / "checkpoint"
     checkpoint.mkdir()
@@ -37,9 +78,8 @@ def test_preflight_requires_component_checkpoints(tmp_path):
     for filename in ("configuration_prismatic.py", "modeling_prismatic.py", "processing_prismatic.py"):
         (checkpoint / filename).touch()
     data_root = tmp_path / "data"
-    (data_root / "libero_plus_mixdata").mkdir(parents=True)
-    (data_root / "libero_plus_mixdata" / "dataset_info.json").touch()
-    cfg = FFTConfig("ava_vla", checkpoint, data_root, tmp_path / "out")
+    (data_root / "synthetic").mkdir(parents=True)
+    cfg = FFTConfig("ava_vla", checkpoint, data_root, tmp_path / "out", dataset_name="synthetic")
     with pytest.raises(FileNotFoundError, match="action_head"):
         preflight(cfg)
 
@@ -58,6 +98,11 @@ def test_config_rejects_non_fft_optimizer(tmp_path):
     path.write_text(json.dumps(raw), encoding="utf-8")
     with pytest.raises(ValueError, match="optimizer"):
         FFTConfig.from_json(path, "ava_vla")
+
+
+def test_libero_plus_config_cannot_bypass_canonical_prepared_data(tmp_path):
+    with pytest.raises(ValueError, match="canonical prepared data"):
+        FFTConfig("ava_vla", tmp_path, tmp_path, tmp_path / "out").validate()
 
 
 def test_libero_plus_rlds_uses_disk_builder(monkeypatch, tmp_path):
@@ -131,6 +176,10 @@ def test_continuous_loss_updates_backbone_and_ava_components(monkeypatch):
     loss.backward()
     assert loss.item() > 0
     assert all(component.scale.grad is not None for component in (model, head, proprio, generator))
+    with torch.no_grad():
+        head.scale.fill_(float("nan"))
+    with pytest.raises(FloatingPointError, match="predicted action"):
+        compute_loss(model, head, proprio, generator, batch, torch.device("cpu"), 2, 0)
 
 
 def test_full_checkpoint_saves_model_and_all_components(monkeypatch, tmp_path):

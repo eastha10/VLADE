@@ -59,6 +59,10 @@ class FFTConfig:
     device: str = "cuda:0"
     resume: Path | None = None
     prepared_data_root: Path | None = None
+    canonical_split_manifest: Path | None = None
+    canonical_split_sha256: str | None = None
+    canonical_normalization: Path | None = None
+    canonical_normalization_sha256: str | None = None
     debug_records: int = 0
 
     @classmethod
@@ -75,9 +79,10 @@ class FFTConfig:
                 continue
             value = Path(merged[key]).expanduser()
             merged[key] = value if value.is_absolute() else REPO_ROOT / value
-        if merged.get("prepared_data_root") is not None:
-            value = Path(merged["prepared_data_root"]).expanduser()
-            merged["prepared_data_root"] = value if value.is_absolute() or str(value).startswith("hfasset:") else REPO_ROOT / value
+        for key in ("prepared_data_root", "canonical_split_manifest", "canonical_normalization"):
+            if merged.get(key) is not None:
+                value = Path(merged[key]).expanduser()
+                merged[key] = value if value.is_absolute() or str(value).startswith("hfasset:") else REPO_ROOT / value
         cfg = cls(**merged)
         cfg.validate()
         return cfg
@@ -101,6 +106,18 @@ class FFTConfig:
             raise ValueError("Invalid LR schedule or warmup_steps")
         if self.debug_records < 0:
             raise ValueError("debug_records must be nonnegative")
+        canonical = (self.canonical_split_manifest, self.canonical_split_sha256,
+                     self.canonical_normalization, self.canonical_normalization_sha256)
+        if any(value is not None for value in canonical) and not all(value is not None for value in canonical):
+            raise ValueError("Canonical split manifest and normalization paths/hashes must be configured together")
+        if self.dataset_name == "libero_plus_mixdata" and (
+                self.prepared_data_root is None or not all(value is not None for value in canonical)):
+            raise ValueError(
+                "LIBERO+ FFT requires canonical prepared data plus the sealed split and normalization identities"
+            )
+        for value in (self.canonical_split_sha256, self.canonical_normalization_sha256):
+            if value is not None and (len(value) != 64 or any(char not in "0123456789abcdefABCDEF" for char in value)):
+                raise ValueError("Canonical SHA-256 values must contain 64 hexadecimal characters")
         if not self.device.startswith("cuda"):
             raise ValueError("The pinned FFT adapters require a BF16 CUDA device")
 
@@ -164,6 +181,23 @@ def resolve_config_assets(cfg: FFTConfig, *, download: bool) -> FFTConfig:
         value = getattr(cfg, name)
         if value is None:
             continue
+        if name == "prepared_data_root" and not str(value).startswith("hfasset:"):
+            manifest_path = value / "manifest.json"
+            if manifest_path.is_file():
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if manifest.get("dataset_scope") == "canonical_train_episode_smoke":
+                    from vlade.data.episode_data import EpisodeData
+                    source = manifest.get("source") or {}
+                    if not source.get("hf_input"):
+                        raise ValueError("Canonical smoke input requires verified HF source provenance")
+                    source_root = resolve_input(source["hf_input"])
+                    infos = list(source_root.rglob("dataset_info.json"))
+                    if (len(infos) != 1 or hashlib.sha256(infos[0].read_bytes()).hexdigest() !=
+                            source.get("dataset_info_sha256")):
+                        raise ValueError("Canonical smoke source identity differs from its HF input")
+                    EpisodeData(value)
+                    updates[name] = value
+                    continue
         if download and name != "resume":
             updates[name] = resolve_input(value)
             continue
@@ -205,7 +239,26 @@ def preflight(cfg: FFTConfig) -> None:
             raise FileNotFoundError(f"Missing checkpoint model code: {cfg.checkpoint / filename}")
     if cfg.prepared_data_root is not None:
         from vlade.data.episode_data import EpisodeData
-        EpisodeData(cfg.prepared_data_root)
+        from vlade.data.canonical_split import load_canonical_split
+        from vlade.data.colab_assets import sha256
+
+        assert cfg.canonical_split_manifest is not None and cfg.canonical_split_sha256 is not None
+        assert cfg.canonical_normalization is not None and cfg.canonical_normalization_sha256 is not None
+        canonical = load_canonical_split(cfg.canonical_split_manifest, cfg.canonical_split_sha256)
+        if sha256(cfg.canonical_normalization) != cfg.canonical_normalization_sha256.lower():
+            raise ValueError("Canonical normalization SHA-256 mismatch")
+        data = EpisodeData(cfg.prepared_data_root)
+        if data.manifest.get("canonical_manifest_sha256") != canonical.sha256:
+            raise ValueError("Prepared data was built from a different canonical split or normalization")
+        reference_stats = json.loads(cfg.canonical_normalization.read_text(encoding="utf-8"))
+        if any(data.stats.get(section) != reference_stats[section] for section in ("action", "proprio")):
+            raise ValueError("Prepared normalization statistics differ from the sealed canonical reference")
+        if data.manifest.get("canonical_normalization_sha256") != cfg.canonical_normalization_sha256.lower():
+            # Existing pinned HF data retains its original normalization blob hash.
+            # JSON serialization may differ; keep both byte identities and require
+            # exact statistical equality plus independent HF payload verification.
+            from vlade.storage.assets import resolve_input
+            resolve_input(cfg.prepared_data_root)
     elif not cfg.data_root.is_dir():
         raise FileNotFoundError(f"Missing extracted RLDS data root: {cfg.data_root}")
     if cfg.prepared_data_root is None and not (cfg.data_root / cfg.dataset_name).is_dir():
@@ -371,6 +424,8 @@ def compute_loss(model: Any, head: Any, proprio: Any, generator: Any, batch: dic
         prediction = head.predict_action(action_hidden.to(torch.bfloat16))
         if prediction.shape != target.shape:
             raise ValueError(f"Prediction/target shape mismatch: {prediction.shape} vs {target.shape}")
+        if not torch.isfinite(prediction).all():
+            raise FloatingPointError("Non-finite predicted action")
         if capture is not None:
             capture({"predicted_action": prediction.detach().float().cpu(), "gt_action": target.detach().cpu(),
                      "proprio": state.detach().float().cpu(),
@@ -409,7 +464,8 @@ def _git_revision(path: Path) -> str | None:
 
 def _code_fingerprint() -> dict[str, str]:
     paths = [Path(__file__).with_name(name) for name in ("fft.py", "loop.py", "prepared_fft.py", "run_control.py", "debug_records.py", "compute_budget.py")]
-    paths.append(Path(__file__).parents[1] / "data/episode_data.py")
+    paths.extend(Path(__file__).parents[1] / "data" / name for name in
+                 ("episode_data.py", "canonical_split.py", "canonical_normalization.py"))
     return {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
 
 
@@ -418,7 +474,9 @@ def _prepared_data_identity(cfg: FFTConfig) -> dict | None:
         return None
     from vlade.data.episode_data import EpisodeData
     data = EpisodeData(cfg.prepared_data_root)
-    return {**{key: data.manifest[key] for key in ("normalization_sha256", "split_sha256")},
+    return {**{key: data.manifest[key] for key in ("normalization_sha256", "split_sha256",
+                                                    "canonical_manifest_sha256",
+                                                    "canonical_normalization_sha256")},
             "manifest_sha256": hashlib.sha256((data.root / "manifest.json").read_bytes()).hexdigest()}
 
 
@@ -505,7 +563,9 @@ def validate_resume(cfg: FFTConfig) -> dict[str, Any]:
     compatible = ("model", "checkpoint", "data_root", "dataset_name", "max_steps", "batch_size",
                   "grad_accumulation_steps", "learning_rate", "weight_decay", "seed",
                   "shuffle_buffer_size", "num_images_in_input", "optimizer", "gradient_checkpointing",
-                  "image_aug", "max_grad_norm", "lr_schedule", "warmup_steps", "prepared_data_root")
+                  "image_aug", "max_grad_norm", "lr_schedule", "warmup_steps", "prepared_data_root",
+                  "canonical_split_manifest", "canonical_split_sha256", "canonical_normalization",
+                  "canonical_normalization_sha256")
     for name in compatible:
         value = str(current[name]) if isinstance(current[name], Path) else current[name]
         if saved["configuration"].get(name) != value:
@@ -630,13 +690,24 @@ def train(cfg: FFTConfig) -> None:
                 if generator is not None:
                     groups["attention_generator"] = generator
                 manifest["gradient_diagnostics"] = gradient_diagnostics(groups)
+                manifest["finite_checks"] = {
+                    "predicted_action": True,
+                    "scalar_loss": True,
+                    "gradients": True,
+                }
 
         with metrics_path.open("x", encoding="utf-8") as metrics_file:
+            torch.cuda.synchronize(device)
+            step_started = time.monotonic()
             def on_step(current: Any, metrics: dict[str, float]) -> None:
                 nonlocal step_started
                 torch.cuda.synchronize(device)
                 metrics["optimizer_step_seconds"] = time.monotonic() - step_started
+                metrics["step_time_seconds"] = metrics["optimizer_step_seconds"]
+                from vlade.training.run_control import peak_process_rss_bytes
                 metrics["peak_allocated_bytes"] = torch.cuda.max_memory_allocated(device)
+                metrics["peak_reserved_bytes"] = torch.cuda.max_memory_reserved(device)
+                metrics["peak_process_rss_bytes"] = peak_process_rss_bytes()
                 budget_stop = bool(deadline and should_stop(deadline - time.time(), save_reserve,
                                                              metrics["optimizer_step_seconds"]))
                 if not budget_stop and validation is not None and (current.step % cfg.eval_steps == 0 or current.step == cfg.max_steps):
@@ -670,6 +741,7 @@ def train(cfg: FFTConfig) -> None:
                 record_manifest()
                 if budget_stop and current.step < cfg.max_steps:
                     raise BudgetExhausted("Saved optimizer boundary before the training deadline")
+                torch.cuda.synchronize(device)
                 step_started = time.monotonic()
 
             run_loop(modules=modules, optimizer=optimizer, scheduler=scheduler, batches=loader,

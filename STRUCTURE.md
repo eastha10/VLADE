@@ -40,6 +40,8 @@ vlade/
 │  ├─ colab_03_*.ipynb      # Qwen Task-only
 │  ├─ colab_04_*.ipynb      # AVA 논문 최고 보고 설정 · K=4 LoRA 준비
 │  ├─ colab_05_*.ipynb      # Qwen 고정 T1 액션 증류 · Task+Action KD
+│  ├─ colab_04_*.ipynb      # OpenVLA-OFT 독립 환경 FFT·재로딩
+│  ├─ colab_05_*.ipynb      # AVA canonical Train 1-Episode A100 1-step·재로딩
 │  └─ runs/                 # 실제 실행별 기록
 ├─ tests/                   # unit, integration, smoke test
 ├─ docs/                    # 의사결정·프로토콜·환경·논문 메모
@@ -154,9 +156,11 @@ Student 계약 구현은 아래 범위이며 KD trainer는 미구현입니다.
 
 ## Colab 실행 연결 (2026-10-28)
 
-- `experiments/colab_01_*.ipynb` → `colab_02_*.ipynb` → `colab_03_*.ipynb`: 다운로드·FFT/cache·Task-only 실행 순서.
+- `experiments/colab_01_*.ipynb` → `colab_02_*.ipynb` / `colab_04_*.ipynb`: 공통 데이터 준비 후 AVA와 OFT를 독립 환경에서 실행합니다. `colab_03_*.ipynb`는 별도 Qwen Task-only 단계입니다.
 - `src/vlade/data/colab_assets.py`, `episode_data.py`: Drive 자료 준비·공통 episode split/query/정규화.
-- `src/vlade/training/prepared_fft.py`, `fixed_cache.py`, `student_task.py`: 데이터 어댑터·순차 Teacher cache·Student BC.
+- `scripts/data/prepare_single_canonical_episode.py`: 전체 전처리 없이 canonical Train 1-Episode smoke 입력 준비.
+- `src/vlade/data/canonical_split.py`, `canonical_normalization.py`: 확정 D/seed-42 manifest 검증·exact group 배정·Train 전용 통계.
+- `src/vlade/training/prepared_fft.py`, `fixed_cache.py`, `student_task.py`: canonical 데이터 어댑터·순차 Teacher cache·Student BC.
 - `scripts/data/`, `scripts/train/`: 해당 기능의 얇은 CLI와 checkpoint 재로딩 검사.
 - `src/vlade/utils/colab_notebooks.py`: 순서별 노트북과 Git 소스 배포 설정 생성.
 - `scripts/prepare/generate_colab_notebooks.py`: 저장소 루트에서 인자 없이 실행하는 생성 진입점.
@@ -167,7 +171,7 @@ Student 계약 구현은 아래 범위이며 KD trainer는 미구현입니다.
 
 정본은 위 `src/`, `scripts/`, `experiments/`, `configs/`, `docs/`, `tests/`에 유지합니다.
 `experiments/baselines/`와 원본 소스 manifests도 Colab 파일 목록에 포함합니다. 실제 upstream
-복사 대상은 `third_party/ava_vla/`이며 OpenVLA-OFT 실행 환경은 별도입니다.
+복사 대상은 고정된 `third_party/ava_vla/`와 `third_party/openvla_oft/`이며 실행 환경은 별도입니다.
 
 새 노트북은 Git commit별 실행 소스를 `/content/vlade_sources`에 준비합니다. 가중치·데이터는
 HF에서 `/content/vlade_hf_assets`로 받고 현재 실행 출력은 `/content/vlade_runs` 및
@@ -178,6 +182,11 @@ HF에서 `/content/vlade_hf_assets`로 받고 현재 실행 출력은 `/content/
 - `src/vlade/utils/filesystem.py`: 같은 parent의 완료 staging을 덮어쓰기 없이 게시하고 일시적인 잠금만 제한 재시도.
 - `tests/unit/test_final_{data,cache,run}_review.py`: split/part/checkpoint/report/추출 재시작의 변조·실패 회귀 검사.
 - `tests/unit/test_colab_source_files.py`: 일반 소스 파일 manifest·복사·누락/변조 거부와 revision 복원 검사.
+
+- `experiments/colab_ava_fft_suite_balanced_cu.ipynb`: 유지 관리되는 AVA Suite-balanced FFT 실행본.
+- `notebooks/references/colab_ava_fft_suite_balanced_supplied.ipynb`: PR의 전달본 원본 참조.
+- `notebooks/references/colab_ava_libero_plus_paired_rollout_hf.ipynb`: 첨부 LIBERO+ paired rollout 실행 소스.
+- `docs/environment/libero_plus_preprocessing_handoff.md`: 전처리 진입점·입력·첨부본 실행 설정 안내.
 
 
 ## Hugging Face 자료 참조

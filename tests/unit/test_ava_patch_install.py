@@ -178,7 +178,7 @@ def test_generated_ava_notebook_guards_fft_and_avoids_global_pip(tmp_path, monke
     target.write_bytes((Path(__file__).resolve().parents[2] / PATCH_REL).read_bytes())
     monkeypatch.setattr(colab_notebooks, "ROOT", root)
     generated = colab_notebooks.generate()
-    assert len(generated) == 6
+    assert len(generated) == 8
     notebooks = [json.loads(p.read_text(encoding="utf-8")) for p in generated[:-1]]
     for notebook in notebooks:
         for item in notebook["cells"]:
@@ -195,3 +195,6 @@ def test_generated_ava_notebook_guards_fft_and_avoids_global_pip(tmp_path, monke
         assert cells[name].startswith("require_ava_environment()")
     for notebook in (notebooks[0], notebooks[2]):
         assert not any("AVA_ENV_READY" in "".join(item["source"]) for item in notebook["cells"])
+    single_episode = {item['id']: ''.join(item['source']) for item in notebooks[6]['cells']}
+    assert single_episode['install-ava'] == cells['install-ava']
+    assert "hf_input('raw_rlds', AVA_PY)" in single_episode['prepare-one-episode']

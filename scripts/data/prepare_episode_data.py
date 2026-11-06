@@ -1,4 +1,4 @@
-"""Build episode/group splits and exact train-only normalization for Colab."""
+"""Stream Drive TFDS into local episode data with sealed periodic backups."""
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))

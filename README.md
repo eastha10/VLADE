@@ -181,6 +181,8 @@ Drive를 공통 저장소로 사용하는 순서별 노트북을 추가했습니
 1. [LIBERO+·AVA 가중치 다운로드/검증·episode 전처리](experiments/colab_01_download_data_weights.ipynb)
 2. [AVA-VLA FFT·저장/재개·T1 선택·순차 cache](experiments/colab_02_ava_fft_and_fixed_cache.ipynb)
 3. [Qwen Task-only·실제 가중치 로딩·overfit·저장/재개](experiments/colab_03_qwen_task_only.ipynb)
+4. [OpenVLA-OFT 독립 환경 FFT·체크포인트 재로딩](experiments/colab_04_openvla_oft_fft.ipynb)
+5. [AVA A100 Canonical Train 1-Episode·1-step FFT·별도 프로세스 재로딩](experiments/colab_05_ava_a100_one_step_reload.ipynb)
 
 Colab에서 사용하는 코드와 노트북은 아래 위치의 일반 파일을 정본으로 관리합니다.
 
@@ -188,7 +190,7 @@ Colab에서 사용하는 코드와 노트북은 아래 위치의 일반 파일�
 |---|---|
 | `src/vlade/data/`, `src/vlade/training/` | 다운로드·episode 데이터·FFT·cache·Student 학습의 실제 구현 |
 | `scripts/data/`, `scripts/train/` | 위 구현을 실행하는 명령과 checkpoint 재로딩 검사 |
-| `experiments/colab_01_*.ipynb`부터 `colab_03_*.ipynb` | Colab에서 여는 순서별 실행 노트북 |
+| `experiments/colab_01_*.ipynb`부터 `colab_05_*.ipynb` | 데이터 준비·모델별 학습·재로딩 점검 노트북 |
 | `configs/` | 모델·데이터·학습 조건과 고정 revision |
 | `experiments/baselines/`, `experiments/manifests/` | 비교 기준과 원본 소스 기록, Colab Git 소스 배포 설정 |
 | `docs/`, `tests/` | 실행·연구 검토 안내와 회귀 검사 |
@@ -204,8 +206,10 @@ python scripts/prepare/generate_colab_notebooks.py
 SHA256 목록은 관리하지 않습니다. `experiments/manifests/colab_source.json`은 Git 저장소/ref
 설정입니다. 로컬 변경은 먼저 commit·push하고, 재개 시 이전 `SOURCE_COMMIT`을 지정하십시오.
 
-Git checkout에는 baseline·원본 소스 기록이 포함되며, 이번 실행에서 사용하는 upstream
-코드는 `third_party/ava_vla/`입니다. OpenVLA-OFT는 기존 baseline의 별도 환경에서 다룹니다.
+Git checkout에는 baseline·원본 소스 기록과 고정 AVA/OFT upstream을 포함합니다.
+두 모델은 서로 다른 Transformers 환경에서 실행하지만 D/content-group 80/10/10 seed 42
+canonical manifest와 확정 Train 전용 normalization을 공유합니다. Train/Validation/Test는
+11,477/1,428/1,442 Episode이며 Calibration 728개는 Train 내부 subset입니다.
 실행·분할 정본·AVA zero-context FFT 제한은 [Colab 인계 문서](docs/environment/colab_kanban_handoff.md)에
 정리했습니다. 일반 파일 전환 후 전체 CPU 회귀 검사 **127개 통과(40.24초)**와 실제 GPU 미검증 범위를 구분하며,
 CPU 검증을 실제 T1 선정/cache·Task-only 성능 결과로 해석하지 않습니다.
@@ -217,6 +221,14 @@ checkpoint 공간 검사·bounded debug와 T1 비교 보고서 검증을 연결�
 
 추가 교차 검토 후 split manifest 정합성, checkpoint 파일·step 봉인, cache source/feature 대조,
 파일럿 보고서 identity와 기존 T1 선택 충돌 검사, 소유한 추출 임시 파일의 재시작도 보완했습니다.
+
+AVA 전용 1-step 노트북은 전체 Episode 전처리와 본 학습을 수행하지 않습니다. 원본 TFDS를
+순서대로 읽다가 첫 canonical Train Episode를 확인한 즉시 중단하고 sealed full-Train
+normalization을 그대로 사용합니다. A100 실측값은 Colab에서 실제 실행한 뒤 생성되는
+`reload_report.json`만 근거로 삼으며, 이 저장소 변경 자체는 GPU 통과를 뜻하지 않습니다.
+
+전처리 진입점과 첨부 AVA Suite-balanced FFT·paired rollout 노트북은
+[전처리 및 노트북 안내](docs/environment/libero_plus_preprocessing_handoff.md)를 참고하십시오.
 
 
 ## Hugging Face 자료 참조
