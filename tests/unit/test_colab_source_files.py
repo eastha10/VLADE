@@ -67,6 +67,7 @@ def test_generated_notebooks_use_git_and_hf_without_source_file_hashes(tmp_path,
         assert 'SOURCE_COMMIT' in sources and 'hf_input' in sources
         assert 'files_sha256' not in sources and 'drive.mount(' not in sources
         assert '/content/drive' not in sources
+        assert '/content/vlade-preprocess/libero_plus_episode80' not in sources
         for c in value['cells']:
             if c['cell_type'] == 'code':
                 compile(''.join(c['source']), path.name, 'exec')

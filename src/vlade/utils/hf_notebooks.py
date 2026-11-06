@@ -107,7 +107,10 @@ def apply_hf_storage(path: Path, root: Path) -> None:
         if identifier == 'purpose':
             titles = {'01':'# 01 · Hugging Face 자료 준비', '02':'# 02 · AVA FFT · Teacher 선택 · 캐시',
                       '03':'# 03 · Qwen Task-only', '04':'# 04 · AVA 논문 설정', '05':'# 05 · Qwen 액션 증류'}
-            item['source'] = [titles.get(path.name.split('_')[1], '# VLADE')+'\n',
+            title = {'colab_04_openvla_oft_fft.ipynb': '# 04 · OpenVLA-OFT FFT 재로딩',
+                     'colab_05_ava_a100_one_step_reload.ipynb': '# 05 · AVA 단일 Episode FFT 재로딩'}.get(path.name,
+                         titles.get(path.name.split('_')[1], '# VLADE'))
+            item['source'] = [title+'\n',
                 '소스는 Git에서, 가중치·데이터는 Hugging Face 고정 revision에서 받습니다. 실행 시 SOURCE_COMMIT을 기록하고 재개할 때 SOURCE_REF에 지정하십시오.\n',
                 '이 로컬 노트북 변경은 기존 Drive 노트북과 실행 중인 Colab에 자동 반영되지 않습니다.\n']
         if item['cell_type'] != 'code':
@@ -121,6 +124,8 @@ def apply_hf_storage(path: Path, root: Path) -> None:
                                 ('STUDENT_PY' if '_03_' in path.name or '_05_' in path.name else 'AVA_PY') + ')')
         source = source.replace("str(ROOT / 'data/processed/libero_plus_tfds')", 'str(PREPARED)')
         source = source.replace("ROOT / 'checkpoints/teacher/avavla-libero-4in1'", "hf_input('ava_t0', AVA_PY)")
+        source = source.replace("ROOT / 'checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-spatial-object-goal-10'",
+                                "hf_input('openvla_oft_t0', OFT_PY)")
         source = source.replace("ROOT / 'data/teacher_cache'", "ASSET_WORK_ROOT / 'data/teacher_cache'")
         source = source.replace('ROOT / TEACHER_CACHE_RELATIVE', 'TEACHER_CACHE_RELATIVE')
         source = source.replace('shutil.disk_usage(ROOT)', 'shutil.disk_usage(RUNS_ROOT)')

@@ -4,9 +4,11 @@
 
 2026-10-28에 Drive 다운로드·공통 episode split·FFT/cache·Qwen Task-only를 연결하는
 순서별 Colab 노트북을 추가했습니다. [실행·검토 인계](colab_kanban_handoff.md)를 먼저
-확인하십시오. 해당 노트북은 `prepared_data_root`를 설정해 content-group 80/10/10과
-train-only 통계를 사용합니다. 아래 기존 upstream RLDS 경로와 분리한 어댑터이며,
-실제 데이터 담당자의 최종 split manifest와 대조하기 전에는 정본 동일성을 주장하지 않습니다.
+확인하십시오. 확정 정본은 D/content-group 80/10/10, seed 42이며 Train/Validation/Test는
+11,477/1,428/1,442 Episode, Train 내부 Calibration은 728 Episode입니다. 정본 후보의
+SHA-256은 `487d2be...6e80`이고 전체 원본을 다시 읽어 계산한 Train 1,791,269 transition
+전용 normalization SHA-256은 `74b5c78d...abb8`입니다. 두 모델은 같은 prepared-data,
+manifest와 normalization을 사용하며 Validation/Test는 학습 loader에서 선택할 수 없습니다.
 
 최신 `colab_02`는 [8시간 예산 정책](../../configs/experiments/ava_fft_a100_8h.json)을
 사용합니다. 설치·파일럿·재로딩·학습·후속 작업과 대기를 합쳐 첫 시작부터 8시간으로
@@ -48,13 +50,32 @@ zero-context 경로를 학습하며, 에피소드 간 temporal context를 활용
 
 ## 데이터 준비
 
-LIBERO+ RLDS 자료는 로컬에서 사용자 요청으로 삭제했습니다. FFT를 진행할 때는
+고정 revision의 분할 ZIP은 다음과 같이 코드에 봉인되어 있습니다.
+
+| 파일 | bytes | SHA-256 |
+|---|---:|---|
+| `libero_plus_mixdata.z01` | 32,212,254,720 | `61928db465d2ae68994796174ddaaccd951c3728550e8454f3331b32ab555741` |
+| `libero_plus_mixdata.z02` | 32,212,254,720 | `57abe4f928e80b5c40f5f3ffaabafe175ec2b301adf9e85c1b7779a9a6bdb2e0` |
+| `libero_plus_mixdata.zip` | 11,119,747,860 | `56bf87a8decce0a0a331b09f3fe5011af3fb061a1867a761c755283342b0836e` |
+
+합계는 75,544,257,300 bytes(약 75.5 GB, 70.4 GiB)입니다. 결합 ZIP을 만드는 `/content`
+scratch에는 이 크기와 최소 2 GiB 여유가 필요하고, Drive에는 세 원본 part·추출본·prepared
+query 이미지·두 모델 가중치·checkpoint를 함께 둘 별도 여유가 필요합니다. 압축 해제 후 실제
+용량은 archive central directory의 합계를 읽은 뒤 공간을 검사하므로 사전에 고정값으로 단정하지 않습니다.
+
+Colab에서 FFT를 진행할 때는
 Colab에서 공식 분할 ZIP 3개를 직접 받은 다음
 `data/processed/libero_plus_rlds/libero_plus_mixdata/` 디렉터리가 생기도록
 압축 해제합니다. ZIP 내부 구조는 다운로드 완료 후 확인해야 합니다. 데이터가
 해당 경로와 다르게 풀리면 JSON 설정의 `fft_defaults.data_root`를 바꾸십시오.
 실행 전 압축 해제된 TFDS의 `dataset_info.json`과 shards가 있는지 확인하십시오.
 원본 평가 assets는 학습 입력이 아니므로 이 단계에서 설치할 필요가 없습니다.
+
+`colab_01_download_data_weights.ipynb`는 canonical manifest로 각 action+state trajectory
+group을 대조한 뒤에만 prepared dataset을 게시합니다. 임의 해시 재분할은 하지 않으며,
+확정 Train 전체 transition에서 재계산한 통계가 저장된 canonical normalization과 다르면
+실패합니다. `colab_02_ava_fft_and_fixed_cache.ipynb`와
+`colab_04_openvla_oft_fft.ipynb`는 서로 독립된 Transformers 환경을 사용합니다.
 
 ## 실행
 
@@ -172,3 +193,32 @@ TensorFlow RNG와 validation 샘플 순서는 복원하지 않습니다. `val_l1
 - AVA·OFT 각각 Colab A100 단일 step forward/backward/save/load smoke test
 - VRAM 사용량, 학습 시간, 체크포인트 크기와 평가 연결 검증
 - AVA의 이전 시점 행동 특징을 사용하는 temporal-context 학습 확장
+
+## AVA A100 1-step·재로딩 전용 경로
+
+`experiments/colab_05_ava_a100_one_step_reload.ipynb`는 현재 Drive 배치
+(`/content/real_drive/MyDrive/VLADE`)에서 다음 셀을 순서대로 실행하도록 고정합니다.
+
+1. manifest로 일반 소스 파일을 검증해 `/content`에 stage합니다.
+2. Colab 기본 Python 3.13과 분리된 `uv` Python 3.11 환경에 AVA 고정 의존성과
+   `bitsandbytes==0.43.3`을 설치하고 CUDA/BF16/A100 정보를 확인합니다.
+3. `prepare_single_canonical_episode.py`가 원본 TFDS를 순서대로 읽다가 첫 canonical
+   Train Episode를 확인한 즉시 중단합니다. 전체 14,347 Episode를 복사·전처리하지 않고,
+   D/seed 42 manifest와 sealed full-Train normalization SHA-256을 그대로 검증합니다.
+4. batch 1, accumulation 1, BF16, gradient checkpointing, paged AdamW 8-bit로 실제
+   forward/backward/update 1-step을 실행하고 optimizer state를 포함한 checkpoint를 저장합니다.
+5. 학습 프로세스 종료 후 별도 Python 프로세스에서 checkpoint를 다시 로드해 같은 첫 query의
+   action finite·reset 반복성을 확인합니다. 보고서에는 학습 peak allocated/reserved VRAM,
+   peak process RAM, step 시간, loss/grad norm, component별 finite·nonzero gradient,
+   checkpoint bytes와 재로딩 process 메모리를 기록합니다.
+
+`step_time_seconds`는 warm-up 없는 첫 optimizer step의 end-to-end 시간입니다. CUDA를
+step 직전·직후 동기화하며 batch 1, accumulation 1, BF16 조건에서 첫 데이터 로드와
+forward/backward/update를 포함하고 checkpoint 저장·재로딩 시간은 제외합니다. 따라서
+steady-state 학습 latency나 여러 step 평균으로 해석하지 않습니다.
+
+이 경로는 데이터·가중치를 새로 다운로드하지 않으며 OFT, Student, 증류, 양자화 코드를
+변경하지 않습니다. 단일 Episode는 학습 품질이나 benchmark 성공률 검증이 아니라 실제 AVA
+코드 경로·메모리·저장/재로딩의 bounded smoke test입니다. FFT 중
+`temporal_context=None`을 사용하므로 learned zero buffer만 거치는 **temporal zero-context**
+검사이며 원본 AVA의 순차 temporal-context 학습/TBPTT 또는 rollout 동등성을 입증하지 않습니다.

@@ -5,6 +5,7 @@ import json
 import math
 import shutil
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,26 @@ from vlade.data.episode_data import EpisodeData, query_count, write_json
 from vlade.data.colab_assets import sha256
 
 CHECKPOINT_MANIFEST = "checkpoint_manifest.json"
+
+
+def peak_process_rss_bytes() -> int | None:
+    """Return peak resident memory for the current process when the OS exposes it."""
+    try:
+        import resource
+        value = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+        return value * 1024 if sys.platform.startswith(("linux", "freebsd")) else value
+    except (ImportError, OSError, ValueError):
+        try:
+            import psutil
+            return int(psutil.Process().memory_info().rss)
+        except (ImportError, OSError):
+            return None
+
+
+def directory_size_bytes(directory: Path) -> int:
+    """Measure regular files below a completed artifact directory."""
+    return sum(path.stat().st_size for path in directory.rglob("*")
+               if path.is_file() and not path.is_symlink())
 
 
 def seal_checkpoint(directory: Path, step: int, microsteps: int) -> dict:
