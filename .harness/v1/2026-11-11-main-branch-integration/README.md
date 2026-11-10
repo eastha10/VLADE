@@ -11,3 +11,7 @@
 - 충돌은 하네스로 이동한 test_colab_pipeline.py 한 파일에서 발생했습니다. 현재 하네스 검사를 보존하고 협업자의 새 검사 2 case를 이번 작업 checks/test_suite_query_merge.py에 분리했습니다. tests/unit에 검증 파일을 되살리지 않았습니다.
 - 전체 하네스 304 passed, 0 failed/0 skipped, SWIG warning 2개 (227.24초). 관련 Python compile과 정책 검사를 통과했습니다. HF 입력 경계·고정 revision·현재 Colab 경로·v0 동결·submodule pin을 보존했습니다.
 - 기존 미추적 기록 25개는 stash 원본 Git blob과 비교해 동일함을 확인했고 이번 소스 commit에서 제외했습니다. 실제 데이터·가중치 재처리나 GPU 훈련, Drive 배포는 수행하지 않았습니다. 데이터 변경은 코드의 샘플링 순서 개선이며 기존 prepared payload를 다시 만들지 않습니다.
+
+## 원격 반영 확인
+
+코드 병합 commit `8ec3b1b3cf66511af5cfe9962c5cd23086abd83f`를 main에 push하고 `git pull --ff-only --no-recurse-submodules origin main`을 실행했습니다. 로컬과 원격 main이 같고 dev/eastha·dev/fish13031e·codex/ava-transformers-patch-a가 모두 조상으로 포함됨을 확인했습니다. codex는 이미 포함된 branch라 추가 변경 없이 유지했습니다. 이 확인 기록은 코드 병합 뒤 별도 기록 commit으로 보존합니다.
