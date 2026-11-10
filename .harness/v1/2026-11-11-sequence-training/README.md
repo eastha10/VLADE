@@ -38,3 +38,9 @@ python -B -m pytest .harness/v1/2026-11-11-ava-teacher-code/checks .harness/v1/2
 
 미실행: 실제 7B BF16 GPU 훈련·Colab 설치·성능/rollout 및 전체 HF 자료의 짧은 Episode 수 측정. 공식 데이터·학습 결과 생성과 Drive 배포를 수행하지 않았습니다.
 기존 미추적 하네스 기록 25개는 보존하고 이번 변경 목록에 포함하지 않습니다.
+
+## 외부 반영과 정리
+
+- 코드 commit `26a58671fa6f6c258273e9386e8b83d3011c83c7`을 `origin/main`에 push했습니다. `git ls-remote origin refs/heads/main`과 로컬 HEAD 일치를 확인했습니다.
+- [황인호 칸반 · 11월 11일 확인사항](https://app.notion.com/p/414b5dd0687081d19a60ec338324a7ce)을 생성했습니다. 담당자 황인호, 날짜 2026-11-11, Type Task로 저장되고 해당 개인 칸반 view에 나타나는 것을 조회했습니다. CPU 검증과 main 반영은 완료 사실로, GPU 파일럿·Hub 재개·rollout은 미실행 확인사항으로 기록하여 Status는 Not started입니다.
+- 이번 scratch의 절대 경계를 확인하고 테스트 생성물·임시 CRC 의존성·캐시를 모두 삭제했습니다. 현재 작업 보존 파일은 3개이며 합계 20 KiB 미만입니다. 기존 미추적 기록과 submodule은 보존했습니다.
