@@ -1,0 +1,30 @@
+{
+  "full_suite": {
+    "passed": 299,
+    "skipped": 3,
+    "warnings": 2,
+    "seconds": 273.57,
+    "command": "python -B -m pytest .harness/v1/2026-11-11-ava-teacher-code/checks -q --tb=short -p no:cacheprovider --basetemp=.harness/v1/2026-11-11-ava-teacher-code/scratch/p8 --maxfail=5"
+  },
+  "supplemental": {
+    "passed": 3,
+    "commands": [
+      "CRC normalization + TFRecord truncation tests: scratch/p9 (2 passed, 3.44s)",
+      "full-frame interrupted export/restart test: scratch/p10 (1 passed, 1.95s)"
+    ],
+    "dependency": "google-crc32c 1.9.0, 35 KB wheel, installed only under scratch/crc-deps"
+  },
+  "distinct_cases_verified": 302,
+  "remaining_skipped_cases": 0,
+  "real_gpu_training": false,
+  "real_simulator_rollouts": false,
+  "colab_environment_installation": false,
+  "upstream_submodules_changed": false,
+  "branch": "main",
+  "git_head": "ddc86c38632fcfafe48fc4317bda6334a47dffbd",
+  "synthetic_training_cli": {
+    "status": "passed",
+    "steps": 4,
+    "exact_save_load_resume": true
+  }
+}

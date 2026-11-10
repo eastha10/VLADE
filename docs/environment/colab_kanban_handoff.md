@@ -1,5 +1,7 @@
 # 27일 마감 업무 · Colab 실행·검토 인계
 
+현재 유지 관리되는 Colab의 설치·설정·실행은 [연구 실행 안내](research_runs.md)를 우선합니다. 아래의 이전 셀 이름은 당시 흐름의 설명이며 현재 실행 셀과 구분합니다.
+
 > 2026-11-04 이후 로컬/Git 노트북의 실행 기준은 [Git 소스·HF 입력 안내](hf_inputs_and_git_source.md)입니다. 아래 Drive 기반 절차·실행 기록은 기존 버전의 맥락입니다. 진행 중인 세션은 그대로 유지하며 Drive 배포는 별도 명령 후 수행합니다.
 
 2026-10-31 실행 정책 갱신: `colab_02`는 사용자가 지정한 A100 총 8시간 상한에 맞춰
@@ -39,7 +41,7 @@
 | `docs/`, `tests/` | 연구/실행 검토와 회귀 검사 |
 
 Drive의 `ROOT=/content/drive/MyDrive/colab/VLADE`, `PROJECT_ROOT=ROOT`를 기본으로 사용합니다.
-이 디렉터리 바로 아래에 `src/`, `scripts/`, `configs/`, `third_party/`가 있어야 합니다.
+이 디렉터리 바로 아래에 `src/`, `scripts/`, `configs/`가 있어야 합니다.
 노트북은 `experiments/manifests/colab_source.json`과 일반 파일의 SHA를 검증한 뒤 필요한
 파일을 `/content`로 복사해 실행합니다. AVA와 OpenVLA-OFT는 각각 고정된 upstream과
 별도 환경입니다. baseline과 원본 manifest 기록은 함께 보관합니다.
@@ -187,7 +189,7 @@ cache/Task-only 두 실행 카드의 원래 완료 조건까지 옮겼습니다.
 - [ ] debug sampling/용량 제한과 fixed KD의 순서·무결성 검사를 검토합니다.
 - [ ] T1 고정·adapter 연결이 준비됐는지 판단하고 cache 실행 가능/선행 대기를 기록합니다.
 
-볼 파일: `src/vlade/data/teacher_records.py`, `tests/unit/test_teacher_records.py`,
+볼 파일: `src/vlade/data/teacher_records.py`, `.harness/v1/2026-11-11-ava-teacher-code/checks/test_teacher_records.py`,
 `docs/environment/teacher_records_and_student.md`, 새 `src/vlade/training/fixed_cache.py`.
 
 ### Qwen Student 구조·출력 계약
@@ -202,8 +204,8 @@ cache/Task-only 두 실행 카드의 원래 완료 조건까지 옮겼습니다.
 - [ ] Hugging Face 로딩 방식·실제 모델 가중치 검토/다운로드·후속 실행 전제를 확인합니다.
 
 볼 파일: `configs/models/student/qwen3_5_0_8b.json`, `src/vlade/models/students/qwen.py`,
-`src/vlade/models/contracts.py`, `src/vlade/models/students/smoke.py`,
-`scripts/train/smoke_student.py`, `tests/unit/test_student_contract.py`.
+`src/vlade/models/contracts.py`, `.harness/v1/2026-11-11-ava-teacher-code/checks/student_smoke.py`,
+`.harness/v1/2026-11-11-ava-teacher-code/checks/student_smoke.py`, `.harness/v1/2026-11-11-ava-teacher-code/checks/test_student_contract.py`.
 
 ### Related Work·논문 및 실험 양식
 

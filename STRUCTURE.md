@@ -24,11 +24,14 @@ vlade/
 │  ├─ distillation/         # action/representation KD와 정렬 로직
 │  ├─ training/             # 학습 루프와 checkpoint 정책
 │  ├─ evaluation/           # 성공률·일반화·효율 평가
+│  ├─ research/             # 설정·CLI·연구 task 연결
+│  ├─ runtime/              # 독립 환경·AVA patch·benchmark 자료 준비
 │  ├─ deployment/           # Jetson 및 TensorRT 경로
 │  └─ utils/                # 로깅, seed, 공통 유틸리티
 ├─ scripts/                 # 사용자가 실행하는 얇은 진입점
 │  ├─ data/                # 자료 준비·검증·T1 선택·cache 생성
-│  ├─ train/               # FFT/Student 학습·smoke·재로딩 검사
+│  ├─ train/               # FFT/Student 학습·실제 checkpoint 재로딩 검사
+│  ├─ research/            # 설정 기반 계획·설치·실행 CLI
 │  └─ prepare/             # Colab 노트북·source manifest 갱신
 ├─ benchmarks/              # LIBERO, LIBERO+, CALVIN 연결 계층
 ├─ experiments/             # baseline, ablation, run manifest
@@ -43,10 +46,10 @@ vlade/
 │  ├─ colab_04_*.ipynb      # OpenVLA-OFT 독립 환경 FFT·재로딩
 │  ├─ colab_05_*.ipynb      # AVA canonical Train 1-Episode A100 1-step·재로딩
 │  └─ runs/                 # 실제 실행별 기록
-├─ tests/                   # unit, integration, smoke test
+├─ tests/                   # 사용자 지정 연구 검사 경계 (에이전트 검증은 하네스)
 ├─ docs/                    # 의사결정·프로토콜·환경·논문 메모
 ├─ notebooks/               # 탐색 전용 분석
-├─ third_party/             # 외부 원본 소스 연결
+├─ third_party/             # 출처 보관용, 연구 실행에서 불필요
 │  ├─ ava_vla/              # eastha10/AVA-VLA Git submodule (커밋 고정)
 │  └─ openvla_oft/          # moojink/openvla-oft Git submodule (커밋 고정)
 ├─ data/                    # 설치된 데이터셋·전처리 데이터·Teacher cache (보존, Git 제외)
@@ -61,8 +64,7 @@ vlade/
 ## 경계 규칙
 
 - `third_party/` 내부 로직을 VLADE 핵심 구현으로 간주하지 않습니다.
-- 외부 baseline 코드는 `experiments/baselines/`에 복제하지 않고, 고정된
-  `third_party/` 원본과 실행 설정을 연결합니다.
+- 외부 baseline 코드는 `experiments/baselines/`에 복제하지 않고, 고정 원본의 출처를 기록하고 프로젝트 구현과 실행 설정을 연결합니다.
 - benchmark별 observation/action 차이는 `benchmarks/` 또는 `data/adapters/`에서만 흡수합니다.
 - Teacher와 Student가 달라도 학습 코드는 공통 인터페이스만 보도록 구성합니다.
 - quantization, pruning 등의 압축 확장은 증류 baseline이 고정된 뒤 별도 설정으로 추가합니다.
@@ -123,29 +125,43 @@ vlade/
   `checkpoints/`, `hf_cache/`와 다른 위치에 설치된 데이터셋·다운로드 자료도 같은 원칙으로 보존합니다.
 - 갱신할 소스·설정·문서·노트북·소스 manifest만 명시적으로 선택합니다. 프로젝트 폴더 전체 교체,
   삭제 전파, 폴더 미러링을 사용하지 않습니다. 로컬에 데이터가 없다는 이유로 Drive의 데이터를 삭제하지 않습니다.
-- `experiments/manifests/colab_source.json`은 실행할 **소스 파일**의 hash 목록입니다.
+- `experiments/manifests/colab_source.json`은 Git 저장소·commit 배포 설정이며 소스 파일 hash 목록을 사용하지 않습니다.
   이를 갱신하는 작업은 `data/`의 데이터 manifest를 변경하거나 데이터셋을 다시 준비하는 작업과 구분합니다.
+
+## 설정 기반 실행
+
+`configs/research/`는 step·rollout·seed·학습률·예산을, `configs/runtime/`는 모델별 의존성을 제어합니다.
+`src/vlade/research/`와 `scripts/research/run.py`가 기존 연구 구현을 호출합니다.
+현재 경로·명령·미검증 범위는 [연구 실행 안내](docs/environment/research_runs.md)에 있습니다.
+검증 전용 Python은 `.harness/v1/2026-11-11-ava-teacher-code/checks/`로 옮겼습니다.
 
 ## 학습 구현
 
 - `src/vlade/training/loop.py`: 모델과 독립적인 optimizer step 루프·검증·학습 상태
 - `src/vlade/training/fft.py`: 기존 AVA/OFT의 모델·RLDS·L1·checkpoint 어댑터
-- `src/vlade/training/smoke.py`: 합성 CPU 액션 정책의 학습·저장·재개 검사
-- `scripts/train/smoke_loop.py`: 합성 검사의 얇은 CLI
-- `tests/unit/test_training_loop.py`: 누적·clipping·NaN·validation·재개 검증
 - `docs/decisions/0003-backbone-review.md`: Student 후보 비교와 도입 조건
 
 공통 루프의 loss callback에 향후 action/representation KD를 연결할 수 있습니다.
 실제 가중치로 검증된 학습 경로는 아직 없으며 기존 FFT는 GPU 검증 전입니다.
-Student 계약 구현은 아래 범위이며 KD trainer는 미구현입니다.
+기존 Qwen Task-only/action KD trainer는 유지하며 별도 QwenVLA 모델의 학습 연결과 구분합니다.
 
 ## Teacher 저장·Student·집필 준비
 
-- `src/vlade/models/students/skeleton.py`: 논문 검토 후 사용자가 구조를 결정할 Student 뼈대. 입력·출력 인터페이스만 있으며 학습에는 연결하지 않음.
+- `src/vlade/models/teachers/ava_vla.py`: AVA Teacher 정책 클래스의 조합·초기화.
+- `src/vlade/models/teachers/backbones/{prismatic,llama,vlm}.py`: 원본 DINOv2/SigLIP 비전 백본과 Llama/HF 연결.
+- `src/vlade/models/teachers/components/{multimodal,action_prediction}.py`: 이미지/proprio/시간 상태 token 조합·forward와 연속 L1 액션 추론·Q99 역정규화.
+- `src/vlade/models/teachers/components/{projectors,action_heads,attn_weight_generator}.py`: 비전/proprio projector·L1 action head·softmaxscore AVA.
+- `src/vlade/models/teachers/components/{attention_blocks,attention_heads,attention_utils}.py`: AVA attention block·score head·위치/MLP 유틸리티. HF 출력은 `teachers/outputs.py`에 분리.
+- `src/vlade/models/teachers/{configuration_ava_vla,processing_ava_vla,constants,action_masks}.py`: 설정·이미지/텍스트 처리·LIBERO 규약·action token mask. 출처와 라이선스는 `AVA_LICENSE.txt` 및 각 파일에 보존.
+- `src/vlade/models/students/qwen_vla.py`: native Qwen 비전·merger·언어 + AVA 정책 조합·시간 상태·8×7 action.
+- `src/vlade/models/students/configuration_qwen_vla.py`: Qwen VLA 모델 설정과 검증.
+- `src/vlade/models/students/backbones/qwen.py`: Qwen 백본 로딩·native 이미지 처리·멀티모달 위치 인코딩.
+- `src/vlade/models/students/components/action_heads.py`, `projectors.py`, `attn_weight_generator.py`: 원본 AVA와 같은 역할 분리. 외부 vision projector는 제거하고 proprio projector는 유지.
+- `src/vlade/models/students/components/qwen_attention.py`: Qwen hybrid attention 적응. AVA 구성요소는 Student 내부 복사본이며 Teacher runtime에 의존하지 않음.
+- `configs/models/student/qwen_vla_0_8b.json`, `docs/environment/qwen_vla_student.md`: 설정·근거·호출 및 검증 범위.
 - `src/vlade/data/teacher_records.py`: 제한된 debug 기록과 고정 Teacher cache 저장·검증·로드
 - `src/vlade/models/contracts.py`: 정규화 액션 `[B,8,7]` 및 horizon feature 공통 출력·mask loss
 - `src/vlade/models/students/qwen.py`: 별도 Qwen3.5 VLM 연결·processor·연속 query action head
-- `src/vlade/models/students/smoke.py`, `scripts/train/smoke_student.py`: native Qwen 축소 CPU 검증
 - `configs/models/student/qwen3_5_0_8b.json`: 고정 Hub revision·입력/출력·환경 검증 범위
 - `docs/paper/`: 집필용 outline·원문 근거와 실험 기록 템플릿, 측정 결과 자체는 아님
 - `docs/environment/teacher_records_and_student.md`: 저장 스키마·Student 설계·실행 제한
@@ -170,8 +186,7 @@ Student 계약 구현은 아래 범위이며 KD trainer는 미구현입니다.
 핵심 데이터·학습 로직은 `src/vlade/`에 있으며 노트북은 실행 순서와 사용자 경로 설정을 제공합니다.
 
 정본은 위 `src/`, `scripts/`, `experiments/`, `configs/`, `docs/`, `tests/`에 유지합니다.
-`experiments/baselines/`와 원본 소스 manifests도 Colab 파일 목록에 포함합니다. 실제 upstream
-복사 대상은 고정된 `third_party/ava_vla/`와 `third_party/openvla_oft/`이며 실행 환경은 별도입니다.
+`experiments/baselines/`와 원본 소스 manifests도 Colab 파일 목록에 포함합니다. 연구 실행은 `third_party/`를 복사하지 않으며 `configs/runtime/`에 지정한 환경을 준비합니다.
 
 새 노트북은 Git commit별 실행 소스를 `/content/vlade_sources`에 준비합니다. 가중치·데이터는
 HF에서 `/content/vlade_hf_assets`로 받고 현재 실행 출력은 `/content/vlade_runs` 및
@@ -180,8 +195,6 @@ HF에서 `/content/vlade_hf_assets`로 받고 현재 실행 출력은 `/content/
 - `src/vlade/training/run_control.py`: epoch/query budget, 파일럿 통과 조건, gradient·checkpoint 공간·T1 보고서 검사.
 - `src/vlade/training/debug_records.py`: 정확한 저장 checkpoint hash에 연결된 bounded 학습 debug 기록.
 - `src/vlade/utils/filesystem.py`: 같은 parent의 완료 staging을 덮어쓰기 없이 게시하고 일시적인 잠금만 제한 재시도.
-- `tests/unit/test_final_{data,cache,run}_review.py`: split/part/checkpoint/report/추출 재시작의 변조·실패 회귀 검사.
-- `tests/unit/test_colab_source_files.py`: 일반 소스 파일 manifest·복사·누락/변조 거부와 revision 복원 검사.
 
 - `experiments/colab_ava_fft_suite_balanced_cu.ipynb`: 유지 관리되는 AVA Suite-balanced FFT 실행본.
 - `notebooks/references/colab_ava_fft_suite_balanced_supplied.ipynb`: PR의 전달본 원본 참조.

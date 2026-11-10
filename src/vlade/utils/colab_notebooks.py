@@ -1,914 +1,169 @@
-"""Generate Colab notebooks using Git source and Hugging Face inputs."""
+"""Generate short Colab clients for the config-driven, standalone research CLI."""
+
 from __future__ import annotations
-import hashlib
-import inspect
 import json
-import subprocess
-import textwrap
-import shutil
 from pathlib import Path
+import textwrap
 
 ROOT = Path(__file__).resolve().parents[3]
+PROFILES = {
+    "colab_01_download_data_weights.ipynb": ("prepare_inputs", "01 · HF 입력 준비"),
+    "colab_02_ava_fft_and_fixed_cache.ipynb": ("ava_fft", "02 · AVA FFT·T1 선택·cache"),
+    "colab_03_qwen_task_only.ipynb": ("qwen_task", "03 · Qwen Task-only"),
+    "colab_04_ava_paper_best.ipynb": ("ava_paper", "04 · AVA 논문 기준 LoRA/TBPTT"),
+    "colab_04_openvla_oft_fft.ipynb": ("oft_fft", "04 · OpenVLA-OFT FFT"),
+    "colab_05_ava_a100_one_step_reload.ipynb": (
+        "ava_one_step",
+        "05 · Canonical 1-Episode·1-step·별도 재로딩",
+    ),
+    "colab_05_qwen_action_distillation.ipynb": ("qwen_kd", "05 · Qwen Action KD"),
+    "colab_ava_fft_suite_balanced_cu.ipynb": ("ava_suite", "AVA Suite-balanced FFT"),
+    "colab_inference_smoke.ipynb": ("inference_ava", "실제 가중치 단일 추론"),
+    "colab_06_evaluate_libero_plus.ipynb": ("evaluate_ava", "06 · LIBERO+ paired rollout 평가"),
+}
 
 
 def cell(kind: str, text: str, name: str) -> dict:
-    result = {"cell_type": kind, "id": name, "metadata": {},
-              "source": textwrap.dedent(text).strip().splitlines(keepends=True)}
+    source = textwrap.dedent(text).strip() + "\n"
+    value = {
+        "cell_type": kind,
+        "id": name,
+        "metadata": {},
+        "source": source.splitlines(keepends=True),
+    }
     if kind == "code":
-        result.update(execution_count=None, outputs=[])
-        compile("".join(result["source"]), name, "exec")
-    return result
+        compile(source, name, "exec")
+        value.update(execution_count=None, outputs=[])
+    return value
 
 
-def notebook(path: Path, cells: list[dict]) -> None:
-    if any(item.get("id") == "drive-and-source" for item in cells):
-        index = next(i for i, item in enumerate(cells) if item.get("id") == "drive-and-source")
-        cells = [item for item in cells if item.get("id") != "private-hub"]
-        cells.insert(index + 1, hub_cell())
-    if any(item.get("id") == "install-data" for item in cells):
-        cells = [item for item in cells if item.get("id") != "private-hub-check"]
-        index = next(i for i, item in enumerate(cells) if item.get("id") == "install-data")
-        cells.insert(index + 1, hub_check_cell())
-    value = {"nbformat": 4, "nbformat_minor": 5, "cells": cells,
-             "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
-                          "language_info": {"name": "python"}, "colab": {"name": path.name, "provenance": []}}}
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-
-
-def hub_cell() -> dict:
-    """Optional Secrets-based authentication; never write a token into Drive."""
-    return cell("code", '''
-        # HF 설정 후 기존 학습 셀을 실행하면 checkpoint 저장 시 자동 전송합니다.
-        # 저장소는 HF 웹에서 Private로 먼저 만들고 해당 저장소 쓰기 토큰을 Secrets에 등록하십시오.
-        if 'ENV' not in globals():
-            ENV = os.environ.copy()
-        from google.colab import userdata
-        os.environ['HF_TOKEN'] = userdata.get('HF_TOKEN')
-        ENV['HF_TOKEN'] = os.environ['HF_TOKEN']
-        import datetime, uuid
-        ENABLE_HUB_UPLOAD = globals().get('ENABLE_HUB_UPLOAD', True)
-        HF_REPO_ID = 'VLADE-konkuk/VLADE-checkpoints'  # 조직 저장소; 이전 런타임 값도 갱신합니다.
-        HF_RUN_GROUP = globals().get('HF_RUN_GROUP', datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8])  # 재개 시 기존 group 지정
-        if ENABLE_HUB_UPLOAD:
-            if not HF_RUN_GROUP:
-                raise ValueError('HF_RUN_GROUP을 지정하십시오. pilot/main은 출력 폴더명으로 구분합니다.')
-            os.environ['VLADE_HUB_REPO'] = HF_REPO_ID
-            os.environ['VLADE_HUB_RUN_ID'] = HF_RUN_GROUP
-            os.environ['HF_TOKEN_PATH'] = '/content/vlade_hf_token'
-            # 모델 캐시는 기존 위치를 유지하고 토큰 파일은 런타임 로컬에만 둡니다.
-            ENV.update(HF_TOKEN=os.environ['HF_TOKEN'], VLADE_HUB_REPO=HF_REPO_ID,
-                       VLADE_HUB_RUN_ID=HF_RUN_GROUP, HF_TOKEN_PATH='/content/vlade_hf_token')
-            print('Private Hub 업로드 설정:', HF_REPO_ID, HF_RUN_GROUP)
-        else:
-            for key in ('VLADE_HUB_REPO', 'VLADE_HUB_RUN_ID'):
-                ENV.pop(key, None)
-                os.environ.pop(key, None)
-            print('Hub 업로드 꺼짐: HF_RUN_GROUP 설정 후 ENABLE_HUB_UPLOAD=True로 이 셀을 다시 실행하십시오.')
-        ''', "private-hub")
-
-
-def hub_check_cell() -> dict:
-    """01 can verify Secrets/repository access using its existing CPU data env."""
-    program = '''
-import json, sys
-from huggingface_hub import HfApi
-try:
-    api = HfApi()
-    account = api.whoami()
-    api.create_repo(repo_id=sys.argv[1], repo_type='model', private=True, exist_ok=True)
-    info = api.model_info(sys.argv[1])
-    if info.private is not True:
-        raise ValueError('Private repository required')
-    print(json.dumps({'authenticated_user': account['name'], 'repo_id': sys.argv[1],
-                      'private': info.private, 'status': 'connection_verified'}))
-except Exception as error:
-    print('HF connection failed:', type(error).__name__)
-    raise SystemExit(1)
-'''.strip()
-    source = "# 인증·조직 저장소 접근 확인만 수행합니다. 모델·데이터 업로드나 학습은 실행하지 않습니다.\n"
-    source += "if ENABLE_HUB_UPLOAD:\n"
-    source += "    run([DATA_PY, '-c', " + repr(program) + ", HF_REPO_ID], env=ENV)\n"
-    source += "else:\n    print('먼저 private-hub 셀에서 업로드 설정을 켜십시오.')"
-    return cell("code", source, "private-hub-check")
-
-
-from vlade.utils.source import stage_source
-
-
-def bootstrap(source_ref: str = "main", *, isolated_uv: bool = False) -> str:
-    source = '''
-from pathlib import Path
-import hashlib, json, os, re, shutil, subprocess, sys, tempfile
-SOURCE_REPOSITORY = 'https://github.com/eastha10/VLADE.git'
-SOURCE_REF = globals().get('SOURCE_REF', ''' + repr(source_ref) + ''')  # 재개 시 이전 SOURCE_COMMIT을 지정하십시오.
-ROOT = Path('/content/vlade_work')
-ROOT.mkdir(parents=True, exist_ok=True)
-''' + inspect.getsource(stage_source) + '''
-CODE = stage_source(SOURCE_REPOSITORY, Path('/content/vlade_sources'), SOURCE_REF)
-PROJECT_ROOT = CODE
-SOURCE_COMMIT = subprocess.check_output(['git', '-C', str(CODE), 'rev-parse', 'HEAD'], text=True).strip()
-for module_name, module in list(sys.modules.items()):
-    if module_name == 'vlade' or module_name.startswith('vlade.'):
-        filename = getattr(module, '__file__', None)
-        if filename and not Path(filename).resolve().is_relative_to(CODE.resolve()):
-            raise RuntimeError('다른 버전의 VLADE가 메모리에 있습니다. Colab 런타임을 다시 시작하십시오.')
-sys.path.insert(0, str(CODE / 'src'))
-print('실행 소스:', CODE, '\\nGit commit:', SOURCE_COMMIT)
-ENV = os.environ.copy()
-ENV.update(TOKENIZERS_PARALLELISM='false', WANDB_MODE='disabled', TF_CPP_MIN_LOG_LEVEL='2',
-           HF_HOME=str(ROOT / 'hf_cache'), HF_TOKEN_PATH='/content/vlade_hf_token')
-def run(args, env=None):
-    import signal, threading, time
-    deadline = float((env or ENV).get('VLADE_DEADLINE_UNIX', '0'))
-    if deadline and deadline - time.time() <= 60:
-        raise RuntimeError('8시간 예산이 끝났습니다. 새 작업을 시작하지 않습니다.')
-    process = subprocess.Popen([str(x) for x in args], cwd=CODE, env=env or ENV,
-                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-    timers = []
-    if deadline:
-        for delay, callback in [(max(0, deadline-time.time()-60), lambda: process.send_signal(signal.SIGINT)),
-                                (max(0, deadline-time.time()), process.kill)]:
-            timer = threading.Timer(delay, callback)
-            timer.daemon = True
-            timer.start()
-            timers.append(timer)
-    try:
-        for line in process.stdout:
-            print(line, end='', flush=True)
-        if process.wait():
-            raise RuntimeError('실행에 실패했거나 시간 예산이 끝났습니다. 위 결과를 확인하십시오.')
-    finally:
-        for timer in timers:
-            timer.cancel()
-if shutil.which('uv') is None:
-    run([sys.executable, '-m', 'pip', 'install', 'uv'])
-UV = shutil.which('uv')
-assert UV
-def environment(name, version, packages):
-    directory = Path('/content') / name
-    python = directory / 'bin/python'
-    if not python.is_file():
-        run([UV, 'venv', '--python', version, directory])
-    run([UV, 'pip', 'install', '--python', python, *packages])
-    return python
-def completed_checkpoints(directory):
-    return sorted(path for path in directory.glob('step-*')
-                  if (path / 'COMPLETE').is_file() and (path / 'trainer_state.pt').is_file())
-'''
-    if isolated_uv:
-        source = source.replace("EXPECTED_MANIFEST_SHA256", "EXPECTED_SOURCE_MANIFEST_SHA256")
-        source = source.replace(
-            "if shutil.which('uv') is None:\n    run([sys.executable, '-m', 'pip', 'install', 'uv'])\nUV = shutil.which('uv')\nassert UV",
-            "UV = shutil.which('uv')\nif UV is None:\n"
-            "    tool_env = Path('/content/vlade_uv_tool')\n"
-            "    tool_python = tool_env / 'bin/python'\n"
-            "    if not tool_python.is_file():\n"
-            "        run([sys.executable, '-m', 'venv', tool_env])\n"
-            "    run([tool_python, '-m', 'pip', 'install', 'uv'])\n"
-            "    UV = str(tool_env / 'bin/uv')\nassert UV")
-    return source
-
-
-def _ava_installed_transformers_check() -> str:
-    """Child-process verification of the imported package in the AVA-only venv."""
-    return textwrap.dedent('''
-        import ast, hashlib, importlib, json, sys
+def bootstrap(source_ref: str = "main", **kwargs) -> str:
+    return (
+        textwrap.dedent(
+            """
         from pathlib import Path
-        expected_sha, expected_prefix = sys.argv[1:3]
-        prefix = Path(sys.prefix).resolve()
-        if sys.prefix == sys.base_prefix or prefix != Path(expected_prefix).resolve():
-            raise RuntimeError('AVA verification requires the dedicated virtual environment')
-        module = importlib.import_module('transformers.models.llama.modeling_llama')
-        source = Path(module.__file__).resolve()
-        if not source.is_relative_to(prefix) or source.name != 'modeling_llama.py':
-            raise RuntimeError('Transformers was imported outside the AVA environment')
-        payload = source.read_bytes()
-        if hashlib.sha256(payload).hexdigest() != expected_sha:
-            raise RuntimeError('Installed AVA Transformers source SHA mismatch')
-        tree = ast.parse(payload)
-        model = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'LlamaModel')
-        forward = next(node for node in model.body if isinstance(node, ast.FunctionDef) and node.name == 'forward')
-        calls = [node for node in ast.walk(forward) if isinstance(node, ast.Call)
-                 and isinstance(node.func, ast.Attribute) and node.func.attr == '_gradient_checkpointing_func']
-        expected = 'extra_attn_weights if extra_layer_ids and layer_idx in extra_layer_ids else None'
-        if len(calls) != 1 or len(calls[0].args) != 9 or ast.unparse(calls[0].args[-1]) != expected:
-            raise RuntimeError('Installed checkpoint attention argument was not preserved')
-        print(json.dumps({'source': str(source), 'sha256': expected_sha, 'venv': str(prefix)}))
-    ''').strip()
+        import os, re, subprocess, sys, time
+        os.environ.setdefault('VLADE_SESSION_STARTED_UNIX', str(time.time()))
+        SOURCE_REF = __REF__  # 재개할 때는 이전 SOURCE_COMMIT을 지정하십시오.
+        REPOSITORY = 'https://github.com/eastha10/VLADE.git'
+        SOURCE_COMMIT = SOURCE_REF if re.fullmatch(r'[0-9a-f]{40}', SOURCE_REF) else subprocess.check_output(['git','ls-remote',REPOSITORY,SOURCE_REF], text=True).split()[0]
+        if not re.fullmatch(r'[0-9a-f]{40}', SOURCE_COMMIT): raise ValueError('불변 Git commit이 필요합니다.')
+        CODE = Path('/content/vlade_sources') / SOURCE_COMMIT
+        if any(name.startswith('vlade.') and getattr(module,'__file__',None) and not Path(module.__file__).resolve().is_relative_to(CODE) for name,module in list(sys.modules.items())):
+            raise RuntimeError('다른 소스가 로드되어 있습니다. Colab 런타임을 다시 시작하십시오.')
+        if not CODE.exists():
+            subprocess.run(['git','clone','--no-checkout','--filter=blob:none',REPOSITORY,str(CODE)],check=True)
+            subprocess.run(['git','-C',str(CODE),'fetch','--depth','1','origin',SOURCE_COMMIT],check=True)
+            subprocess.run(['git','-C',str(CODE),'checkout','--detach',SOURCE_COMMIT],check=True)
+        sys.path[:0] = [str(CODE/'src'),str(CODE)]
+        from vlade.utils.source_identity import source_identity
+        assert source_identity(CODE,require_clean=True)['git_commit']==SOURCE_COMMIT
+        print('SOURCE_COMMIT:',SOURCE_COMMIT)
+    """
+        )
+        .replace("__REF__", repr(source_ref))
+        .strip()
+    )
 
 
-def ava_install_source() -> str:
-    """Build the verified managed patch into a wheel; fail closed before any AVA run."""
-    return textwrap.dedent(r'''
-        AVA_ENV_READY = False
-        AVA_PY = None
-        import tempfile, tomllib, zipfile
-        AVA_VENV = Path('/content') / 'vlade_ava_fft_py311'
-        AVA_PATCH_REL = 'configs/models/teacher/transformers-avavla-a03eee5-checkpoint-extra-attn.patch'
-        AVA_PATCH_SHA = '9f0e46c9e93d62a92af950aeee712191cfcf314c1e636a9608fddcb57ff6087d'
-        AVA_TRANSFORMERS_REV = 'a03eee5da1794c45f5a911b60a9a4545e6e0ed1f'
-        AVA_BASE_SHA = '62f22856fe7b8459d6d61d4676b0075b65724979f84859ac475dbe36c10a3d80'
-        AVA_INSTALLED_SHA = '0a9c25300f3358f87af1719199608af3c27567dba0425690327fccd44cfb516b'
-        AVA_VERIFY_SOURCE = __AVA_VERIFY_SOURCE__
-        _VLADE_AVA_BASE_RUN = getattr(run, '_vlade_base_run', run)
-
-        def verify_ava_transformers(python):
-            _VLADE_AVA_BASE_RUN([python, '-c', AVA_VERIFY_SOURCE, AVA_INSTALLED_SHA, AVA_VENV])
-
-        def require_ava_environment():
-            if not AVA_ENV_READY or AVA_PY is None:
-                raise RuntimeError('AVA patched environment is not verified; rerun the installation cell')
-            verify_ava_transformers(AVA_PY)
-
-        def run(args, env=None):
-            command = [str(value) for value in args]
-            if command and (command[0] == str(AVA_VENV / 'bin/python')
-                            or any(Path(value).name == 'run_fft.py' for value in command)):
-                require_ava_environment()
-            return _VLADE_AVA_BASE_RUN(args, env=env)
-
-        run._vlade_base_run = _VLADE_AVA_BASE_RUN
-        patch = CODE / AVA_PATCH_REL
-        if not patch.is_file() or hashlib.sha256(patch.read_bytes()).hexdigest() != AVA_PATCH_SHA:
-            raise RuntimeError('Staged AVA patch is missing or has the wrong SHA')
-
-        build_root = Path(tempfile.mkdtemp(prefix='vlade-ava-transformers-', dir=AVA_VENV.parent))
-        source = build_root / 'source'
-        source.mkdir()
-        build_env = ENV.copy()
-        build_env.update(UV_CACHE_DIR=str(build_root / 'uv-cache'), TMPDIR=str(build_root / 'tmp'))
-        (build_root / 'tmp').mkdir()
-        fork = 'https://github.com/LiAuto-DSR/transformers-avavla.git'
-        _VLADE_AVA_BASE_RUN(['git', '-C', source, 'init'], env=build_env)
-        _VLADE_AVA_BASE_RUN(['git', '-C', source, 'fetch', '--depth', '1', fork, AVA_TRANSFORMERS_REV], env=build_env)
-        _VLADE_AVA_BASE_RUN(['git', '-C', source, 'checkout', '--detach', 'FETCH_HEAD'], env=build_env)
-        revision = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()
-        if revision != AVA_TRANSFORMERS_REV:
-            raise RuntimeError('AVA Transformers checkout revision mismatch')
-        llama = source / 'src/transformers/models/llama/modeling_llama.py'
-        if hashlib.sha256(llama.read_bytes()).hexdigest() != AVA_BASE_SHA:
-            raise RuntimeError('Unpatched AVA Transformers source SHA mismatch')
-        _VLADE_AVA_BASE_RUN(['git', '-C', source, 'apply', '--check', patch], env=build_env)
-        _VLADE_AVA_BASE_RUN(['git', '-C', source, 'apply', patch], env=build_env)
-        if hashlib.sha256(llama.read_bytes()).hexdigest() != AVA_INSTALLED_SHA:
-            raise RuntimeError('Patched AVA Transformers source SHA mismatch')
-        wheels = build_root / 'wheels'
-        wheels.mkdir()
-        _VLADE_AVA_BASE_RUN([UV, 'build', '--wheel', '--python', '3.11', '--out-dir', wheels, source], env=build_env)
-        wheel_files = list(wheels.glob('transformers-*.whl'))
-        if len(wheel_files) != 1:
-            raise RuntimeError('Expected exactly one patched Transformers wheel')
-        wheel = wheel_files[0]
-        with zipfile.ZipFile(wheel) as archive:
-            wheel_source = archive.read('transformers/models/llama/modeling_llama.py')
-        if hashlib.sha256(wheel_source).hexdigest() != AVA_INSTALLED_SHA:
-            raise RuntimeError('Built Transformers wheel does not contain the approved patch')
-
-        upstream = CODE / 'third_party/ava_vla'
-        dependencies = tomllib.loads((upstream / 'pyproject.toml').read_text())['project']['dependencies']
-        dependencies = [dep for dep in dependencies if not dep.startswith(('transformers @', 'dlimp @', 'huggingface_hub', 'accelerate'))]
-        dependencies += [
-            str(wheel),
-            'dlimp @ git+https://github.com/moojink/dlimp_openvla.git@040105d256bd28866cc6620621a3d5f7b6b91b46',
-            'numpy==1.26.4', 'tensorflow-metadata==1.15.0', 'bitsandbytes==0.43.3',
-            'huggingface_hub==0.36.2', 'accelerate==1.15.0']
-        candidate_python = environment('vlade_ava_fft_py311', '3.11', dependencies)
-        if str(candidate_python) != str(AVA_VENV / 'bin/python'):
-            raise RuntimeError('Refusing to install outside the dedicated AVA environment')
-        _VLADE_AVA_BASE_RUN([UV, 'pip', 'install', '--python', candidate_python,
-                            '--no-deps', '--force-reinstall', wheel], env=build_env)
-        _VLADE_AVA_BASE_RUN([UV, 'pip', 'install', '--python', candidate_python, '--no-deps', '-e', upstream])
-        verify_ava_transformers(candidate_python)
-        _VLADE_AVA_BASE_RUN([candidate_python, '-c', "import torch,transformers,tensorflow_datasets; assert torch.cuda.is_available(); assert torch.cuda.is_bf16_supported(); print(torch.__version__,transformers.__version__,torch.cuda.get_device_name(0),torch.cuda.get_device_properties(0).total_memory/2**30)"])
-        freeze = subprocess.check_output([str(UV), 'pip', 'freeze', '--python', str(candidate_python)], text=True)
-        (ROOT / 'ava_environment_freeze.txt').write_text(freeze)
-        (AVA_VENV / 'vlade_transformers_patch.json').write_text(json.dumps({
-            'base_commit': AVA_TRANSFORMERS_REV, 'patch_sha256': AVA_PATCH_SHA,
-            'installed_source_sha256': AVA_INSTALLED_SHA,
-            'wheel_sha256': hashlib.sha256(wheel.read_bytes()).hexdigest()}, indent=2))
-        AVA_PY = candidate_python
-        AVA_ENV_READY = True
-        print('AVA managed Transformers patch verified; FFT environment ready')
-    ''').replace('__AVA_VERIFY_SOURCE__', repr(_ava_installed_transformers_check())).strip()
-
-
-def apply_fft_budget(path: Path) -> None:
-    """Apply the eight-hour policy while retaining the managed AVA install cell."""
-    value = json.loads(path.read_text(encoding="utf-8"))
-    cells = value["cells"]
-    by_id = {item["id"]: item for item in cells}
-
-    def replace_cell(name: str, kind: str, source: str) -> None:
-        cells[cells.index(by_id[name])] = cell(kind, source, name)
-
-    cells.insert(1, cell("code", """
-        import os, time
-        SESSION_STARTED_UNIX = globals().get('SESSION_STARTED_UNIX', time.time())
-        SESSION_DEADLINE_UNIX = SESSION_STARTED_UNIX + 8 * 3600
-        os.environ['VLADE_DEADLINE_UNIX'] = str(SESSION_DEADLINE_UNIX)
-        print('A100 예산: 설치·파일럿·학습·후속 작업을 포함한 최대 8시간')
-        """, "budget-start"))
-    install_index = next(i for i, item in enumerate(cells) if item["id"] == "install-ava")
-    cells.insert(install_index, cell("code", """
-        import threading
-        from google.colab import runtime
-        POLICY = json.loads((CODE / 'configs/experiments/ava_fft_a100_8h.json').read_text())
-        RUN_NAME = 'ava-fft-a100-8h-seed42'
-        CONFIGS = ROOT / 'run-configs'
-        CONFIGS.mkdir(exist_ok=True)
-        SESSION_FILE = CONFIGS / (RUN_NAME + '-session.json')
-        if SESSION_FILE.is_file():
-            session = json.loads(SESSION_FILE.read_text())
-            SESSION_STARTED_UNIX = session['started_unix']
-            SESSION_DEADLINE_UNIX = session['deadline_unix']
-        else:
-            SESSION_FILE.write_text(json.dumps(dict(started_unix=SESSION_STARTED_UNIX,
-                deadline_unix=SESSION_DEADLINE_UNIX, total_hours=POLICY['total_hours']), indent=2))
-        ENV['VLADE_DEADLINE_UNIX'] = str(SESSION_DEADLINE_UNIX)
-        os.environ['VLADE_DEADLINE_UNIX'] = str(SESSION_DEADLINE_UNIX)
-        if SESSION_DEADLINE_UNIX <= time.time():
-            runtime.unassign()
-            raise RuntimeError('이 실행의 8시간 예산이 종료되었습니다.')
-        if globals().get('_budget_release_timer'):
-            _budget_release_timer.cancel()
-        _budget_release_timer = threading.Timer(SESSION_DEADLINE_UNIX-time.time(), runtime.unassign)
-        _budget_release_timer.daemon = True
-        _budget_release_timer.start()
-        print('남은 예산(분):', round((SESSION_DEADLINE_UNIX-time.time())/60, 1))
-        print('8시간 마감 시 Colab 런타임 자동 해제를 요청합니다. 대기 시간도 포함됩니다.')
-        """, "budget-session"))
-    replace_cell("fft-config", "code", """
-        require_ava_environment()
-        PREPARED = ROOT / 'data/processed/libero_plus_episode80'
-        from vlade.data.episode_data import EpisodeData, query_count
-        from vlade.training.run_control import require_reports, planned_checkpoint_space, pilot_context
-        from vlade.training.compute_budget import pilot_profile, plan_fft
-        RUN_MAIN_FFT = False  # 측정된 예산과 재로딩 결과 확인 후 True
-        OUTPUT = ROOT / 'runs/ava_fft' / RUN_NAME
-        TRAIN_QUERIES = query_count(EpisodeData(PREPARED))
-        config = json.loads((CODE / 'configs/experiments/libero_plus_fft.json').read_text())
-        config['fft_defaults'].update(data_root=str(ROOT / 'data/processed/libero_plus_tfds'),
-            prepared_data_root=str(PREPARED), image_aug=False, batch_size=POLICY['batch_size'],
-            grad_accumulation_steps=POLICY['accumulation_steps'], max_steps=POLICY['pilot_steps'],
-            save_steps=POLICY['pilot_steps'], save_optimizer_state=True,
-            learning_rate=POLICY['learning_rate'], lr_schedule=POLICY['lr_schedule'], warmup_steps=0,
-            max_grad_norm=POLICY['max_grad_norm'], eval_steps=POLICY['pilot_steps'],
-            max_eval_batches=POLICY['validation_batches'], debug_records=0)
-        config['fft_runs']['ava_vla'].update(
-            checkpoint=str(ROOT / 'checkpoints/teacher/avavla-libero-4in1'), output_dir=str(OUTPUT))
-        MAIN_CONFIG = CONFIGS / (RUN_NAME + '.json')
-        print('train query:', TRAIN_QUERIES, ' / 본 학습 max_steps: 파일럿 실측 후 계산')
-        """)
-    replace_cell("smoke-help", "markdown", """
-        ## 동일 accumulation의 4-step 파일럿 → 저장·재로딩 검사
-        첫 optimizer step은 속도 산정에서 제외하고 뒤의 3 step, validation 및 checkpoint 저장 시간을 측정합니다.
-        파일럿은 본 학습과 같은 batch/accumulation을 사용합니다. 파일럿 가중치는 본 학습 초기값으로 쓰지 않습니다.
-        """)
-    replace_cell("fft-smoke", "code", """
-        require_ava_environment()
-        smoke = json.loads(json.dumps(config))
-        SMOKE_OUTPUT = ROOT / 'runs/ava_fft' / (RUN_NAME + '-pilot4')
-        SMOKE_STEP = SMOKE_OUTPUT / f"step-{POLICY['pilot_steps']:07d}"
-        smoke['fft_runs']['ava_vla']['output_dir'] = str(SMOKE_OUTPUT)
-        SMOKE_CONFIG = CONFIGS / (RUN_NAME + '-pilot4.json')
-        if SMOKE_CONFIG.exists() and json.loads(SMOKE_CONFIG.read_text()) != smoke:
-            raise ValueError('기존 파일럿과 설정이 다릅니다. 같은 경로를 덮어쓰지 않습니다.')
-        SMOKE_CONFIG.write_text(json.dumps(smoke, indent=2))
-        if not (SMOKE_STEP / 'COMPLETE').is_file():
-            run([AVA_PY, 'scripts/train/run_fft.py', '--model', 'ava_vla', '--config', SMOKE_CONFIG])
-        run([AVA_PY, 'scripts/train/check_fft_checkpoint.py', '--checkpoint', SMOKE_STEP,
-             '--data', PREPARED, '--config', SMOKE_CONFIG, '--report', SMOKE_OUTPUT / 'reload_report.json'])
-        PROFILE = pilot_profile(SMOKE_OUTPUT, expected_steps=POLICY['pilot_steps'])
-        current_hardware = json.loads(subprocess.check_output([str(AVA_PY), '-c',
-            "import json,torch; print(json.dumps(dict(gpu=torch.cuda.get_device_name(0), vram_bytes=torch.cuda.get_device_properties(0).total_memory)))"], text=True))
-        if ('A100' not in current_hardware['gpu'] or
-                any(PROFILE[key] != current_hardware[key] for key in ('gpu', 'vram_bytes'))):
-            raise RuntimeError('현재 A100과 timing pilot의 GPU/메모리가 다릅니다. 기존 측정값을 재사용하지 않습니다.')
-        print('실측 시간(초):', json.dumps(PROFILE, indent=2))
-        """)
-    plan_index = next(i for i, item in enumerate(cells) if item["id"] == "main-help")
-    cells.insert(plan_index, cell("code", """
-        require_reports([SMOKE_OUTPUT / 'reload_report.json'],
-            [pilot_context(SMOKE_CONFIG, SMOKE_STEP, PREPARED, 'fft')])
-        if MAIN_CONFIG.is_file():
-            existing = json.loads(MAIN_CONFIG.read_text())
-            if existing.get('training', {}).get('budget_policy') != POLICY:
-                raise ValueError('기존 본 학습의 예산 정책이 다릅니다. 새 실행 이름이 필요합니다.')
-            if any(existing['fft_defaults'].get(k) != v for k, v in config['fft_defaults'].items()
-                   if k not in {'max_steps', 'save_steps', 'eval_steps', 'warmup_steps'}):
-                raise ValueError('기존 본 학습과 입력/학습 설정이 다릅니다.')
-            config = existing  # 재개 시 max_steps와 LR 스케줄을 재계산하지 않습니다.
-            BUDGET = config['training']['colab_budget']
-        else:
-            BUDGET = plan_fft(TRAIN_QUERIES, PROFILE, SESSION_DEADLINE_UNIX-time.time(),
-                accumulation=POLICY['accumulation_steps'], max_epochs=POLICY['max_epochs'],
-                safety_factor=POLICY['safety_factor'],
-                downstream_reserve_seconds=POLICY['downstream_reserve_seconds'],
-                shutdown_reserve_seconds=POLICY['shutdown_reserve_seconds'])
-            config['fft_defaults'].update(max_steps=BUDGET['optimizer_steps'],
-                save_steps=BUDGET['save_steps'], eval_steps=BUDGET['eval_steps'],
-                warmup_steps=BUDGET['warmup_steps'])
-            config['training'].update(colab_budget=BUDGET, budget_policy=POLICY)
-            MAIN_CONFIG.write_text(json.dumps(config, indent=2))
-        print('본 학습 예산:', json.dumps(BUDGET, indent=2))
-        if POLICY['compute_units_per_hour'] is not None:
-            print('8시간 최대 예상 CU:', POLICY['total_hours'] * POLICY['compute_units_per_hour'])
-        """, "fft-budget-plan"))
-    replace_cell("main-help", "markdown", """
-        ## 8시간 예산 내 본 학습
-        최대 1 epoch와 실측 가능한 step 중 작은 값을 사용합니다. 설치·파일럿·재로딩은 이미 경과한 시간으로 차감됩니다.
-        이후 validation/T1/cache 작업용 1시간과 종료용 최소 5분을 확보하고, 나머지 속도 추정에는 30% 여유를 둡니다.
-        저장·validation은 중간과 마지막 약 2회로 줄입니다. 실제 저장이 느려지면 optimizer 경계에서 저장 후 예산 종료로 기록합니다.
-        이 설정은 논문 재현/수렴 완료를 뜻하지 않습니다. FFT의 LR은 2e-5, warm-up 10%, cosine이며 temporal zero-context입니다.
-        RUN_MAIN_FFT를 켜야 학습합니다. 8시간 후 런타임 해제 요청이 실패하면 Colab에서 직접 연결 해제·삭제하십시오.
-        """)
-    replace_cell("fft-main", "code", """
-        require_ava_environment()
-        checkpoints = completed_checkpoints(OUTPUT)
-        latest = checkpoints[-1] if checkpoints else None
-        if not RUN_MAIN_FFT:
-            print('본 학습 대기: 측정 예산과 재로딩 결과 확인 후 RUN_MAIN_FFT=True로 실행하십시오.')
-        elif latest and int(latest.name.split('-')[1]) >= config['fft_defaults']['max_steps']:
-            print('목표 step 완료:', latest)
-        else:
-            require_reports([SMOKE_OUTPUT / 'reload_report.json'],
-                [pilot_context(SMOKE_CONFIG, SMOKE_STEP, PREPARED, 'fft')])
-            print('저장 공간 계획:', planned_checkpoint_space(ROOT, SMOKE_STEP,
-                config['fft_defaults']['max_steps'], config['fft_defaults']['save_steps'],
-                int(latest.name.split('-')[1]) if latest else 0))
-            train_env = ENV.copy()
-            train_env['VLADE_TRAIN_DEADLINE_UNIX'] = str(SESSION_DEADLINE_UNIX-POLICY['downstream_reserve_seconds'])
-            train_env['VLADE_SAVE_RESERVE_SECONDS'] = str(BUDGET['save_reserve_seconds'])
-            command = [AVA_PY, 'scripts/train/run_fft.py', '--model', 'ava_vla', '--config', MAIN_CONFIG]
-            if latest:
-                command += ['--resume', latest]
-            run(command, env=train_env)
-        """)
-    cells.append(cell("code", """
-        RELEASE_GPU_NOW = False  # 필요한 단계가 끝났으면 True로 바꿔 실행하십시오.
-        print('실제 경과 시간(시간):', round((time.time()-SESSION_STARTED_UNIX)/3600, 3))
-        if RELEASE_GPU_NOW:
-            runtime.unassign()
-        """, "release-gpu"))
+def write_thin_notebook(path: Path, profile: str, title: str) -> Path:
+    config = "configs/research/" + profile + ".json"
+    intro = f"# {title}\n\n실행 로직은 프로젝트 모듈과 CLI에 있습니다. `CONFIG`의 훈련 step·평가 rollout·seed·학습률·주기·예산을 편집하거나 `OVERRIDES`로 지정하십시오. 재개는 같은 run_group과 고정 SOURCE_COMMIT 및 원래 설정을 사용합니다. 기본 실행 스위치는 모두 False입니다. 가중치/데이터는 고정 HF 입력이며 Drive는 자동 갱신하지 않습니다.\n\n실험 단계: prepare_inputs → 훈련/검증 → select_teacher → cache_teacher → qwen_kd → evaluate_ava/evaluate_oft. Suite-balanced는 pilot4/main을 구분합니다."
+    controls = """
+        import datetime, uuid
+        from vlade.research.client import job
+        WORKSPACE = '/content/vlade_work'
+        CONFIG = str(CODE / __CONFIG__)
+        RUN_GROUP = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+uuid.uuid4().hex[:8]
+        OVERRIDES = {'run_group': RUN_GROUP}  # 예: 'train.max_steps': 1000 또는 'evaluation.rollouts_per_task': 10
+        RUN_SETUP = False
+        RUN_EXPERIMENT = False
+    """.replace(
+        "__CONFIG__", repr(config)
+    )
+    cells = [
+        cell("markdown", intro, "purpose"),
+        cell("code", bootstrap(), "source"),
+        cell(
+            "code",
+            "from google.colab import userdata\nos.environ['HF_TOKEN'] = userdata.get('HF_TOKEN')",
+            "authentication",
+        ),
+        cell("code", controls, "config"),
+        cell("code", "job(CONFIG,action='plan',workspace=WORKSPACE,overrides=OVERRIDES)", "plan"),
+        cell(
+            "code",
+            "if RUN_SETUP:\n    job(CONFIG,action='setup',workspace=WORKSPACE,overrides=OVERRIDES)",
+            "setup",
+        ),
+        cell(
+            "code",
+            "if RUN_EXPERIMENT:\n    job(CONFIG,action='run',workspace=WORKSPACE,overrides=OVERRIDES)",
+            "run",
+        ),
+    ]
+    if profile == "prepare_inputs":
+        cells.append(
+            cell(
+                "code",
+                "RUN_FULLFRAMES = False  # 승인된 별도 공개 D/seed42 전체 프레임 게시\nif RUN_FULLFRAMES:\n    job(CODE/'configs/research/fullframes.json',action='setup',workspace=WORKSPACE)\n    job(CODE/'configs/research/fullframes.json',action='run',workspace=WORKSPACE)",
+                "export-fullframes-to-hf",
+            )
+        )
+    if profile == "ava_one_step":
+        cells.insert(
+            -1,
+            cell(
+                "code",
+                "RUN_PREPARE_ONE = False\nif RUN_PREPARE_ONE:\n    job(CODE/'configs/research/prepare_one_episode.json',action='setup',workspace=WORKSPACE)\n    job(CODE/'configs/research/prepare_one_episode.json',action='run',workspace=WORKSPACE)",
+                "prepare-one-episode",
+            ),
+        )
+    value = {
+        "nbformat": 4,
+        "nbformat_minor": 5,
+        "cells": cells,
+        "metadata": {
+            "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+            "language_info": {"name": "python"},
+            "colab": {"name": path.name, "provenance": []},
+        },
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return path
 
 
 def generate() -> list[Path]:
-    manifest_path = ROOT / "experiments/manifests/colab_source.json"
-    manifest = {"schema_version": 2, "repository": "https://github.com/eastha10/VLADE.git",
-                "ref": "main", "deployment": "git_checkout", "inputs": "hugging_face"}
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    digest = manifest["ref"]
-    common = cell("code", bootstrap(digest), "drive-and-source")
-    notebooks = ROOT / "experiments"
-    one = notebooks / "colab_01_download_data_weights.ipynb"
-    notebook(one, [cell("markdown", "# 01 · Hugging Face 자료 준비", "purpose"), common,
-        cell("code", """
-        DATA_PY = environment('vlade_data_py311', '3.11', [
-            'numpy==1.26.4', 'pillow==10.4.0', 'huggingface_hub==0.36.2',
-            'tensorflow==2.15.0', 'tensorflow-datasets==4.9.3', 'tensorflow-metadata==1.15.0',
-            'pyarrow==19.0.1'])
-        if shutil.which('zip') is None:
-            run(['apt-get', 'update'])
-            run(['apt-get', 'install', '-y', 'zip'])
-        """, "install-data")])
-    two = notebooks / "colab_02_ava_fft_and_fixed_cache.ipynb"
-    notebook(two, [
-        cell("markdown", """
-        # 02 · AVA-VLA 전체 미세조정 → 검증 후 T1 선택 → 순차 캐시
-        01을 완료한 뒤 A100 런타임에서 실행하십시오. LoRA를 사용하지 않으며 backbone/head/proprio/attention generator를 학습 대상으로 둡니다.
-        A100 40 GB에서 FFT는 OOM이 날 수 있습니다. 먼저 1 step을 실행하고 실제 peak 메모리를 확인하십시오.
-        **현재 FFT는 temporal zero-context입니다.** 이후 캐시는 이전 query의 layer -2 action hidden을 전달하지만,
-        시간 문맥을 사용한 FFT/TBPTT를 구현하거나 원본 AVA 학습을 재현한 것은 아닙니다. 본 실험 채택 전 검토 항목입니다.
-        체크포인트/optimizer 저장은 수십 GB가 될 수 있습니다. `COMPLETE`와 training state가 있는 저장만 재개합니다.
-        """, "purpose"), cell("code", bootstrap(digest, isolated_uv=True), "drive-and-source"),
-        cell("code", ava_install_source(), "install-ava"),
-        cell("code", """
-        require_ava_environment()
-        PREPARED = ROOT / 'data/processed/libero_plus_episode80'
-        from vlade.data.episode_data import EpisodeData
-        from vlade.training.run_control import epoch_budget, require_reports, planned_checkpoint_space, pilot_context
-        MAIN_EPOCHS = 1  # 최소 1회 전체 train query 순회. 최종 목표 epoch는 검토 후 조정하십시오.
-        RUN_MAIN_FFT = False  # 1-step/reload 보고서 확인 후 본 학습을 실행할 때만 True
-        SAVES_PER_EPOCH = 4
-        BUDGET = epoch_budget(EpisodeData(PREPARED), MAIN_EPOCHS, batch_size=1, accumulation=8)
-        RUN_NAME = 'ava-fft-epoch-seed42'  # 설정/코드가 바뀐 기존 실행은 별도 이름을 사용하십시오.
-        OUTPUT = ROOT / 'runs/ava_fft' / RUN_NAME
-        CONFIGS = ROOT / 'run-configs'
-        CONFIGS.mkdir(exist_ok=True)
-        config = json.loads((CODE / 'configs/experiments/libero_plus_fft.json').read_text())
-        config['fft_defaults'].update(data_root=str(ROOT / 'data/processed/libero_plus_tfds'),
-            prepared_data_root=str(PREPARED), image_aug=False, batch_size=1,
-            grad_accumulation_steps=8, max_steps=BUDGET['optimizer_steps'],
-            save_steps=max(1, (BUDGET['optimizer_steps'] + MAIN_EPOCHS*SAVES_PER_EPOCH - 1)//(MAIN_EPOCHS*SAVES_PER_EPOCH)),
-            save_optimizer_state=True, eval_steps=100, max_eval_batches=32, debug_records=1)
-        config['training']['colab_budget'] = BUDGET
-        print('실제 데이터 기준 본 학습량:', json.dumps(BUDGET, indent=2))
-        config['fft_runs']['ava_vla'].update(
-            checkpoint=str(ROOT / 'checkpoints/teacher/avavla-libero-4in1'), output_dir=str(OUTPUT))
-        MAIN_CONFIG = CONFIGS / (RUN_NAME + '.json')
-        if MAIN_CONFIG.exists() and json.loads(MAIN_CONFIG.read_text()) != config:
-            raise ValueError('기존 실행 설정이 다릅니다. RUN_NAME을 바꾸십시오.')
-        MAIN_CONFIG.write_text(json.dumps(config, indent=2))
-        run([AVA_PY, 'scripts/train/run_fft.py', '--model', 'ava_vla', '--config', MAIN_CONFIG, '--preflight'])
-        """, "fft-config"),
-        cell("markdown", "## 실제 1-step·저장·재로딩 검사\n본 학습과 별도 경로를 사용합니다. 이 1-step 체크포인트를 다른 목표량의 본 실험으로 재개하지 않습니다. 오류가 발생하면 본 학습 셀을 실행하지 마십시오.", "smoke-help"),
-        cell("code", """
-        require_ava_environment()
-        smoke = json.loads(json.dumps(config))
-        SMOKE_OUTPUT = ROOT / 'runs/ava_fft' / (RUN_NAME + '-one-step')
-        smoke['fft_defaults'].update(max_steps=1, save_steps=1, grad_accumulation_steps=1)
-        smoke['fft_runs']['ava_vla']['output_dir'] = str(SMOKE_OUTPUT)
-        SMOKE_CONFIG = CONFIGS / (RUN_NAME + '-one-step.json')
-        SMOKE_CONFIG.write_text(json.dumps(smoke, indent=2))
-        if not (SMOKE_OUTPUT / 'step-0000001/COMPLETE').is_file():
-            run([AVA_PY, 'scripts/train/run_fft.py', '--model', 'ava_vla', '--config', SMOKE_CONFIG])
-        run([AVA_PY, 'scripts/train/check_fft_checkpoint.py', '--checkpoint', SMOKE_OUTPUT / 'step-0000001',
-             '--data', PREPARED, '--config', SMOKE_CONFIG, '--report', SMOKE_OUTPUT / 'reload_report.json'])
-        """, "fft-smoke"),
-        cell("markdown", "## 본 학습·다음 날 재개\n고정 1000-step 대신 실제 train query 수 × MAIN_EPOCHS에서 optimizer step을 계산합니다. accumulation 경계로 올림한 여분 query 수를 표시합니다. episode 순서는 seed/epoch로 섞고 내부 시간 순서는 유지하며, prepared-data 재개는 query cursor를 복원합니다. GPU kernel의 bitwise 결정성은 별도 검증 사항입니다. RUN_MAIN_FFT 기본 False이므로 모두 실행만으로 본 학습이 시작되지 않습니다.", "main-help"),
-        cell("code", """
-        require_ava_environment()
-        checkpoints = completed_checkpoints(OUTPUT)
-        latest = checkpoints[-1] if checkpoints else None
-        if not RUN_MAIN_FFT:
-            print('본 학습 대기: budget·1-step/reload 결과 확인 후 RUN_MAIN_FFT=True로 실행하십시오.')
-        elif latest and int(latest.name.split('-')[1]) >= config['fft_defaults']['max_steps']:
-            print('목표 step의 완료 checkpoint가 이미 있습니다:', latest)
-        else:
-            require_reports([SMOKE_OUTPUT / 'reload_report.json'],
-                [pilot_context(SMOKE_CONFIG, SMOKE_OUTPUT / 'step-0000001', PREPARED, 'fft')])
-            print('저장 공간 계획:', planned_checkpoint_space(ROOT, SMOKE_OUTPUT / 'step-0000001',
-                config['fft_defaults']['max_steps'], config['fft_defaults']['save_steps'],
-                int(latest.name.split('-')[1]) if latest else 0))
-            command = [AVA_PY, 'scripts/train/run_fft.py', '--model', 'ava_vla', '--config', MAIN_CONFIG]
-            if latest:
-                command += ['--resume', latest]
-            run(command)
-        """, "fft-main"),
-        cell("markdown", """
-        ## Validation 후 T1 선택
-        마지막 step을 자동으로 T1으로 부르지 않습니다. 별도 validation/rollout 보고서를 확인한 뒤 아래 세 값을 지정하십시오.
-        `validation_report`는 JSON이며 report_type=teacher_validation_comparison, selection_split=validation,
-        used_final_test=false, 실제 evaluation_protocol_sha256, prepared manifest의 data_split_sha256,
-        candidates 배열을 포함해야 합니다. 각 후보에는 checkpoint/role(T0 또는 T1),
-        validation_success_rate/validation_episodes, original_libero_success_rate/original_libero_episodes가 필요합니다.
-        실제 측정값과 선택 T1이 없으면 거부합니다. 한 번의 재로딩 보고서는 선정 근거가 아닙니다.
-        선택 파일에 전체 bundle SHA256·통계/split SHA256·보고서 SHA256을 기록합니다.
-        """, "selection-help"),
-        cell("code", """
-        T1_CHECKPOINT = ''  # 실제 validation으로 선택한 완료 checkpoint의 Drive 경로
-        VALIDATION_REPORT = ''  # 실제 validation/rollout 보고서의 현재 실행 출력 경로
-        SELECTION_REASON = ''  # 선택 지표·비교 checkpoint·이유
-        SELECTION = ROOT / 'selections/T1.json'
-        if T1_CHECKPOINT and VALIDATION_REPORT and SELECTION_REASON:
-            if SELECTION.is_file():
-                previous = json.loads(SELECTION.read_text())
-                if (Path(previous['checkpoint']).resolve() != Path(T1_CHECKPOINT).resolve() or
-                    Path(previous['validation_report']).resolve() != Path(VALIDATION_REPORT).resolve() or
-                    previous['selection_reason'] != SELECTION_REASON or
-                    hashlib.sha256(Path(VALIDATION_REPORT).read_bytes()).hexdigest() != previous['validation_report_sha256']):
-                    raise ValueError('기존 T1 선택과 새 입력이 다릅니다. SELECTION에 새 파일 경로를 지정하십시오.')
-            else:
-                run([AVA_PY, 'scripts/data/select_teacher.py', '--checkpoint', T1_CHECKPOINT,
-                     '--validation-report', VALIDATION_REPORT, '--reason', SELECTION_REASON,
-                     '--data', PREPARED, '--output', SELECTION])
-        else:
-            print('선행 대기: 실제 validation·T1 선정 후 cache를 생성하십시오.')
-        """, "select-t1"),
-        cell("markdown", """
-        ## 고정 시퀀스 cache: 2-episode pilot → 전체 train
-        T1은 frozen·비양자화, query 간격 8, episode별 reset과 이전 hidden 전달을 유지합니다.
-        재로딩 무결성·샘플 수와 고르게 떨어진 최대 3개 episode의 전체 query 재실행을 검사하고 완료된 episode만 재사용합니다.
-        기본은 action cache입니다. `SAVE_HIDDEN=True`이면 `[56,D]` layer -2 feature도 기록합니다.
-        큰 hidden JSON은 전체 데이터에서 용량이 매우 커질 수 있으므로 pilot 실측으로 예산을 먼저 확인하십시오.
-        `RUN_FULL_CACHE`는 pilot 결과를 검토한 후 켜십시오. action-only cache를 representation KD용으로 해석하지 않습니다.
-        """, "cache-help"),
-        cell("code", """
-        SAVE_HIDDEN = False
-        RUN_FULL_CACHE = False
-        if SELECTION.is_file():
-            suffix = 'hidden' if SAVE_HIDDEN else 'action'
-            PILOT = ROOT / 'data/teacher_cache' / ('T1-pilot-' + suffix)
-            command = [AVA_PY, 'scripts/data/generate_fixed_cache.py', '--selection', SELECTION,
-                       '--data', PREPARED, '--output', PILOT, '--max-episodes', '2']
-            run(command + (['--hidden'] if SAVE_HIDDEN else []))
-            pilot = json.loads((PILOT / 'cache_manifest.json').read_text())
-            total_queries = sum(item['queries'] for item in json.loads((PREPARED / 'manifest.json').read_text())['episodes'] if item['split'] == 'train')
-            estimate = pilot['bytes'] * total_queries / pilot['queries']
-            print('전체 cache 예상 GiB (pilot 비례 추정):', estimate / 2**30)
-            estimated_seconds = pilot['invocation_seconds'] * total_queries / pilot['queries'] * POLICY['safety_factor']
-            print('전체 cache 예상 시간(분, pilot 비례 추정):', estimated_seconds / 60)
-            if RUN_FULL_CACHE:
-                if estimated_seconds + POLICY['shutdown_reserve_seconds'] > SESSION_DEADLINE_UNIX-time.time():
-                    raise RuntimeError('남은 8시간 예산으로 전체 cache를 생성하기 어렵습니다. pilot은 보존합니다.')
-                if shutil.disk_usage(ROOT).free < estimate * 1.2:
-                    raise OSError('pilot 기반 cache 예상 용량과 여유 공간이 부족합니다.')
-                command = [AVA_PY, 'scripts/data/generate_fixed_cache.py', '--selection', SELECTION,
-                           '--data', PREPARED, '--output', ROOT / 'data/teacher_cache' / ('T1-full-' + suffix)]
-                run(command + (['--hidden'] if SAVE_HIDDEN else []))
-        else:
-            print('선행 대기: 선택된 T1이 없습니다. 공개 T0/zero-context debug를 대신 저장하지 않습니다.')
-        """, "cache")])
-    apply_fft_budget(two)
-    three = notebooks / "colab_03_qwen_task_only.ipynb"
-    notebook(three, [
-        cell("markdown", """
-        # 03 · Qwen3.5-0.8B Task-only 기준선
-        01의 동일 episode split·정규화·query 간격 8을 사용합니다. Teacher cache 없이 demonstration L1으로 학습합니다.
-        최근 2 query × 2 camera, 8차원 proprio, 연속 action `[1,8,7]` 계약입니다. Teacher와 별도 Python 3.13 환경을 만듭니다.
-        실행 순서: 환경 → Qwen 가중치 다운로드 → 1-step → 작은 episode overfit → 결과 확인 후 본 학습/재개.
-        실제 0.8B 가중치·GPU 학습은 아직 검증하지 않았습니다. 이 노트북을 실행하면서 검증 결과를 기록합니다.
-        [고정 Qwen revision](https://huggingface.co/Qwen/Qwen3.5-0.8B/tree/2fc06364715b967f1860aea9cf38778875588b17).
-        Task-only/KD의 공정 비교에는 같은 초기 revision·seed·head·sampler·최종 step·입력 budget을 유지하십시오.
-        이 노트북에는 KD loss, CoTinyVLA Plan/Think 생성, 환경 rollout 성공률 평가가 포함되어 있지 않습니다.
-        """, "purpose"), common,
-        cell("code", """
-        STUDENT_PY = environment('vlade_qwen_task_py313', '3.13', [
-            'torch==2.12.0', 'torchvision==0.27.0', 'transformers==5.9.0',
-            'accelerate', 'pillow', 'numpy', 'sentencepiece'])
-        run([STUDENT_PY, '-c', "import torch; from transformers import Qwen3_5Model; assert torch.cuda.is_available(); assert torch.cuda.is_bf16_supported(); print(torch.__version__,torch.cuda.get_device_name(0))"])
-        (ROOT / 'student_environment_freeze.txt').write_text(subprocess.check_output(
-            [str(UV), 'pip', 'freeze', '--python', str(STUDENT_PY)], text=True))
-        """, "install-student"),
-        cell("markdown", "## Qwen 초기 가중치 준비\n이 셀을 실행하면 공식 고정 revision의 모델 가중치 약 1.75 GB와 processor 자료를 Hugging Face에서 런타임 캐시로 받습니다. 기존 로컬 폴더의 processor 자료만으로는 전체 학습을 실행할 수 없습니다. 오늘 다운로드한 것으로 기록하지 않습니다.", "weights-help"),
-        cell("code", """
-        QWEN = ROOT / 'checkpoints/students/qwen3_5_0_8b'
-        program = "import sys; from pathlib import Path; sys.path.insert(0,'src'); from vlade.data.colab_assets import download; download('Qwen/Qwen3.5-0.8B','2fc06364715b967f1860aea9cf38778875588b17',Path(sys.argv[1]))"
-        run([STUDENT_PY, '-c', program, QWEN])
-        """, "download-student"),
-        cell("code", """
-        PREPARED = ROOT / 'data/processed/libero_plus_episode80'
-        from vlade.data.episode_data import EpisodeData, write_json
-        from vlade.training.run_control import epoch_budget, overfit_report, require_reports, planned_checkpoint_space, pilot_context
-        MAIN_EPOCHS = 1
-        RUN_MAIN_STUDENT = False
-        OVERFIT_MAX_RATIO = .8  # 초기/마지막 loss 중앙값의 비율: 파일럿 감소 검사 기준
-        SAVES_PER_EPOCH = 4
-        BUDGET = epoch_budget(EpisodeData(PREPARED), MAIN_EPOCHS, batch_size=1, accumulation=8)
-        RUN_NAME = 'qwen-task-epoch-seed42'
-        CONFIGS = ROOT / 'run-configs'
-        CONFIGS.mkdir(exist_ok=True)
-        student = json.loads((CODE / 'configs/models/student/qwen3_5_0_8b.json').read_text())['student']
-        base = dict(method='task_only', data=str(PREPARED), initial_checkpoint=str(QWEN), student=student,
-                    seed=42, batch_size=1, accumulation_steps=8, max_steps=BUDGET['optimizer_steps'],
-                    save_steps=max(1,(BUDGET['optimizer_steps']+MAIN_EPOCHS*SAVES_PER_EPOCH-1)//(MAIN_EPOCHS*SAVES_PER_EPOCH)),
-                    learning_rate=2e-5, weight_decay=.01, validation_queries=32, eval_steps=100, episode_limit=0,
-                    budget=BUDGET,
-                    output=str(ROOT / 'runs/student_task' / RUN_NAME))
-        def student_config(suffix, **updates):
-            settings = {**base, **updates}
-            settings['output'] = str(ROOT / 'runs/student_task' / (RUN_NAME + suffix))
-            path = CONFIGS / (RUN_NAME + suffix + '.json')
-            if path.exists() and json.loads(path.read_text()) != settings:
-                raise ValueError('기존 실행 설정 불일치: RUN_NAME을 바꾸십시오.')
-            path.write_text(json.dumps(settings, indent=2))
-            return path, Path(settings['output'])
-        def train_student(config_path, output):
-            settings = json.loads(config_path.read_text())
-            run([STUDENT_PY, 'scripts/train/run_student_task.py', '--config', config_path, '--preflight'])
-            checkpoints = completed_checkpoints(output)
-            latest = checkpoints[-1] if checkpoints else None
-            if latest and int(latest.name.split('-')[1]) >= settings['max_steps']:
-                print('이미 완료된 학습:', latest)
-                return
-            command = [STUDENT_PY, 'scripts/train/run_student_task.py', '--config', config_path]
-            if latest:
-                command += ['--resume', latest]
-            run(command)
-        """, "student-config"),
-        cell("code", """
-        smoke_config, smoke_output = student_config('-one-step', max_steps=1, save_steps=1,
-            accumulation_steps=1, validation_queries=1)
-        train_student(smoke_config, smoke_output)
-        run([STUDENT_PY, 'scripts/train/check_student_checkpoint.py', '--checkpoint', smoke_output / 'step-0000001',
-             '--data', PREPARED, '--config', smoke_config, '--report', smoke_output / 'reload_report.json'])
-        """, "student-smoke"),
-        cell("markdown", "## 작은 episode overfit 검사\n같은 train episode를 반복하며 처음/마지막 5개 loss 중앙값의 감소 비율을 자동 검사합니다. 이 파일럿 기준은 완전 수렴이나 rollout 성공률을 의미하지 않습니다. 실패 보고서가 있으면 본 학습을 거부합니다. 실제 가중치의 입력 모달리티 영향은 별도 확인 대상입니다.", "overfit-help"),
-        cell("code", """
-        overfit_config, overfit_output = student_config('-overfit', max_steps=50, save_steps=50,
-            accumulation_steps=1, episode_limit=1, validation_queries=4)
-        train_student(overfit_config, overfit_output)
-        by_step = {}
-        for log in sorted(overfit_output.glob('metrics-*.jsonl'), key=lambda path: path.stat().st_mtime):
-            for line in log.read_text().splitlines():
-                row = json.loads(line)
-                by_step[row['step']] = row
-        report = overfit_report(list(by_step.values()), max_ratio=OVERFIT_MAX_RATIO)
-        overfit_steps = json.loads(overfit_config.read_text())['max_steps']
-        report['context'] = pilot_context(overfit_config, overfit_output / f'step-{overfit_steps:07d}',
-            PREPARED, 'student', policy={'max_ratio': OVERFIT_MAX_RATIO, 'window': 5})
-        write_json(overfit_output / 'overfit_report.json', report)
-        print('파일럿 loss 감소 검사:', report)
-        import matplotlib.pyplot as plt
-        for log in sorted(overfit_output.glob('metrics-*.jsonl')):
-            rows = [json.loads(line) for line in log.read_text().splitlines()]
-            plt.plot([row['step'] for row in rows], [row['loss'] for row in rows], label=log.stem)
-        plt.xlabel('Optimizer step'); plt.ylabel('Train L1'); plt.legend(); plt.show()
-        """, "student-overfit"),
-        cell("code", """
-        MAIN_CONFIG, MAIN_OUTPUT = student_config('')
-        if RUN_MAIN_STUDENT:
-            overfit_steps = json.loads(overfit_config.read_text())['max_steps']
-            require_reports([smoke_output / 'reload_report.json', overfit_output / 'overfit_report.json'],
-                [pilot_context(smoke_config, smoke_output / 'step-0000001', PREPARED, 'student'),
-                 pilot_context(overfit_config, overfit_output / f'step-{overfit_steps:07d}', PREPARED, 'student',
-                    policy={'max_ratio': OVERFIT_MAX_RATIO, 'window': 5})])
-            checkpoints = completed_checkpoints(MAIN_OUTPUT)
-            print('저장 공간 계획:', planned_checkpoint_space(ROOT, smoke_output / 'step-0000001',
-                base['max_steps'], base['save_steps'], int(checkpoints[-1].name.split('-')[1]) if checkpoints else 0))
-            train_student(MAIN_CONFIG, MAIN_OUTPUT)
-        else:
-            print('본 학습 대기: budget·reload·overfit 결과 확인 후 RUN_MAIN_STUDENT=True로 실행하십시오.')
-        reports = [json.loads(path.read_text()) for path in sorted(MAIN_OUTPUT.glob('run-*.json'), key=lambda path: path.stat().st_mtime_ns)]
-        print(json.dumps(reports[-1] if reports else {}, indent=2, ensure_ascii=False))
-        print('Validation L1은 rollout 성공률이 아닙니다. 환경 평가와 최종 기준 성능 기록은 별도로 진행하십시오.')
-        """, "student-main")])
-    from vlade.utils.paper_notebook import generate_paper_notebook
-    four = generate_paper_notebook(ROOT,digest)
-    from vlade.utils.kd_notebook import generate_kd_notebook
-    five = generate_kd_notebook(ROOT, digest)
-    from vlade.utils.hf_notebooks import apply_hf_storage, refresh_suite_sources, refresh_inference_sources
-    for path in (one, two, three, four, five):
-        apply_hf_storage(path, ROOT)
-    refresh_suite_sources(ROOT/'experiments/colab_ava_fft_suite_balanced_cu.ipynb', ROOT, digest)
-    refresh_inference_sources(ROOT/'experiments/colab_inference_smoke.ipynb')
-    six = notebooks / "colab_04_openvla_oft_fft.ipynb"
-    notebook(six, [
-        cell("markdown", """
-        # 04 · OpenVLA-OFT 독립 환경 1-step FFT·재로딩
-        01에서 준비한 동일 canonical split/normalization을 사용합니다. AVA 환경과 Transformers fork를
-        공유하지 않습니다. LoRA가 아닌 전체 파라미터 FFT이며, 본격 학습 전 1 optimizer step과 저장·재로딩만 검사합니다.
-        A100 40 GB에서도 OOM 가능성이 있으므로 실제 peak VRAM과 Drive 여유 공간을 먼저 확인하십시오.
-        """, "purpose"), common,
-        cell("code", """
-        import tomllib
-        run(['git', '-C', CODE, 'submodule', 'update', '--init', '--depth', '1', '--', 'third_party/openvla_oft'])
-        upstream = CODE / 'third_party/openvla_oft'
-        dependencies = tomllib.loads((upstream / 'pyproject.toml').read_text())['project']['dependencies']
-        dependencies = [dep for dep in dependencies if not dep.startswith(('transformers @', 'dlimp @', 'huggingface_hub', 'accelerate'))]
-        dependencies += [
-            'transformers @ git+https://github.com/moojink/transformers-openvla-oft.git@bc339d9ad707454c0c115970db43c260067c61ab',
-            'dlimp @ git+https://github.com/moojink/dlimp_openvla.git@040105d256bd28866cc6620621a3d5f7b6b91b46',
-            'numpy==1.26.4', 'tensorflow-metadata==1.15.0', 'bitsandbytes==0.43.3',
-            'huggingface_hub==0.36.2', 'accelerate==1.15.0']
-        OFT_PY = environment('vlade_oft_fft_py311', '3.11', dependencies)
-        run([UV, 'pip', 'install', '--python', OFT_PY, '--no-deps', '-e', upstream])
-        run([OFT_PY, '-c', "import torch,transformers,tensorflow_datasets; assert torch.cuda.is_available(); assert torch.cuda.is_bf16_supported(); print(torch.__version__,transformers.__version__,torch.cuda.get_device_name(0))"])
-        (ROOT / 'oft_environment_freeze.txt').write_text(subprocess.check_output(
-            [str(UV), 'pip', 'freeze', '--python', str(OFT_PY)], text=True))
-        """, "install-oft"),
-        cell("code", """
-        PREPARED = hf_input('prepared_d_seed42', OFT_PY)
-        from vlade.data.episode_data import EpisodeData
-        data = EpisodeData(PREPARED)
-        assert data.manifest['counts'] == {'train': 11477, 'validation': 1428, 'test': 1442}
-        assert data.manifest['canonical_manifest_sha256'] == '487d2be1039ba6a4facc3ba44785ba5159245dfe53462a1d5a41ba8230446e80'
-        config = json.loads((CODE / 'configs/experiments/libero_plus_fft.json').read_text())
-        output = ROOT / 'runs/openvla_oft_fft/oft-one-step-seed42'
-        config['fft_defaults'].update(
-            data_root=str(ASSET_WORK_ROOT / 'data/processed/libero_plus_tfds'), prepared_data_root=str(PREPARED),
-            image_aug=False, batch_size=1, grad_accumulation_steps=1, max_steps=1, save_steps=1,
-            save_optimizer_state=True, eval_steps=0)
-        config['fft_runs']['openvla_oft'].update(
-            checkpoint=str(ROOT / 'checkpoints/baselines/openvla_oft/openvla-7b-oft-finetuned-libero-spatial-object-goal-10'),
-            output_dir=str(output))
-        configs = ROOT / 'run-configs'; configs.mkdir(exist_ok=True)
-        config_path = configs / 'openvla-oft-one-step-seed42.json'
-        config_path.write_text(json.dumps(config, indent=2))
-        run([OFT_PY, 'scripts/train/run_fft.py', '--model', 'openvla_oft', '--config', config_path, '--preflight'])
-        if not (output / 'step-0000001/COMPLETE').is_file():
-            run([OFT_PY, 'scripts/train/run_fft.py', '--model', 'openvla_oft', '--config', config_path])
-        run([OFT_PY, 'scripts/train/check_fft_checkpoint.py', '--checkpoint', output / 'step-0000001',
-             '--data', PREPARED, '--config', config_path, '--report', output / 'reload_report.json'])
-        """, "oft-smoke")])
-    seven = notebooks / "colab_05_ava_a100_one_step_reload.ipynb"
-    notebook(seven, [
-        cell("markdown", """
-        # 05 · AVA-VLA A100 1-step FFT · checkpoint 별도 프로세스 재로딩
-        이 노트북은 Canonical D/seed 42의 **Train Episode 1개만** 원본 TFDS에서 준비하고
-        AVA-VLA full-parameter forward/backward/update 1-step, 전체 checkpoint 저장과 별도 Python
-        프로세스 재로딩을 검사합니다. 14,347 Episode 전체 전처리·복사나 본 학습은 실행하지 않습니다.
+    paths = [
+        write_thin_notebook(ROOT / "experiments" / name, *profile)
+        for name, profile in PROFILES.items()
+    ]
+    manifest = ROOT / "experiments/manifests/colab_source.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    value = {
+        "schema_version": 2,
+        "distribution": "git_commit",
+        "repository": "https://github.com/eastha10/VLADE.git",
+        "default_ref": "main",
+        "runtime_source": "project_owned",
+        "submodules_required": False,
+    }
+    manifest.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+    return paths + [manifest]
 
-        기본 Colab Python 3.13은 사용하지 않고 `uv`로 Python 3.11 환경을 만듭니다.
-        `bitsandbytes`를 포함한 AVA 고정 의존성을 설치하므로 네트워크 설치 시간은 필요하지만
-        모델·데이터를 새로 다운로드하지 않습니다. 입력은 Drive의 기존 TFDS와 AVA 가중치입니다.
 
-        **AVA temporal 한계:** FFT 샘플에는 이전 query의 action feature가 없어
-        `temporal_context=None`인 learned zero-context 경로만 학습합니다. 따라서 원본 AVA의
-        순차 temporal-context 학습/TBPTT 또는 rollout 성능 검증과 동등하지 않습니다.
-        """, "purpose"), common,
-        cell("code", """
-        import tomllib
-        upstream = CODE / 'third_party/ava_vla'
-        dependencies = tomllib.loads((upstream / 'pyproject.toml').read_text())['project']['dependencies']
-        dependencies = [dep for dep in dependencies if not dep.startswith(
-            ('transformers @', 'dlimp @', 'huggingface_hub', 'accelerate'))]
-        dependencies += [
-            'transformers @ git+https://github.com/LiAuto-DSR/transformers-avavla.git@a03eee5da1794c45f5a911b60a9a4545e6e0ed1f',
-            'dlimp @ git+https://github.com/moojink/dlimp_openvla.git@040105d256bd28866cc6620621a3d5f7b6b91b46',
-            'numpy==1.26.4', 'tensorflow-metadata==1.15.0', 'bitsandbytes==0.43.3',
-            'huggingface_hub==0.36.2', 'accelerate==1.15.0']
-        AVA_PY = environment('vlade_ava_fft_py311', '3.11', dependencies)
-        run([UV, 'pip', 'install', '--python', AVA_PY, '--no-deps', '-e', upstream])
-        run([AVA_PY, '-c', "import bitsandbytes,torch,transformers,tensorflow_datasets; "
-            "assert torch.cuda.is_available() and torch.cuda.is_bf16_supported(); "
-            "p=torch.cuda.get_device_properties(0); "
-            "print(torch.__version__,transformers.__version__,bitsandbytes.__version__,p.name,p.total_memory/2**30)"])
-        run(['nvidia-smi', '--query-gpu=name,memory.total,driver_version', '--format=csv,noheader'])
-        freeze = subprocess.check_output([str(UV), 'pip', 'freeze', '--python', str(AVA_PY)], text=True)
-        (ROOT / 'ava_environment_freeze.txt').write_text(freeze)
-        """, "install-ava"),
-        cell("code", """
-        TFDS_ROOT = hf_input('raw_rlds', AVA_PY)
-        PREPARED = ASSET_WORK_ROOT / 'data/processed/libero_plus_canonical_train1'
-        if not (PREPARED / 'COMPLETE').is_file():
-            run([AVA_PY, 'scripts/data/prepare_single_canonical_episode.py',
-                 '--tfds-root', TFDS_ROOT, '--output', PREPARED,
-                 '--canonical-manifest', CODE / 'experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz',
-                 '--canonical-sha256', '487d2be1039ba6a4facc3ba44785ba5159245dfe53462a1d5a41ba8230446e80',
-                 '--canonical-normalization', CODE / 'experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json',
-                 '--canonical-normalization-sha256', 'eac95bcc81b6182b90a2bd030096df6e3e408cb88923d0a1d57dc6c81e297c67'])
-        manifest = json.loads((PREPARED / 'manifest.json').read_text())
-        assert manifest['dataset_scope'] == 'canonical_train_episode_smoke'
-        assert manifest['counts'] == {'train': 1}
-        assert manifest['canonical_manifest_sha256'] == '487d2be1039ba6a4facc3ba44785ba5159245dfe53462a1d5a41ba8230446e80'
-        assert manifest['canonical_normalization_sha256'] == 'eac95bcc81b6182b90a2bd030096df6e3e408cb88923d0a1d57dc6c81e297c67'
-        print(json.dumps({key: manifest[key] for key in (
-            'dataset_scope', 'counts', 'selected_source_episode_index',
-            'canonical_manifest_sha256', 'canonical_normalization_sha256')}, indent=2))
-        print('Episode:', manifest['episodes'][0]['episode_id'],
-              'queries:', manifest['episodes'][0]['queries'])
-        """, "prepare-one-episode"),
-        cell("code", """
-        OUTPUT = ROOT / 'runs/ava_fft/ava-a100-one-step-seed42'
-        CONFIGS = ROOT / 'run-configs'; CONFIGS.mkdir(exist_ok=True)
-        CONFIG = CONFIGS / 'ava-a100-one-step-seed42.json'
-        config = json.loads((CODE / 'configs/experiments/libero_plus_fft.json').read_text())
-        config['fft_defaults'].update(
-            data_root=str(TFDS_ROOT), prepared_data_root=str(PREPARED), image_aug=False,
-            batch_size=1, grad_accumulation_steps=1, max_steps=1, save_steps=1,
-            save_optimizer_state=True, eval_steps=0, debug_records=0)
-        config['fft_runs']['ava_vla'].update(
-            checkpoint=str(ROOT / 'checkpoints/teacher/avavla-libero-4in1'),
-            output_dir=str(OUTPUT))
-        if CONFIG.exists() and json.loads(CONFIG.read_text()) != config:
-            raise ValueError('기존 1-step 설정이 다릅니다. OUTPUT/CONFIG 이름을 바꾸십시오.')
-        CONFIG.write_text(json.dumps(config, indent=2))
-        run([AVA_PY, 'scripts/train/run_fft.py', '--model', 'ava_vla',
-             '--config', CONFIG, '--preflight'])
-        """, "configure-one-step"),
-        cell("code", """
-        CHECKPOINT = OUTPUT / 'step-0000001'
-        if not (CHECKPOINT / 'COMPLETE').is_file():
-            run([AVA_PY, 'scripts/train/run_fft.py', '--model', 'ava_vla', '--config', CONFIG])
-        metrics = sorted(OUTPUT.glob('metrics-*.jsonl'))
-        runs = sorted(OUTPUT.glob('run-*.json'))
-        if len(metrics) != 1 or len(runs) != 1:
-            raise ValueError('격리된 새 OUTPUT에는 metrics/run manifest가 각각 하나여야 합니다.')
-        run([AVA_PY, 'scripts/train/check_fft_checkpoint.py',
-             '--checkpoint', CHECKPOINT, '--data', PREPARED, '--config', CONFIG,
-             '--metrics', metrics[0], '--run-manifest', runs[0],
-             '--report', OUTPUT / 'reload_report.json'])
-        """, "run-and-reload"),
-        cell("code", """
-        report = json.loads((OUTPUT / 'reload_report.json').read_text())
-        summary = {
-            'status': report['status'], 'gpu': report['gpu'],
-            'step_time_seconds': report['training_metrics']['step_time_seconds'],
-            'training_peak_allocated_gib': report['training_metrics']['peak_allocated_bytes'] / 2**30,
-            'training_peak_reserved_gib': report['training_metrics']['peak_reserved_bytes'] / 2**30,
-            'training_peak_process_ram_gib': report['training_metrics']['peak_process_rss_bytes'] / 2**30,
-            'reload_peak_allocated_gib': report['reload_peak_allocated_bytes'] / 2**30,
-            'reload_peak_process_ram_gib': report['reload_peak_process_rss_bytes'] / 2**30,
-            'checkpoint_gib': report['checkpoint_bytes'] / 2**30,
-            'loss': report['training_metrics']['loss'],
-            'grad_norm': report['training_metrics']['grad_norm'],
-            'gradient_diagnostics': report['gradient_diagnostics'],
-            'action_finite': report['action_finite'],
-            'training_finite_checks': report['training_finite_checks'],
-            'scope': report['scope'],
-            'ava_temporal_training': 'zero_context',
-        }
-        print(json.dumps(summary, indent=2))
-        print('원본 보고서:', OUTPUT / 'reload_report.json')
-        """, "show-report")])
-    verified_install = next(item for item in json.loads(two.read_text(encoding='utf-8'))['cells']
-                            if item.get('id') == 'install-ava')
-    value = json.loads(seven.read_text(encoding='utf-8'))
-    value['cells'] = [verified_install if item.get('id') == 'install-ava' else item
-                      for item in value['cells']]
-    seven.write_text(json.dumps(value, ensure_ascii=False, indent=1)+'\n', encoding='utf-8')
-    for path in (six, seven):
-        apply_hf_storage(path, ROOT)
-    return [one, two, three, four, five, six, seven, manifest_path]
+def _ava_installed_transformers_check() -> str:
+    from vlade.runtime.ava_patch import VERIFY_PROGRAM
+
+    return VERIFY_PROGRAM
+
+
+def ava_install_source() -> str:
+    return "from vlade.runtime.environment import prepare\nAVA_PY = prepare(CODE, ROOT, 'ava')\nAVA_ENV_READY = True"
 
 
 def main() -> None:
+    """Regenerate maintained notebooks from the project CLI profiles."""
     for path in generate():
-        print(path)
-
-
-if __name__ == "__main__":
-    main()
+        print(path.relative_to(ROOT))

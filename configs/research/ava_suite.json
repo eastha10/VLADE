@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "run_group": "ava-suite-seed42",
+  "seed": 42,
+  "budget": {
+    "hours": 8,
+    "save_reserve_seconds": 300,
+    "release_colab_on_deadline": true
+  },
+  "task": "suite",
+  "runtime": "ava",
+  "model": "ava_vla",
+  "base_config": "configs/experiments/libero_plus_fft.json",
+  "train": {
+    "max_steps": 4,
+    "batch_size": 1,
+    "accumulation_steps": 8,
+    "learning_rate": 2e-05,
+    "weight_decay": 0.01,
+    "save_steps": 4,
+    "eval_steps": 100,
+    "warmup_steps": 0,
+    "lr_schedule": "cosine"
+  },
+  "resume": null,
+  "hub": {
+    "enabled": true,
+    "repo": "VLADE-konkuk/VLADE-checkpoints"
+  },
+  "settings": {
+    "phase": "pilot4",
+    "suite_map": "hfasset://suite_map_seed42",
+    "reserve_seconds": 300
+  },
+  "registry_revision": null
+}

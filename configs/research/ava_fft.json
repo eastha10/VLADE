@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "run_group": "ava-fft-seed42",
+  "seed": 42,
+  "budget": {
+    "hours": 8,
+    "save_reserve_seconds": 300,
+    "release_colab_on_deadline": true
+  },
+  "task": "fft",
+  "runtime": "ava",
+  "model": "ava_vla",
+  "base_config": "configs/experiments/libero_plus_fft.json",
+  "train": {
+    "max_steps": 1000,
+    "batch_size": 1,
+    "accumulation_steps": 8,
+    "learning_rate": 2e-05,
+    "weight_decay": 0.01,
+    "save_steps": 250,
+    "eval_steps": 100,
+    "warmup_steps": 100,
+    "lr_schedule": "cosine"
+  },
+  "checkpoint": "hfasset://ava_t0",
+  "data": "hfasset://prepared_d_seed42",
+  "resume": null,
+  "hub": {
+    "enabled": true,
+    "repo": "VLADE-konkuk/VLADE-checkpoints"
+  },
+  "registry_revision": null
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "run_group": "cache-teacher-seed42",
+  "seed": 42,
+  "budget": {
+    "hours": 8,
+    "save_reserve_seconds": 300,
+    "release_colab_on_deadline": true
+  },
+  "task": "cache",
+  "runtime": "ava",
+  "data": "hfasset://prepared_d_seed42",
+  "selection": "{work}/teacher_selection.json",
+  "max_episodes": 0,
+  "save_hidden": false,
+  "publish": true,
+  "asset_key": "teacher_cache_t1",
+  "registry_revision": null
+}
