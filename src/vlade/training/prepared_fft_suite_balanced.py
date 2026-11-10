@@ -39,15 +39,16 @@ def make_loader(cfg: Any, processor: Any, *, train: bool = True) -> tuple[Any, A
         dataset_statistics = {cfg.dataset_name: data.stats}
 
         def __iter__(self):
+            update_size = cfg.grad_accumulation_steps * cfg.batch_size if train else None
             skip = 0
             if train and cfg.resume:
                 saved = json.loads((cfg.resume / "vlade_fft.json").read_text(encoding="utf-8"))
-                skip = saved["step"] * cfg.grad_accumulation_steps * cfg.batch_size
+                skip = saved["step"] * update_size
             for sample, _ in query_stream(data, "train" if train else "validation", seed=cfg.seed,
                                          repeat=train, skip=skip,
                                          limit=0 if train else cfg.max_eval_batches * cfg.batch_size,
                                          sampling="suite_balanced" if train else "episode",
-                                         suite_map=suite_map_path):
+                                         suite_map=suite_map_path, fft_update_size=update_size):
                 item = transform({"dataset_name": cfg.dataset_name.encode(),
                                   "action": sample["gt_action"],
                                   "observation": {"image_primary": np.asarray(data.image(sample, "primary"))[None],

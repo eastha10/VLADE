@@ -67,6 +67,11 @@ Suite-balanced는 `settings.phase='pilot4'`와 4 step으로 먼저 실행합니�
 파일럿 checkpoint는 `suite/pilot4/checkpoints`, 본 학습은 `suite/checkpoints`로 분리되며
 Hub run group의 `-pilot4`/`-main` 구분을 유지합니다.
 
+Suite-balanced FFT는 suite별 quota와 선택한 query 집합을 보존하면서 optimizer update 안에
+동일한 궤적 그룹이 반복되는 것을 줄입니다. 각 query는 현재 관측만 사용합니다.
+Validation·순차 Teacher cache·Student의 기존 시간 순서는 유지합니다. seed와 완료 step으로
+새 순서를 재현하며, 이전 순서의 checkpoint는 당시 고정 소스로 재개합니다.
+
 `settings.suite_map='hfasset://suite_map_seed42'`는 작업 지시문과 `spatial/object/goal/libero_10`을
 명시적으로 연결한 입력입니다. task 이름에서 임의로 추정하지 않습니다. 기존 Drive 자료의 해당 파일은
 확인해 비공개 model 저장소 `VLADE-konkuk/VLADE-checkpoints`에 게시했습니다.

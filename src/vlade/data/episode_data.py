@@ -697,7 +697,8 @@ def _episode_suite(entry: dict, queries: list[dict], by_episode: dict, by_instru
 
 
 def _balanced_query_stream(data: EpisodeData, entries: list[dict], *, seed: int,
-                           repeat: bool, skip: int, suite_map: dict | Path | None
+                           repeat: bool, skip: int, suite_map: dict | Path | None,
+                           fft_update_size: int | None = None
                            ) -> Iterator[tuple[dict, list[dict]]]:
     """Select equal suite quotas *before* a deterministic constrained query shuffle.
 
@@ -706,6 +707,8 @@ def _balanced_query_stream(data: EpisodeData, entries: list[dict], *, seed: int,
     their unique Queries have been selected. Abundant suites are subsampled.
     Shuffle suites in groups of four so every completed group is 25% each,
     even if a time-limited run stops partway through an epoch.
+    FFT can drop cross-Query history and prefer different trajectory groups
+    within each optimizer update without changing the suite selections.
     """
     by_episode, by_instruction = _read_suite_mapping(data, suite_map)
     if (not by_episode and not by_instruction and
@@ -723,12 +726,19 @@ def _balanced_query_stream(data: EpisodeData, entries: list[dict], *, seed: int,
             sample["suite"] = suite
             buckets[suite].append((sample, previous))
             previous = sample
+    group_by_episode = {entry["episode_id"]: entry.get("content_group_id") or entry["episode_id"]
+                        for entry in entries}
     missing = [suite for suite in SUITES if not buckets[suite]]
     if missing:
         raise ValueError(f"Cannot balance train: empty suite(s) {missing}")
 
     total = sum(map(len, buckets.values()))
     epoch, cursor = divmod(skip, total) if repeat else (0, skip)
+    update_groups: set[str] = set()
+    if fft_update_size is not None:
+        # Replay the cheap numeric schedule across epoch boundaries. An optimizer
+        # update can include samples from both the previous and the next epoch.
+        epoch, cursor = 0, skip
     while True:
         rng = random.Random(seed + epoch * 1000003)
         remainder_order = list(SUITES)
@@ -749,36 +759,69 @@ def _balanced_query_stream(data: EpisodeData, entries: list[dict], *, seed: int,
         # Constrained shuffle: shuffle all Query orders within each suite,
         # then randomly shuffle suite order each round. Every four consecutive
         # queries contain one from each suite until final (<4) remainder.
+        remaining_groups = ({suite: Counter(group_by_episode[sample["episode_id"]]
+                                             for sample, _ in selected[suite]) for suite in SUITES}
+                            if fft_update_size is not None else {})
         positions = {suite: 0 for suite in SUITES}
         emitted = 0
         while emitted < total:
             suite_order = [suite for suite in SUITES if positions[suite] < quotas[suite]]
             rng.shuffle(suite_order)
             for suite in suite_order:
-                sample, previous = selected[suite][positions[suite]]
-                positions[suite] += 1
-                if emitted >= cursor:
+                pos = positions[suite]
+                pool = selected[suite]
+                sample, previous = pool[pos]
+                if fft_update_size is not None:
+                    absolute_position = epoch * total + emitted
+                    if absolute_position % fft_update_size == 0:
+                        update_groups.clear()
+                    group = group_by_episode[sample["episode_id"]]
+                    remaining = remaining_groups[suite]
+                    # Swap within the chosen suite only. Preserve the original
+                    # quotas and the exact selected Query multiset.
+                    if group in update_groups and sum(remaining[g] for g in update_groups) < len(pool) - pos:
+                        for candidate in range(pos + 1, len(pool)):
+                            candidate_sample, _ = pool[candidate]
+                            candidate_group = group_by_episode[candidate_sample["episode_id"]]
+                            if candidate_group not in update_groups:
+                                pool[pos], pool[candidate] = pool[candidate], pool[pos]
+                                sample, previous = pool[pos]
+                                group = candidate_group
+                                break
+                    remaining[group] -= 1
+                    update_groups.add(group)
+                    if absolute_position >= cursor:
+                        yield sample, [sample]
+                elif emitted >= cursor:
                     yield sample, [sample] if previous is None else [previous, sample]
+                positions[suite] += 1
                 emitted += 1
         if not repeat:
             return
         epoch += 1
-        cursor = 0
+        if fft_update_size is None:
+            cursor = 0
 
 
 def query_stream(data: EpisodeData, split: str, *, seed: int = 42, repeat: bool = False,
                  skip: int = 0, episode_limit: int = 0, limit: int = 0,
-                 sampling: str = "episode", suite_map: dict | Path | None = None
+                 sampling: str = "episode", suite_map: dict | Path | None = None,
+                 fft_update_size: int | None = None
                  ) -> Iterator[tuple[dict, list[dict]]]:
     """Emit Queries in legacy episode order or opt-in suite-balanced order.
 
     Bounded validation remains deterministic and unaffected. Balanced training
     uses verified suite labels, and preserves Query interval/action chunk size.
+    fft_update_size opts into independent FFT Queries and reduces repeated
+    trajectory groups within an update whenever the suite pool permits.
     """
     if split not in {"train", "validation"} or min(skip, episode_limit, limit) < 0:
         raise ValueError("Invalid stream settings; test is sealed from training/selection")
     if sampling not in {"episode", "suite_balanced"}:
         raise ValueError(f"Unknown Query sampling strategy: {sampling}")
+    if fft_update_size is not None and (sampling != "suite_balanced" or
+            type(fft_update_size) is not int or fft_update_size < 1):
+        raise ValueError("FFT update size requires a positive integer and suite-balanced sampling")
     entries = [entry for entry in data.entries if entry["split"] == split]
     if episode_limit:
         entries = entries[:episode_limit]
@@ -789,7 +832,7 @@ def query_stream(data: EpisodeData, split: str, *, seed: int = 42, repeat: bool 
         if split != "train" or limit:
             raise ValueError("Suite-balanced sampling is train-only and does not accept limit")
         yield from _balanced_query_stream(data, entries, seed=seed, repeat=repeat,
-                                          skip=skip, suite_map=suite_map)
+                                          skip=skip, suite_map=suite_map, fft_update_size=fft_update_size)
         return
     if limit and repeat:
         raise ValueError("Bounded evaluation cannot repeat")

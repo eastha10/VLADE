@@ -51,6 +51,18 @@ Train 전체 transition의 정규화 통계를 사용하며, loader가 query별 
 chunk와 tail mask를 구성합니다. 재개할 때만 같은 입력·출력 계약으로 `--resume`을
 추가합니다. 데이터·가중치·전처리 결과는 이번 Git 변경에 포함하지 않습니다.
 
+## Suite-balanced FFT 샘플 순서
+
+전처리본은 에피소드 안의 시간 순서와 8개 행동 묶음, tail mask를 보존합니다.
+Suite-balanced FFT는 개별 Query를 섞어 현재 시점의 관측만 읽습니다. suite별
+배정량과 재표집 규칙은 유지하고, 같은 optimizer update에서 이미 읽은 궤적
+그룹이 다시 나오면 그 suite의 남은 Query 중 다른 그룹을 우선합니다. 대안이
+없을 때는 원래 Query를 사용합니다. Validation·Teacher 캐시의 에피소드 순서는
+기존 방식입니다.
+
+재개 시 seed와 완료 step으로 동일한 Query 위치를 재현합니다. 이전 순서로
+만든 체크포인트는 당시의 고정 소스로 재개해야 합니다.
+
 ## 첨부 노트북 보관
 
 - `notebooks/references/colab_ava_fft_suite_balanced_supplied.ipynb`: 사용자가 전달한

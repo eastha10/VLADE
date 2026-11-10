@@ -1,0 +1,12 @@
+{
+  "tests": "304",
+  "failures": "0",
+  "errors": "0",
+  "skipped": "0",
+  "time": "227.227",
+  "command": "python -B -m pytest .harness/v1/2026-11-11-ava-teacher-code/checks .harness/v1/2026-11-11-main-branch-integration/checks -q --tb=short -p no:cacheprovider --basetemp=.harness/v1/2026-11-11-main-branch-integration/scratch/regression --junitxml=.harness/v1/2026-11-11-main-branch-integration/scratch/regression-results.xml --maxfail=5",
+  "warnings": 2,
+  "gpu_training_run": false,
+  "official_data_reprocessed": false,
+  "drive_deployed": false
+}
