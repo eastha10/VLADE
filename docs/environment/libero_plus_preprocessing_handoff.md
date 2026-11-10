@@ -51,17 +51,19 @@ Train 전체 transition의 정규화 통계를 사용하며, loader가 query별 
 chunk와 tail mask를 구성합니다. 재개할 때만 같은 입력·출력 계약으로 `--resume`을
 추가합니다. 데이터·가중치·전처리 결과는 이번 Git 변경에 포함하지 않습니다.
 
-## Suite-balanced FFT 샘플 순서
+## AVA FFT·Suite-balanced의 연속 시퀀스
 
 전처리본은 에피소드 안의 시간 순서와 8개 행동 묶음, tail mask를 보존합니다.
-Suite-balanced FFT는 개별 Query를 섞어 현재 시점의 관측만 읽습니다. suite별
-배정량과 재표집 규칙은 유지하고, 같은 optimizer update에서 이미 읽은 궤적
-그룹이 다시 나오면 그 suite의 남은 Query 중 다른 그룹을 우선합니다. 대안이
-없을 때는 원래 Query를 사용합니다. Validation·Teacher 캐시의 에피소드 순서는
-기존 방식입니다.
+2026-11-11부터 새 AVA 실행은 Episode와 시작점을 무작위로 선택해 연속 query
+4개(t,t+8,t+16,t+24)를 묶습니다. 미니배치는 시퀀스 단위이며 내부 순서는 고정합니다.
+Suite-balanced는 시퀀스 단위 suite 균형과 가능한 경우 update 내 다른 궤적 group 우선을
+적용합니다. Validation은 별도 Episode의 결정적 구간만 사용합니다.
+훈련 상태는 각 시퀀스 시작에 초기화하며 두 query마다 gradient를 끊습니다.
+추론·Teacher cache 상태는 같은 Episode 안에서 전달하고 경계에서 초기화합니다.
+4 query 미만 Episode는 제외하고 수를 기록합니다. [설정·차이·검증 범위](ava_sequence_training.md)를 확인하십시오.
 
-재개 시 seed와 완료 step으로 동일한 Query 위치를 재현합니다. 이전 순서로
-만든 체크포인트는 당시의 고정 소스로 재개해야 합니다.
+재개 시 seed와 완료 step으로 동일한 시퀀스 위치를 재현합니다. 이전 개별 Query
+순서의 체크포인트는 당시 고정 소스로 재개해야 하며 K4의 재개 입력으로 사용하지 않습니다.
 
 ## 첨부 노트북 보관
 

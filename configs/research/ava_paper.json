@@ -15,7 +15,8 @@
     "max_steps": 100000,
     "warmup_steps": 10000,
     "save_steps": 2000,
-    "learning_rate": 0.0005
+    "learning_rate": 0.0005,
+    "sequence_sampling": "episode_uniform"
   },
   "resume": null,
   "pilot": false,

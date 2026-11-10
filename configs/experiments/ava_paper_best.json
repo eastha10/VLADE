@@ -49,5 +49,6 @@
     "Prepared images are available at query stride 8; four-query windows never cross episodes. Image augmentation stays disabled to preserve the shared input contract.",
     "Mean sequence MAE plus scalar L2 norm of mean actual attention weight minus c. Short episodes with fewer than four queries are excluded.",
     "AdamW weight decay .01, save interval and seed are implementation choices, not reported optimal values."
-  ]
+  ],
+  "sequence_sampling": "episode_uniform"
 }

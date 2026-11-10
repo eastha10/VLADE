@@ -3,6 +3,11 @@
 날짜: 2026-10-31 (한국 시간). 사용자가 A100 최대 8시간을 지정했습니다.
 정책: `configs/experiments/ava_fft_a100_8h.json`, 실행: `experiments/colab_02_ava_fft_and_fixed_cache.ipynb`.
 
+2026-11-11 보완: 새 연구 CLI는 설정의 max_steps와 8시간 상한을 사용하며 AVA FFT는
+[K4·detach2 학습](../environment/ava_sequence_training.md)으로 변경했습니다. 아래
+단일 query·1 epoch 예산 산식은 당시 정책입니다. 새 batch 단위는 시퀀스이고 K4 GPU
+파일럿으로 속도·메모리를 다시 확인해야 합니다. attention regularizer는 논문 LoRA 경로에만 있습니다.
+
 [AVA-VLA v4, Appendix A 및 §3.4](https://arxiv.org/html/2511.18960v4)는 LoRA rank 32와
 AVA 모듈 전체 학습, 관측 시퀀스 K=4와 두 번째/세 번째 시점 사이 gradient detach를 사용합니다.
 LIBERO 설정은 batch 64, 40,000 gradient steps, LR 5e-4, 10% warm-up, cosine 및 clipping 1.0이며
@@ -15,9 +20,8 @@ chunk 8·MAE·clipping을 유지하고 warm-up 10%/cosine만 학습 예산에 �
 effective batch 8(1×8)과 이미지 증강 비활성은 현재 메모리·공통 prepared 입력 계약에 따른 조정이며
 논문과 일치하거나 최적이라고 검증한 값이 아닙니다.
 
-현재 FFT는 temporal zero-context이고 K=4 TBPTT와 논문의 attention regularizer를 재현하지 않습니다.
-순차 Teacher cache는 이전 hidden을 사용하므로 학습/추론 문맥의 차이를 실험 제한으로 기록합니다.
-이 변경을 AVA 논문 재현이나 temporal 학습 구현 완료로 표기하지 않습니다.
+당시 FFT는 temporal zero-context였고 K=4 TBPTT와 논문의 attention regularizer를 재현하지 않았습니다.
+현재 K4 추가만으로 논문 학습 조건이나 성능 재현을 완료했다고 해석하지 않습니다.
 
 4 optimizer step 파일럿은 본 학습과 같은 accumulation을 사용합니다. 첫 step은 속도 추정에서
 제외하고 나머지 3개 중 가장 느린 시간, 실제 validation/저장/모델 준비 시간을 사용합니다.

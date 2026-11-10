@@ -20,7 +20,11 @@
     "save_steps": 250,
     "eval_steps": 100,
     "warmup_steps": 100,
-    "lr_schedule": "cosine"
+    "lr_schedule": "cosine",
+    "sequence_length": 4,
+    "sequence_sampling": "episode_uniform",
+    "detach_every": 2,
+    "temporal_feature_layer": -2
   },
   "checkpoint": "hfasset://ava_t0",
   "data": "hfasset://prepared_d_seed42",

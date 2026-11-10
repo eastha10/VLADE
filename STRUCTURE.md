@@ -2,6 +2,11 @@
 
 현재 실행 기준은 [Git 소스·HF 입력 안내](docs/environment/hf_inputs_and_git_source.md)입니다. `src/vlade/utils/source.py`는 불변 Git checkout을, `src/vlade/storage/assets.py`는 외부 입력의 HF 출처와 캐시 검증을 담당합니다. Drive 배포는 별도 사용자 명령이 필요합니다.
 
+`src/vlade/data/sequences.py`는 Episode 내부 연속 query 구간을 선택하고,
+`src/vlade/training/prepared_sequences.py`는 시퀀스 단위 loader를 구성합니다.
+`src/vlade/training/temporal.py`는 FFT·논문 학습의 상태 전달과 분할 backward를 담당합니다.
+설정과 상태 초기화 기준은 [AVA 시퀀스 안내](docs/environment/ava_sequence_training.md)에 있습니다.
+
 `src/vlade/training/hub.py`는 봉인된 checkpoint의 비공개 Hub 전송·best 선택·재전송·다운로드를,
 `scripts/train/hub_checkpoints.py`는 인증 검사와 수동 복구 진입점을 제공합니다.
 사용법과 best 기준은 `docs/environment/hugging_face_checkpoints.md`에 있습니다.

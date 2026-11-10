@@ -71,6 +71,10 @@ class FFTConfig:
     canonical_normalization: Path | None = None
     canonical_normalization_sha256: str | None = None
     debug_records: int = 0
+    sequence_length: int = 1
+    sequence_sampling: str = "episode_uniform"
+    detach_every: int = 2
+    temporal_feature_layer: int = -2
 
     @classmethod
     def from_json(cls, path: Path, model: str) -> "FFTConfig":
@@ -128,6 +132,17 @@ class FFTConfig:
             raise ValueError("Invalid LR schedule or warmup_steps")
         if self.debug_records < 0:
             raise ValueError("debug_records must be nonnegative")
+        if (
+            type(self.sequence_length) is not int
+            or type(self.detach_every) is not int
+            or type(self.temporal_feature_layer) is not int
+            or self.sequence_length not in {1, 4}
+            or self.detach_every not in {1, 2, 4}
+            or self.sequence_sampling not in {"episode_uniform", "all_windows"}
+        ):
+            raise ValueError("Unsupported temporal sequence configuration")
+        if self.sequence_length > 1 and self.model != "ava_vla":
+            raise ValueError("Recurrent sequence FFT is specific to AVA")
         canonical = (
             self.canonical_split_manifest,
             self.canonical_split_sha256,
@@ -281,6 +296,13 @@ def preflight(cfg: FFTConfig) -> None:
         if sha256(cfg.canonical_normalization) != cfg.canonical_normalization_sha256.lower():
             raise ValueError("Canonical normalization SHA-256 mismatch")
         data = EpisodeData(cfg.prepared_data_root)
+        if cfg.sequence_length > 1:
+            for split in ("train", "validation") if cfg.eval_steps else ("train",):
+                if not any(
+                    e["split"] == split and e["queries"] >= cfg.sequence_length
+                    for e in data.entries
+                ):
+                    raise ValueError(f"No {split} episode contains a full training sequence")
         if data.manifest.get("canonical_manifest_sha256") != canonical.sha256:
             raise ValueError(
                 "Prepared data was built from a different canonical split or normalization"
@@ -436,6 +458,9 @@ def compute_loss(
     step: int,
     *,
     capture: Any = None,
+    temporal_context: Any = None,
+    return_temporal_state: bool = False,
+    temporal_feature_layer: int = -2,
 ) -> Any:
     """Continuous-action L1 objective, with AVA's attention module in the graph."""
     import torch
@@ -454,10 +479,10 @@ def compute_loss(
     with torch.autocast(device.type, dtype=torch.bfloat16):
         kwargs = {}
         if generator is not None:
-            # RLDSBatchTransform samples individual timesteps; it has no previous
-            # action feature. The upstream generator uses its learned zero buffer.
+            # A new window starts from the learned zero buffer. Later queries
+            # receive the preceding action features through the sequence adapter.
             kwargs = {
-                "temporal_context": None,
+                "temporal_context": temporal_context,
                 "vision_attn_weight_generator": generator,
                 "batch_idx": step if model.training else None,
             }
@@ -506,8 +531,14 @@ def compute_loss(
             valid = batch["action_valid_mask"].to(device)
             if valid.shape != target.shape or valid.dtype != torch.bool or not valid.any():
                 raise ValueError("Invalid action tail mask")
-            return (prediction.float()[valid] - target[valid]).abs().mean()
-        return torch.nn.functional.l1_loss(prediction.float(), target)
+            loss = (prediction.float()[valid] - target[valid]).abs().mean()
+        else:
+            loss = torch.nn.functional.l1_loss(prediction.float(), target)
+        if return_temporal_state:
+            features = output.hidden_states[temporal_feature_layer][:, num_patches:-1]
+            context = features[action_mask].reshape(batch_size, expected_tokens, -1)
+            return loss, context
+        return loss
 
 
 def _make_optimizer(cfg: FFTConfig, params: list[Any]) -> Any:
@@ -653,7 +684,17 @@ def save_checkpoint(
                         torch.device(cfg.device)
                     ).total_memory,
                 },
-                "ava_temporal_training": "zero_context" if generator is not None else None,
+                "ava_temporal_training": (
+                    (
+                        f"sequence_K{cfg.sequence_length}_detach{cfg.detach_every}"
+                        if cfg.sequence_length > 1
+                        else "zero_context"
+                    )
+                    if generator is not None
+                    else None
+                ),
+                "data_cursor_unit": "sequence" if cfg.sequence_length > 1 else "query",
+                "sequence_sampling_statistics": getattr(dataset, "sampling_statistics", None),
             },
             indent=2,
         ),
@@ -719,6 +760,15 @@ def validate_resume(cfg: FFTConfig) -> dict[str, Any]:
         value = str(current[name]) if isinstance(current[name], Path) else current[name]
         if saved["configuration"].get(name) != value:
             raise ValueError(f"Resume configuration mismatch: {name}")
+    if cfg.sequence_length > 1 or saved["configuration"].get("sequence_length", 1) > 1:
+        for name in (
+            "sequence_length",
+            "sequence_sampling",
+            "detach_every",
+            "temporal_feature_layer",
+        ):
+            if saved["configuration"].get(name) != current[name]:
+                raise ValueError(f"Resume temporal configuration mismatch: {name}")
     experiment_path = cfg.config_path or REPO_ROOT / "configs/experiments/libero_plus_fft.json"
     experiment = json.loads(experiment_path.read_text(encoding="utf-8"))
     if saved["dataset_revision"] != experiment["training"]["dataset_revision"]:
@@ -800,10 +850,23 @@ def train(cfg: FFTConfig) -> None:
             "gpu": torch.cuda.get_device_name(device),
             "vram_bytes": torch.cuda.get_device_properties(device).total_memory,
         },
-        "ava_temporal_training": "zero_context" if cfg.model == "ava_vla" else None,
+        "ava_temporal_training": (
+            (
+                f"sequence_K{cfg.sequence_length}_detach{cfg.detach_every}"
+                if cfg.sequence_length > 1
+                else "zero_context"
+            )
+            if cfg.model == "ava_vla"
+            else None
+        ),
+        "data_cursor_unit": "sequence" if cfg.sequence_length > 1 else "query",
         "resume_data_stream": (
             (
-                "deterministic_query_cursor"
+                (
+                    "deterministic_sequence_cursor"
+                    if cfg.sequence_length > 1
+                    else "deterministic_query_cursor"
+                )
                 if cfg.prepared_data_root
                 else "restarted_not_bitwise_exact"
             )
@@ -811,7 +874,11 @@ def train(cfg: FFTConfig) -> None:
             else None
         ),
         "sampler": (
-            "seeded_episode_shuffle_causal_queries_v1"
+            (
+                f"{cfg.sequence_sampling}_contiguous_K{cfg.sequence_length}"
+                if cfg.sequence_length > 1
+                else "seeded_episode_shuffle_causal_queries_v1"
+            )
             if cfg.prepared_data_root
             else "upstream_rlds"
         ),
@@ -830,6 +897,7 @@ def train(cfg: FFTConfig) -> None:
         load_cfg = replace(cfg, checkpoint=cfg.resume) if cfg.resume else cfg
         model, processor, head, proprio, generator = _make_model_and_components(load_cfg, device)
         loader, dataset = _make_loader(cfg, model, processor)
+        manifest["sequence_sampling_statistics"] = getattr(dataset, "sampling_statistics", None)
         validation = _make_loader(cfg, model, processor, train=False)[0] if cfg.eval_steps else None
         modules = [model, head, proprio] + ([generator] if generator is not None else [])
         for module in modules:
@@ -864,7 +932,28 @@ def train(cfg: FFTConfig) -> None:
             nonlocal last_training_batch
             if model.training:
                 last_training_batch = batch
+            if cfg.sequence_length > 1:
+                from .temporal import fft_objective
+
+                return fft_objective(
+                    cfg, (model, head, proprio, generator), batch, device, num_patches, step
+                )
             return compute_loss(model, head, proprio, generator, batch, device, num_patches, step)
+
+        def backward_fn(batch: Any, step: int, scale: float) -> Any:
+            nonlocal last_training_batch
+            last_training_batch = batch
+            from .temporal import fft_objective
+
+            return fft_objective(
+                cfg,
+                (model, head, proprio, generator),
+                batch,
+                device,
+                num_patches,
+                step,
+                backward_scale=scale,
+            )
 
         def before_step(current: Any) -> None:
             if "gradient_diagnostics" not in manifest:
@@ -960,18 +1049,24 @@ def train(cfg: FFTConfig) -> None:
                     if not budget_stop and cfg.debug_records and last_training_batch is not None:
                         from vlade.training.debug_records import emit_checkpoint_debug
 
+                        debug_batch = (
+                            last_training_batch["sequences"][0][0]
+                            if cfg.sequence_length > 1
+                            else last_training_batch
+                        )
+
                         emit_checkpoint_debug(
                             cfg,
                             saved_path,
                             current.step,
                             modules,
-                            last_training_batch,
+                            debug_batch,
                             lambda capture: compute_loss(
                                 model,
                                 head,
                                 proprio,
                                 generator,
-                                last_training_batch,
+                                debug_batch,
                                 device,
                                 num_patches,
                                 current.step,
@@ -997,6 +1092,7 @@ def train(cfg: FFTConfig) -> None:
                 scheduler=scheduler,
                 batches=loader,
                 loss_fn=loss_fn,
+                backward_fn=backward_fn if cfg.sequence_length > 1 else None,
                 max_steps=cfg.max_steps,
                 accumulation_steps=cfg.grad_accumulation_steps,
                 max_grad_norm=cfg.max_grad_norm,

@@ -34,6 +34,14 @@ def dispatch(config: dict, code: Path, work: Path, output: Path) -> None:
             updates, seed=config["seed"], save_optimizer_state=True, image_aug=False
         )
         base["fft_runs"][config["model"]]["output_dir"] = str(output)
+        for key in (
+            "sequence_length",
+            "sequence_sampling",
+            "detach_every",
+            "temporal_feature_layer",
+        ):
+            if key in updates:
+                base["fft_runs"][config["model"]][key] = updates[key]
         if config.get("data"):
             base["fft_defaults"]["prepared_data_root"] = config["data"]
         if config.get("checkpoint"):
@@ -128,6 +136,14 @@ def dispatch(config: dict, code: Path, work: Path, output: Path) -> None:
         base["fft_defaults"].update(
             values, seed=config["seed"], image_aug=False, save_optimizer_state=True
         )
+        for key in (
+            "sequence_length",
+            "sequence_sampling",
+            "detach_every",
+            "temporal_feature_layer",
+        ):
+            if key in values:
+                base["fft_runs"]["ava_vla"][key] = values[key]
         from .suite import prepare_phase
 
         phase, suite_map = prepare_phase(config, output)

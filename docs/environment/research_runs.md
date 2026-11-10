@@ -5,6 +5,10 @@
 `third_party/`는 원본 출처를 확인하는 보관본이며 이 실행 경로에는 필요하지 않습니다.
 PyTorch·timm·Transformers·시뮬레이터 등 설치된 실행 의존성은 필요합니다.
 
+AVA FFT·Suite-balanced·논문 학습의 연속 구간, 시퀀스별 훈련 상태 초기화와 K4 설정은
+[AVA 시퀀스 학습](ava_sequence_training.md)을 따릅니다. 기본 FFT batch 1×누적 8은
+8 sequences / 32 query 예측이며, 기존 단일 query 실행과 노출량이 다릅니다.
+
 ## Colab
 
 노트북의 소스·인증 셀을 실행한 뒤 다음처럼 사용합니다. `WORKSPACE`는 현재 런타임 SSD입니다.

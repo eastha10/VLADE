@@ -2,6 +2,9 @@
 
 현재 Colab 실행은 [설정 기반 연구 명령](docs/environment/research_runs.md)을 사용합니다. 훈련 step·평가 rollout 수는 `configs/research/`에서 제어합니다.
 
+새 AVA FFT·Suite-balanced는 [연속 K4 시퀀스 학습](docs/environment/ava_sequence_training.md)을 사용합니다.
+훈련은 시퀀스 시작에, 추론은 Episode 시작에 상태를 초기화합니다. 기존 전처리본과 Episode 분할은 보존합니다.
+
 현재 로컬/Git 버전은 **Git commit 기반 소스 배포 + Hugging Face 가중치·데이터 입력**을 사용합니다. 실행 중인 Colab과 Drive는 자동 갱신하지 않으며, Drive 업로드는 별도 명령이 있을 때 수행합니다. [새 실행 방식](docs/environment/hf_inputs_and_git_source.md)을 먼저 확인하십시오.
 
 학습 중간·검증 best·목표 step의 final을 비공개 Hugging Face Hub에 자동 저장하려면
@@ -41,13 +44,13 @@ A100 단일 추론은 통과했으며, 실제 benchmark 평가 결과는 아직 
 [`docs/environment/local_stage_to_colab.md`](docs/environment/local_stage_to_colab.md)에
 기록했습니다.
 
-FFT 실행 방법과 AVA temporal 학습의 제한은
+FFT 실행 방법과 AVA temporal 학습의 조건은
 [`docs/environment/libero_plus_fft_colab.md`](docs/environment/libero_plus_fft_colab.md)에
 정리했습니다.
-현재 `colab_02`는 A100 총 8시간 예산을 사용합니다. 4-step 파일럿의 실제 속도·저장 시간을
-측정한 뒤 최대 1 epoch와 남은 시간에 가능한 학습량 중 작은 값을 사용합니다.
-warm-up 10%/cosine을 적용하며, 마감 시 런타임 반환을 요청합니다. 논문의 LoRA·K=4 TBPTT를
-재현한 설정은 아닙니다. 정책과 차이는 [예산 결정](docs/decisions/0004-ava-a100-budget.md)에 있습니다.
+현재 `colab_02`는 설정으로 max_steps와 총 8시간 예산을 제어합니다. K4 파일럿에서 실제
+속도·메모리를 먼저 확인해야 합니다. 기존 1 epoch 예산 추정은 과거 단일 query 정책입니다.
+FFT의 LR·전체 파라미터 학습은 논문 LoRA 설정과 다릅니다.
+정책과 차이는 [예산 결정](docs/decisions/0004-ava-a100-budget.md)에 있습니다.
 
 별도 [colab_04_ava_paper_best.ipynb](experiments/colab_04_ava_paper_best.ipynb)는 논문 v4
 Appendix D.1의 최고 보고 설정(사전학습 OpenVLA 초기화·100,000 step·batch 256)을 준비합니다.

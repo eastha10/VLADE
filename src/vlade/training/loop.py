@@ -41,8 +41,9 @@ def restore_rng(state: dict[str, Any]) -> None:
         torch.cuda.set_rng_state_all([item.cpu() for item in state["cuda"]])
 
 
-def make_scheduler(optimizer: Any, max_steps: int, warmup_steps: int = 0,
-                   schedule: str = "constant") -> Any:
+def make_scheduler(
+    optimizer: Any, max_steps: int, warmup_steps: int = 0, schedule: str = "constant"
+) -> Any:
     """LR for update i is configured before that update, in optimizer steps."""
     if max_steps < 1 or not 0 <= warmup_steps < max_steps:
         raise ValueError("Require max_steps > warmup_steps >= 0")
@@ -60,8 +61,13 @@ def make_scheduler(optimizer: Any, max_steps: int, warmup_steps: int = 0,
     return torch.optim.lr_scheduler.LambdaLR(optimizer, factor)
 
 
-def evaluate(modules: Sequence[Any], batches: Iterable[Any],
-             loss_fn: Callable[[Any, int], Any], step: int, max_batches: int) -> float:
+def evaluate(
+    modules: Sequence[Any],
+    batches: Iterable[Any],
+    loss_fn: Callable[[Any, int], Any],
+    step: int,
+    max_batches: int,
+) -> float:
     """Bounded mean loss; restore individual modes and host/PyTorch RNG."""
     if max_batches < 1:
         raise ValueError("max_batches must be positive")
@@ -92,23 +98,39 @@ def evaluate(modules: Sequence[Any], batches: Iterable[Any],
         restore_rng(rng)
 
 
-def run_loop(*, modules: Sequence[Any], optimizer: Any, scheduler: Any,
-             batches: Iterable[Any], loss_fn: Callable[[Any, int], Any],
-             max_steps: int, accumulation_steps: int = 1, max_grad_norm: float = 1.0,
-             state: LoopState | None = None,
-             on_before_step: Callable[[LoopState], None] | None = None,
-             on_step: Callable[[LoopState, dict[str, float]], None] | None = None) -> LoopState:
+def run_loop(
+    *,
+    modules: Sequence[Any],
+    optimizer: Any,
+    scheduler: Any,
+    batches: Iterable[Any],
+    loss_fn: Callable[[Any, int], Any],
+    max_steps: int,
+    accumulation_steps: int = 1,
+    max_grad_norm: float = 1.0,
+    state: LoopState | None = None,
+    backward_fn: Callable[[Any, int, float], Any] | None = None,
+    on_before_step: Callable[[LoopState], None] | None = None,
+    on_step: Callable[[LoopState, dict[str, float]], None] | None = None,
+) -> LoopState:
     """Run complete accumulation windows; reject truncated streams and NaN/Inf.
 
     The caller supplies the stream position. RNG restoration alone cannot resume
     a shuffled RLDS/TFDS iterator exactly.
     """
     state = state if state is not None else LoopState()
-    if max_steps < 1 or accumulation_steps < 1 or not math.isfinite(max_grad_norm) or max_grad_norm <= 0:
+    if (
+        max_steps < 1
+        or accumulation_steps < 1
+        or not math.isfinite(max_grad_norm)
+        or max_grad_norm <= 0
+    ):
         raise ValueError("Invalid loop settings")
     if not 0 <= state.step <= max_steps or state.microsteps != state.step * accumulation_steps:
         raise ValueError("Resume state is not an optimizer boundary")
-    params = list({id(p): p for module in modules for p in module.parameters() if p.requires_grad}.values())
+    params = list(
+        {id(p): p for module in modules for p in module.parameters() if p.requires_grad}.values()
+    )
     if not params:
         raise ValueError("No trainable parameters")
     for module in modules:
@@ -122,10 +144,15 @@ def run_loop(*, modules: Sequence[Any], optimizer: Any, scheduler: Any,
         try:
             for _ in range(accumulation_steps):
                 batch = next(iterator)
-                loss = loss_fn(batch, state.step)
+                loss = (
+                    backward_fn(batch, state.step, 1 / accumulation_steps)
+                    if backward_fn is not None
+                    else loss_fn(batch, state.step)
+                )
                 if loss.ndim != 0 or not torch.isfinite(loss).item():
                     raise FloatingPointError(f"Non-finite or non-scalar loss at step {state.step}")
-                (loss / accumulation_steps).backward()
+                if backward_fn is None:
+                    (loss / accumulation_steps).backward()
                 total += loss.detach().float().item()
             # error_if_nonfinite guards gradients even when the scalar loss is finite.
             norm = torch.nn.utils.clip_grad_norm_(params, max_grad_norm, error_if_nonfinite=True)
@@ -144,16 +171,23 @@ def run_loop(*, modules: Sequence[Any], optimizer: Any, scheduler: Any,
         state.step += 1
         state.microsteps += accumulation_steps
         if on_step is not None:
-            on_step(state, {"loss": total / accumulation_steps, "lr": float(lr),
-                            "grad_norm": float(norm)})
+            on_step(
+                state,
+                {"loss": total / accumulation_steps, "lr": float(lr), "grad_norm": float(norm)},
+            )
     return state
 
 
 def training_state(state: LoopState, optimizer: Any, scheduler: Any) -> dict[str, Any]:
     """Model/component weights are stored separately by the model adapter."""
-    return {"schema_version": 1, "loop": asdict(state), "optimizer": optimizer.state_dict(),
-            "scheduler": scheduler.state_dict(), "rng": capture_rng(),
-            "data_stream_resume": "restart_not_bitwise_exact"}
+    return {
+        "schema_version": 1,
+        "loop": asdict(state),
+        "optimizer": optimizer.state_dict(),
+        "scheduler": scheduler.state_dict(),
+        "rng": capture_rng(),
+        "data_stream_resume": "restart_not_bitwise_exact",
+    }
 
 
 def restore_training_state(payload: dict[str, Any], optimizer: Any, scheduler: Any) -> LoopState:

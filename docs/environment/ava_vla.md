@@ -108,7 +108,9 @@ Colab A100에서 모델·보조 모듈 로드와 단일 액션 생성까지 확�
 이 커밋으로 A100 단일 추론을 통과했습니다. 실행 결과와 136개 패키지의
 버전 기록은 `experiments/runs/inference_smoke/ava_vla_20261004T060317Z.json`에
 보관했습니다. TensorFlow Metadata는 1.15.0으로 고정했고 TensorFlow 전처리는
-CPU에서 수행했습니다. 이전 행동 문맥을 전달하는 다음 시점 동작은 미검증입니다.
+CPU에서 수행했습니다. 후속 K4 변경에서는 축소 AVA의 이전 행동 문맥 전달과 recurrent
+gradient도 검사합니다. 실제 7B GPU 학습·rollout은 미검증입니다.
+[시퀀스 학습 안내](ava_sequence_training.md)에 상태 초기화와 검증 범위를 구분했습니다.
 
 외부 checkpoint는 `hfasset://` 키 또는 정식 검증 캐시로 지정합니다.
 프로젝트 로더는 검증된 가중치·processor 자료를 읽으며 checkpoint의 Python 소스를 실행하거나

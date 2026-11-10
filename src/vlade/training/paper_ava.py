@@ -116,6 +116,8 @@ def validate_recipe(cfg: dict) -> None:
             raise ValueError(f"Invalid {key}")
     if cfg.get("lr_schedule") not in {"constant", "cosine"}:
         raise ValueError("Invalid schedule")
+    if cfg.get("sequence_sampling", "all_windows") not in {"all_windows", "episode_uniform"}:
+        raise ValueError("Invalid sequence sampling")
     if (
         not isinstance(cfg.get("initial_revision"), str)
         or len(cfg["initial_revision"]) != 40
@@ -135,32 +137,13 @@ def sequence_count(data: Any, split: str = "train") -> int:
     return sum(max(0, item["queries"] - 3) for item in data.entries if item["split"] == split)
 
 
-def sequence_stream(data: Any, *, seed: int, skip: int = 0) -> Iterator[list[dict]]:
+def sequence_stream(
+    data: Any, *, seed: int, skip: int = 0, sampling: str = "all_windows"
+) -> Iterator[list[dict]]:
     """Deterministic sliding four-query windows; epoch shuffle; no episode crossing."""
-    total = sequence_count(data)
-    if total < 1 or skip < 0:
-        raise ValueError("No four-query train sequences or invalid cursor")
-    epoch, cursor = divmod(skip, total)
-    while True:
-        rng = random.Random(seed + epoch * 1000003)
-        order = [
-            e["episode_id"] for e in data.entries if e["split"] == "train" and e["queries"] >= 4
-        ]
-        rng.shuffle(order)
-        position = 0
-        for entry, samples in data.episodes("train", order=order):
-            starts = list(range(len(samples) - 3))
-            rng.shuffle(starts)
-            for start in starts:
-                if position >= cursor:
-                    window = samples[start : start + 4]
-                    if len({q["episode_id"] for q in window}) != 1 or [
-                        q["timestep"] for q in window
-                    ] != list(range(window[0]["timestep"], window[0]["timestep"] + 32, 8)):
-                        raise ValueError("Sequence is not a contiguous same-episode query window")
-                    yield window
-                position += 1
-        epoch, cursor = epoch + 1, 0
+    from vlade.data.sequences import windows
+
+    yield from windows(data, length=4, seed=seed, skip=skip, sampling=sampling)
 
 
 def attention_penalty(weights: torch.Tensor, target: float = 0.6) -> torch.Tensor:
@@ -174,19 +157,17 @@ def backward_sequence(frames: list[Any], frame_fn: Callable, *, accumulation: in
     """Unroll 4, backward in two-frame segments, detach only between frames 2/3."""
     if len(frames) != 4 or accumulation < 1:
         raise ValueError("K=4 and positive accumulation are required")
-    context, segment = None, None
+    from .temporal import sequence_objective
+
     totals = {"mae": 0.0, "attention_penalty": 0.0}
-    for index, frame in enumerate(frames):
+
+    def forward(frame, context):
         loss, context, metrics = frame_fn(frame, context)
-        if loss.ndim or not torch.isfinite(loss).item():
-            raise FloatingPointError("Invalid sequence loss")
-        segment = loss if segment is None else segment + loss
         for key in totals:
-            totals[key] += float(metrics[key]) / 4
-        if (index + 1) % 2 == 0:
-            (segment / (4 * accumulation)).backward()
-            context = context.detach()
-            segment = None
+            totals[key] += float(metrics[key]) / len(frames)
+        return loss, context
+
+    sequence_objective(frames, forward, detach_every=2, backward_scale=1 / accumulation)
     return totals
 
 
@@ -577,7 +558,12 @@ def train(cfg: dict, *, resume: Path | None = None, pilot: bool = False) -> None
     state = _restore(resume, identity, components, optimizer, scheduler) if resume else LoopState()
     if not 0 <= state.step <= (1 if pilot else cfg["max_steps"]):
         raise ValueError("Invalid restored paper optimizer step")
-    stream = sequence_stream(data, seed=cfg["seed"], skip=state.microsteps)
+    stream = sequence_stream(
+        data,
+        seed=cfg["seed"],
+        skip=state.microsteps,
+        sampling=cfg.get("sequence_sampling", "all_windows"),
+    )
     frame_fn = _frame_function(cfg, components, data, device)
     run_id = uuid.uuid4().hex
     report = dict(

@@ -16,7 +16,10 @@
   "downstream_reserve_seconds": 3600,
   "shutdown_reserve_seconds": 300,
   "checkpoint_policy": "midpoint_and_final_or_budget_stop_no_automatic_deletion",
-  "temporal_training": "zero_context",
+  "temporal_training": "sequence_K4_detach2",
   "compute_units_per_hour": null,
-  "cost_note": "No monetary price assumed; use actual Colab account unit consumption."
+  "cost_note": "No monetary price assumed; use actual Colab account unit consumption.",
+  "sequence_length": 4,
+  "sequence_sampling": "episode_uniform",
+  "detach_every": 2
 }
