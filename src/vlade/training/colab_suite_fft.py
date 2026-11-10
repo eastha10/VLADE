@@ -357,6 +357,8 @@ def execute(settings: dict) -> dict:
         write(directory / "suite_sampling.json", {
             "sampling": "suite_balanced", "validation_sampling": "episode", "seed": 42,
             "target_proportions": {k: .25 for k in ("spatial", "goal", "object", "libero_10")},
+            "query_order": "independent_prefer_distinct_trajectory_groups",
+            "queries_per_update": cfg.grad_accumulation_steps * cfg.batch_size,
             "suite_map_sha256": sha256(suite_map), "completed_optimizer_step": step,
             "query_cursor": step * cfg.grad_accumulation_steps * cfg.batch_size,
             "cursor_method": "deterministic_replay_skip_num_workers_0_no_image_augmentation",
