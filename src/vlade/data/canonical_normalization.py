@@ -11,7 +11,7 @@ import numpy as np
 
 from vlade.data.canonical_split import (CANONICAL_SHA256, assert_observed_assignments,
     load_canonical_split)
-from vlade.data.episode_data import CONVENTION, write_json
+from vlade.data.episode_data import CONVENTION, _preparation_source, write_json
 
 
 def tfrecord_records(path: Path) -> Iterator[bytes]:
@@ -35,6 +35,7 @@ def compute(data_dir: Path, manifest_path: Path, output: Path,
             expected_sha256: str = CANONICAL_SHA256) -> dict:
     from vlade.data.tfrecord_frames import example_type
 
+    data_dir, _ = _preparation_source(data_dir)
     canonical = load_canonical_split(manifest_path, expected_sha256)
     Example = example_type()
     shards = sorted(data_dir.glob("libero_mix-train.tfrecord-*-of-01024"))
@@ -92,7 +93,8 @@ def compute(data_dir: Path, manifest_path: Path, output: Path,
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--data-dir", type=Path, required=True)
+    parser.add_argument("--data-dir", type=Path, required=True,
+                        help="Pinned hfasset:// key or exact verified HF cache root")
     parser.add_argument("--canonical-manifest", type=Path, required=True)
     parser.add_argument("--canonical-sha256", default=CANONICAL_SHA256)
     parser.add_argument("--output", type=Path, required=True)

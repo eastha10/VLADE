@@ -22,8 +22,16 @@ SOURCE_REF = '이전_실행에서_기록한_40자리_Git_commit'
 python scripts/data/hf_assets.py fetch ava_t0
 python scripts/data/hf_assets.py fetch prepared_d_seed42
 python scripts/data/hf_assets.py fetch qwen_initial
-python scripts/data/prepare_episode_data.py --tfds-root hfasset://raw_rlds --output data/processed/new-prepared
+python scripts/data/prepare_episode_data.py \
+  --tfds-root hfasset://raw_rlds --output data/processed/new-prepared \
+  --canonical-manifest experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz \
+  --canonical-normalization experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json \
+  --canonical-normalization-sha256 eac95bcc81b6182b90a2bd030096df6e3e408cb88923d0a1d57dc6c81e297c67
 ```
+
+전처리와 정규화 통계 생성도 같은 입력 검증을 사용합니다. 로컬 경로는 정확한 검증된
+HF 캐시 루트일 때만 허용하며, 임의의 TFDS 폴더나 캐시 내부 하위 폴더를 지정해 검증을
+생략할 수 없습니다. 출력은 새로운 로컬 경로를 사용합니다.
 
 - `ava_t0`, `ava_fft_step_1975`, `openvla_oft_t0`: 등록된 모델/체크포인트.
 - `qwen_initial`, `openvla_pretrained`: 고정된 공식 HF 모델 revision.

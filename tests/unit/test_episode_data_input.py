@@ -1,5 +1,7 @@
-"""Local TFDS input checks without TensorFlow or dataset preprocessing."""
+"""HF provenance and TFDS checks without network or real preprocessing."""
+import hashlib
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -8,6 +10,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 import vlade.data.episode_data as module
+from vlade.storage import assets
 
 
 @pytest.fixture
@@ -28,9 +31,40 @@ def snapshot(root):
     return {p.relative_to(root).as_posix(): module.sha256(p) for p in root.rglob("*") if p.is_file()}
 
 
+@pytest.fixture
+def trusted_tfds(local_tfds, monkeypatch):
+    """Isolate TFDS schema tests from the separately tested provenance boundary."""
+    monkeypatch.setattr(assets, "resolve_input", lambda value: Path(value))
+    return local_tfds
+
+
+@pytest.fixture
+def hf_tfds(local_tfds, tmp_path, monkeypatch):
+    source, _, _ = local_tfds
+    files = {path.relative_to(source).as_posix(): path.read_bytes()
+             for path in source.rglob("*") if path.is_file()}
+    record = {"repo_id": "fixture/raw", "repo_type": "dataset", "revision": "a" * 40,
+              "format": "directory", "prefix": "assets/raw", "local_name": "tfds",
+              "files": {name: {"bytes": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+                        for name, payload in files.items()}}
+    cache = tmp_path / "cache"
+    root = assets.cache_path("raw_rlds", record, cache)
+    for name in files:
+        target = root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source / name, target)
+    (root.parent / "verified.json").write_text(json.dumps(record), encoding="utf-8")
+    registry = tmp_path / "registry.json"
+    registry.write_text(json.dumps({"schema_version": 1, "assets": {"raw_rlds": record}}), encoding="utf-8")
+    monkeypatch.setenv("VLADE_ASSET_REGISTRY", str(registry))
+    monkeypatch.setenv("VLADE_ASSET_CACHE", str(cache))
+    monkeypatch.setattr(assets, "configure_http", lambda: pytest.fail("Cached tests must not use the network"))
+    return root
+
+
 @pytest.mark.parametrize("direct", [False, True])
-def test_existing_local_tfds_is_read_only(local_tfds, direct):
-    root, directory, info = local_tfds
+def test_located_tfds_is_read_only(trusted_tfds, direct):
+    root, directory, info = trusted_tfds
     before = snapshot(root)
     actual, source = module._preparation_source(directory if direct else root)
     assert actual == directory.resolve()
@@ -41,8 +75,8 @@ def test_existing_local_tfds_is_read_only(local_tfds, direct):
     assert not (root / "extraction_manifest.json").exists()
 
 
-def test_extraction_manifest_keeps_legacy_source(local_tfds):
-    root, directory, info = local_tfds
+def test_extraction_manifest_keeps_legacy_source(trusted_tfds):
+    root, directory, info = trusted_tfds
     extraction = {"source_revision": "archive-revision", "files": ["existing"]}
     (root / "extraction_manifest.json").write_text(json.dumps(extraction), encoding="utf-8")
     # The old path only located dataset_info and read extraction provenance.
@@ -63,8 +97,8 @@ def test_extraction_manifest_keeps_legacy_source(local_tfds):
     ("truncated", "shard sizes"), ("features", "features.json"),
     ("ambiguous", "Exactly one"), ("path", "libero_mix/1.0.0"),
 ])
-def test_invalid_local_tfds_is_rejected_before_output(local_tfds, case, message):
-    root, directory, info = local_tfds
+def test_invalid_local_tfds_is_rejected_before_output(trusted_tfds, case, message):
+    root, directory, info = trusted_tfds
     shard = directory / "libero_mix-train.tfrecord-00000-of-00001"
     if case in {"name", "version"}:
         info[case] = "wrong"
@@ -92,8 +126,8 @@ def test_invalid_local_tfds_is_rejected_before_output(local_tfds, case, message)
 
 
 @pytest.mark.parametrize("bad_hash", [None, "canonical", "normalization"])
-def test_cli_preserves_canonical_and_normalization_checks(local_tfds, tmp_path, monkeypatch, bad_hash):
-    root, directory, _ = local_tfds
+def test_cli_preserves_canonical_and_normalization_checks(trusted_tfds, tmp_path, monkeypatch, bad_hash):
+    root, directory, _ = trusted_tfds
     manifest = ROOT / "experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz"
     normalization = ROOT / "experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json"
     if not normalization.is_file():
@@ -127,3 +161,59 @@ def test_cli_preserves_canonical_and_normalization_checks(local_tfds, tmp_path, 
         assert options["source"]["extraction_manifest"] is None
     assert not output.exists()
     assert snapshot(root) == before
+
+
+@pytest.mark.parametrize("entrypoint", ["source", "episode_cli", "normalization"])
+def test_external_entrypoints_reject_unverified_local_tfds(local_tfds, tmp_path, monkeypatch, entrypoint):
+    from vlade.data.canonical_normalization import compute
+    root, _, _ = local_tfds
+    output = tmp_path / "output"
+    before = snapshot(root)
+    monkeypatch.setattr(module, "tfds_episodes", lambda *_: pytest.fail("Unverified data must not be read"))
+    monkeypatch.setattr(module, "prepare", lambda *_a, **_kw: pytest.fail("Unverified data must not be prepared"))
+    with pytest.raises(ValueError, match="hfasset:// keys or a verified HF cache"):
+        if entrypoint == "source":
+            module._preparation_source(root)
+        elif entrypoint == "normalization":
+            compute(root, tmp_path / "absent-manifest", output)
+        else:
+            monkeypatch.setattr(sys, "argv", ["prepare_episode_data", "--tfds-root", str(root),
+                "--output", str(output), "--canonical-manifest", str(tmp_path / "absent-manifest"),
+                "--canonical-normalization", str(tmp_path / "absent-stats"),
+                "--canonical-normalization-sha256", "a" * 64])
+            module.main()
+    assert not output.exists()
+    assert not output.with_name(output.name + ".incomplete").exists()
+    assert snapshot(root) == before
+
+
+@pytest.mark.parametrize("reference", ["key", "cache"])
+def test_verified_hf_tfds_is_reused_read_only(hf_tfds, reference):
+    before = snapshot(hf_tfds)
+    value = Path("hfasset://raw_rlds") if reference == "key" else hf_tfds
+    directory, source = module._preparation_source(value)
+    assert directory == hf_tfds / "nested/libero_mix/1.0.0"
+    assert source["dataset_info"]["name"] == "libero_mix"
+    assert snapshot(hf_tfds) == before
+
+
+@pytest.mark.parametrize("entrypoint", ["source", "normalization"])
+def test_tampered_hf_tfds_is_rejected_before_processing(hf_tfds, tmp_path, entrypoint):
+    from vlade.data.canonical_normalization import compute
+    (hf_tfds / "nested/libero_mix/1.0.0/features.json").write_text("tampered", encoding="utf-8")
+    with pytest.raises(ValueError, match="integrity mismatch"):
+        if entrypoint == "source":
+            module._preparation_source(hf_tfds)
+        else:
+            compute(hf_tfds, tmp_path / "absent-manifest", tmp_path / "output")
+    assert not (tmp_path / "output").exists()
+
+
+@pytest.mark.parametrize("reference", ["key", "cache"])
+def test_normalization_accepts_verified_hf_root_before_shard_check(hf_tfds, tmp_path, reference):
+    from vlade.data.canonical_normalization import compute
+    value = Path("hfasset://raw_rlds") if reference == "key" else hf_tfds
+    manifest = ROOT / "experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz"
+    with pytest.raises(FileNotFoundError, match="all 1,024 TFRecord shards"):
+        compute(value, manifest, tmp_path / "output")
+    assert not (tmp_path / "output").exists()

@@ -855,7 +855,10 @@ def query_stream(data: EpisodeData, split: str, *, seed: int = 42, repeat: bool 
 
 
 def _preparation_source(tfds_root: Path) -> tuple[Path, dict]:
-    """Locate TFDS without writing to it; retain archive provenance when present."""
+    """Verify the pinned HF input before locating its read-only TFDS payload."""
+    from vlade.storage.assets import resolve_input
+
+    tfds_root = resolve_input(tfds_root)
     if not tfds_root.is_dir():
         raise ValueError("TFDS root must be an existing directory")
     infos = list(tfds_root.rglob("dataset_info.json"))
@@ -927,9 +930,6 @@ def main() -> None:
     parser.add_argument("--canonical-normalization", type=Path, required=True)
     parser.add_argument("--canonical-normalization-sha256", required=True)
     args = parser.parse_args()
-    if str(args.tfds_root).startswith("hfasset:"):
-        from vlade.storage.assets import resolve_input
-        args.tfds_root = resolve_input(args.tfds_root)
     directory, source = _preparation_source(args.tfds_root)
     canonical = load_canonical_split(args.canonical_manifest, args.canonical_sha256)
     actual_normalization_sha256 = sha256(args.canonical_normalization)
