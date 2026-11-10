@@ -153,7 +153,7 @@ def fetch_asset(key: str, *, registry: Path | None = None, cache: Path | None = 
             _verify_files(destination, record["identity_files"])
             if not (destination / 'COMPLETE').is_file():
                 raise ValueError('Prepared HF dataset is incomplete')
-        elif record["format"] == "directory":
+        elif record["format"] in {"directory", "upstream_files"}:
             _verify_files(destination, record["files"])
         elif record["format"] == "parquet_frames":
             _verify_frame_metadata(destination, record)
@@ -189,11 +189,13 @@ def fetch_asset(key: str, *, registry: Path | None = None, cache: Path | None = 
         if stage.resolve().parent != destination.parent.resolve() or not stage.name.startswith(".download-"):
             raise ValueError("Unexpected temporary extraction path")
         shutil.rmtree(stage)
-    elif record["format"] == "directory":
+    elif record["format"] in {"directory", "upstream_files"}:
         stage.mkdir()
         for relative, expected in record["files"].items():
             target = stage / safe_relative(relative)
-            source = Path(hf_hub_download(record["repo_id"], record["prefix"] + "/files/" + relative,
+            remote = (record["prefix"] + "/files/" + relative
+                      if record["format"] == "directory" else relative)
+            source = Path(hf_hub_download(record["repo_id"], remote,
                 repo_type=record["repo_type"], revision=record["revision"]))
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, target)
@@ -297,7 +299,7 @@ def main() -> None:
     fetch.add_argument("--registry", type=Path)
     fetch.add_argument("--cache", type=Path)
     refresh = sub.add_parser("refresh-registry")
-    refresh.add_argument("--output", type=Path, default=ROOT / "configs/storage/hf_assets.lock.json")
+    refresh.add_argument("--output", type=Path, required=True)
     refresh.add_argument("--revision", default="main")
     publish = sub.add_parser("publish")
     publish.add_argument("key")

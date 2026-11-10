@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "seed": 42,
+  "budget": {
+    "hours": 8,
+    "save_reserve_seconds": 300,
+    "release_colab_on_deadline": true
+  },
+  "task": "script",
+  "runtime": "data",
+  "run_group": "canonical-train-one",
+  "entrypoint": "scripts/data/prepare_single_canonical_episode.py",
+  "arguments": [
+    "--tfds-root",
+    "hfasset://raw_rlds",
+    "--output",
+    "{work}/canonical-train-one",
+    "--canonical-manifest",
+    "{code}/experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz",
+    "--canonical-sha256",
+    "487d2be1039ba6a4facc3ba44785ba5159245dfe53462a1d5a41ba8230446e80",
+    "--canonical-normalization",
+    "{code}/experiments/manifests/libero_plus_rlds/normalization_train_d_seed42.json",
+    "--canonical-normalization-sha256",
+    "eac95bcc81b6182b90a2bd030096df6e3e408cb88923d0a1d57dc6c81e297c67"
+  ],
+  "registry_revision": null
+}

@@ -19,7 +19,7 @@ def stage_source(repository: str, scratch_root: Path, source_ref: str = "main") 
     scratch_root.mkdir(parents=True, exist_ok=True)
 
     def git(directory, *args):
-        return subprocess.run(["git", "-C", str(directory), *args], check=True,
+        return subprocess.run(["git", "-c", "core.longpaths=true", "-C", str(directory), *args], check=True,
                               capture_output=True, text=True).stdout.strip()
 
     with tempfile.TemporaryDirectory(prefix="vlade-fetch-", dir=scratch_root) as temporary:
@@ -32,14 +32,10 @@ def stage_source(repository: str, scratch_root: Path, source_ref: str = "main") 
         if destination.exists():
             if (git(destination, "rev-parse", "HEAD") != commit
                     or git(destination, "remote", "get-url", "origin") != repository
-                    or git(destination, "status", "--porcelain", "--untracked-files=normal")
-                    or any(line[:1] in {"-", "+", "U"} for line in git(destination, "submodule", "status").splitlines()
-                           if "third_party/ava_vla" in line)):
+                    or git(destination, "status", "--porcelain", "--ignore-submodules=all", "--untracked-files=normal")):
                 raise ValueError("Existing source checkout changed; use a fresh source cache")
             return destination
         git(staging, "checkout", "--detach", commit)
-        # The parent commit pins the AVA gitlink. Other baselines use their own environments.
-        if (staging / ".gitmodules").is_file():
-            git(staging, "submodule", "update", "--init", "--depth", "1", "--", "third_party/ava_vla")
+        # Origin gitlinks are provenance only. All active research code is local.
         staging.rename(destination)
     return destination

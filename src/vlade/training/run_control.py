@@ -177,7 +177,8 @@ def validate_teacher_report(report: dict, checkpoint: Path, split_sha256: str) -
 
 
 def code_hashes(paths: list[Path]) -> dict[str, str]:
-    return {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths}
+    from vlade.utils.source_identity import source_identity
+    return source_identity(Path(__file__).resolve().parents[3])
 
 
 def gradient_diagnostics(groups: dict[str, Any]) -> dict:

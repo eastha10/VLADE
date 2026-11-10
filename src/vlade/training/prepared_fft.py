@@ -16,10 +16,10 @@ def loader_split(*, train: bool) -> str:
 
 
 def make_loader(cfg: Any, processor: Any, *, train: bool = True) -> tuple[Any, Any]:
-    from prismatic.models.backbones.llm.prompting import PurePromptBuilder
-    from prismatic.util.data_utils import PaddedCollatorForActionPrediction
-    from prismatic.vla.action_tokenizer import ActionTokenizer
-    from prismatic.vla.datasets import RLDSBatchTransform
+    from vlade.data.prismatic.prompts import PurePromptBuilder
+    from vlade.data.prismatic.collation import PaddedCollatorForActionPrediction
+    from vlade.data.prismatic.action_tokenizer import ActionTokenizer
+    from vlade.data.prismatic.transforms import RLDSBatchTransform
 
     if cfg.image_aug:
         raise ValueError("The shared prepared-data path requires image_aug=false for explicit common inputs")

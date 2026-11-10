@@ -1,5 +1,7 @@
 # VLADE
 
+현재 Colab 실행은 [설정 기반 연구 명령](docs/environment/research_runs.md)을 사용합니다. 훈련 step·평가 rollout 수는 `configs/research/`에서 제어합니다.
+
 현재 로컬/Git 버전은 **Git commit 기반 소스 배포 + Hugging Face 가중치·데이터 입력**을 사용합니다. 실행 중인 Colab과 Drive는 자동 갱신하지 않으며, Drive 업로드는 별도 명령이 있을 때 수행합니다. [새 실행 방식](docs/environment/hf_inputs_and_git_source.md)을 먼저 확인하십시오.
 
 학습 중간·검증 best·목표 step의 final을 비공개 Hugging Face Hub에 자동 저장하려면
@@ -21,9 +23,13 @@ baseline 재현용으로 분리하고 CALVIN은 후속 일반화 벤치마크로
 평가할 계획입니다.
 
 기반 Teacher로 AVA-VLA를 연결하고, AVA-VLA와 OpenVLA-OFT를 서로 독립된
-baseline으로 등록했습니다. 사용자 포크 `eastha10/AVA-VLA`의 원본 소스는
-`third_party/ava_vla/`, OpenVLA-OFT 원본 소스는 `third_party/openvla_oft/` Git
-submodule로 관리합니다. VLADE 자체 구현은 `src/vlade/`에 분리합니다.
+baseline으로 등록했습니다. 사용자 포크 `eastha10/AVA-VLA`의 고정 submodule은 출처 확인용으로 보존합니다.
+현재 연구 실행은 `src/vlade/`의 모델·데이터·학습·평가 모듈과 `configs/runtime/`의 환경을 사용하며 `third_party/` 없이 구성됩니다.
+
+사용 중인 AVA Teacher의 LIBERO 연속 L1 모델 코드는 `src/vlade/models/teachers/`에
+비전 백본·projector·action head·시간 attention·processor별로 정리했습니다.
+기존 AVA FFT·논문 학습·순차 Teacher cache가 이 코드를 사용하며, 데이터 파이프라인은
+프로젝트의 `src/vlade/data/prismatic/`를 사용합니다. 세부 범위는 [Teacher 안내](docs/environment/ava_vla.md)에 있습니다.
 
 현재 단계는 baseline 등록, FFT 공통 학습 루프와 Teacher 출력 저장·Student 계약의 CPU 검증까지입니다.
 실제 Colab GPU 학습은 아직 검증하지 않았습니다. Teacher 어댑터,
@@ -65,15 +71,11 @@ LIBERO(+) 성공률이나 FFT 학습 검증을 포함하지 않습니다.
 ## 소스 받기
 
 ```bash
-git clone --recurse-submodules https://github.com/eastha10/VLADE.git
+git clone https://github.com/eastha10/VLADE.git
 cd VLADE
 ```
 
-이미 clone한 저장소는 아래 명령으로 기록된 외부 소스 커밋을 받습니다.
-
-```bash
-git submodule update --init --recursive
-```
+일반 clone만으로 연구 소스를 받습니다. 실행 방법과 설정 항목은 [연구 실행 안내](docs/environment/research_runs.md)를 따릅니다.
 
 Teacher 연결 설정은 `configs/models/teacher/ava_vla.json`, baseline 설정은
 `experiments/baselines/`, 원본·의존성 커밋과 검증 상태는
@@ -90,7 +92,7 @@ Teacher 연결 설정은 `configs/models/teacher/ava_vla.json`, baseline 설정�
 
 ## 기본 실험 흐름
 
-1. `third_party/`에 선정한 VLA 코드를 연결합니다.
+1. Git commit과 HF 입력 revision을 고정하고 연구 설정을 선택합니다.
 2. `src/vlade/models/teachers/`와 `students/`에 공통 인터페이스 어댑터를 둡니다.
 3. 공식 LIBERO baseline을 재현해 `experiments/baselines/`에 원본 조건을 고정합니다.
 4. 두 baseline의 LIBERO+ FFT 조건을 맞춰 주 비교점을 생성합니다.
@@ -126,8 +128,8 @@ python scripts/train/run_fft.py --model openvla_oft --preflight
 - `notebooks/`: 탐색과 분석용 노트북을 보관합니다.
 - `scripts/`: 학습, 평가, 배포와 데이터 처리 실행 스크립트를 둡니다.
 - `src/`: VLADE의 핵심 구현 코드를 관리합니다.
-- `tests/`: 단위, 통합과 smoke test를 관리합니다.
-- `third_party/`: AVA-VLA, OpenVLA-OFT 등 외부 원본 코드를 별도로 관리합니다.
+- `tests/`: 사용자 지정 연구 검사를 위한 경계입니다. 에이전트 검증 전용 코드는 작업별 `.harness/v1/.../checks/`에 둡니다.
+- `third_party/`: 원본 출처 확인용 고정 submodule이며 현재 연구 실행에는 필요하지 않습니다.
 
 자세한 디렉터리 역할은 `STRUCTURE.md`를 참고하십시오.
 
@@ -137,23 +139,24 @@ FFT 어댑터는 공통 `src/vlade/training/loop.py`를 사용합니다. 누적 
 clipping·비정상 값 검사, 선택적 LR 스케줄·val loss, JSONL 실행 기록,
 완료 checkpoint의 optimizer/scheduler/RNG 재개를 지원합니다.
 RLDS stream 위치는 복원하지 않으며 GPU FFT는 아직 검증하지 않았습니다.
-CPU 검사는 `python -m pytest tests/unit -q` 및
-`python scripts/train/smoke_loop.py --output-dir .harness/v1/2026-10-29-training-smoke/scratch/outputs/cpu-loop-smoke`로
-수행합니다. 실행·재개 제한은 [학습 안내](docs/environment/libero_plus_fft_colab.md)에 있습니다.
+에이전트 CPU 검사와 합성 smoke는 작업별 하네스 `checks/`에서 실행하며 출력은 해당 `scratch/`로 제한합니다. 실행·재개 제한은 [학습 안내](docs/environment/libero_plus_fft_colab.md)에 있습니다.
 
 기존 Teacher/baseline과 Llama-2-7B 가중치는 유지합니다. Student 후보인 Qwen3,
 Qwen3.5, SmolVLM2/SmolVLA, Llama 3.2, Gemma 4의 호환성과 계산량 검토는
 [backbone 검토](docs/decisions/0003-backbone-review.md)에 정리했습니다.
 이는 후보 우선순위이며 Student 구현·모델 교체나 VLA 성능 검증을 의미하지 않습니다.
 
-## Student 설계 보류 · 뼈대 (2026-11-04)
+## Qwen VLA Student (2026-11-10)
 
-사용자가 논문 검토 후 구조를 판단하고 구현하기로 하여,
-[`StudentSkeleton`](src/vlade/models/students/skeleton.py)에 입력·출력 인터페이스와
-구현할 자리만 마련했습니다. 백본, 관측 인코딩, 시간 이력, proprio 융합, 액션 헤드와
-증류 목적은 미정입니다. 현재 공통 `PolicyOutput` 형식만 참조하며 호출 시
-`NotImplementedError`를 냅니다. 학습 진입점에는 연결하지 않았습니다.
-기존 Qwen 초안과 관련 실행 코드는 보존하며, 최종 Student 구조의 확정을 뜻하지 않습니다.
+Student 구현은 [qwen_vla.py](src/vlade/models/students/qwen_vla.py)의 `QwenVLA`입니다.
+Qwen3.5-0.8B의 자체 비전·내장 merger·언어 모듈에 AVA 시간 상태·proprio projector·
+L1 action head를 연결합니다. DINOv2/SigLIP과 외부 3-layer projector는 사용하지 않습니다.
+
+원본 AVA처럼 백본은 `models/students/backbones/qwen.py`, action head·proprio projector·AVA는
+`models/students/components/action_heads.py`, `projectors.py`, `attn_weight_generator.py`로 분리했습니다.
+설정은 `configs/models/student/qwen_vla_0_8b.json`이며 구조·교체 근거·실행 방법은
+[Student 안내](docs/environment/qwen_vla_student.md)에 있습니다.
+기존 Qwen query-head 초안과 Colab trainer는 보존하며, pretrained/GPU/rollout은 아직 미검증입니다.
 
 ## Teacher 저장·Student 계약·집필 준비 (2026-10-26)
 
@@ -168,15 +171,13 @@ Teacher action/GT token/hidden-state 저장·로드와 provenance·episode 순�
 - [논문 outline·Related Work·조건/결과표 양식](docs/paper/preparation.md)
 - [실험 기록 JSON 템플릿](docs/paper/experiment-record.template.json)
 
-```bash
-python scripts/train/smoke_student.py --output-dir .harness/v1/2026-10-29-student-smoke/scratch/outputs/tiny-random-check
-```
+합성 Student 검증 진입점은 작업별 하네스 `checks/student_smoke.py`에 있습니다.
 
 실제 고정 T1 cache 생성·episode rollout 연결과 학습/평가 budget 확정은 별도 선행 작업입니다.
 
 ## Colab 데이터 준비·FFT·27일 업무 인계 (2026-10-28)
 
-Drive를 공통 저장소로 사용하는 순서별 노트북을 추가했습니다.
+유지 관리되는 노트북은 Git 소스·HF 입력과 설정 기반 CLI를 사용합니다. [현재 실행 안내](docs/environment/research_runs.md)를 우선합니다.
 
 1. [LIBERO+·AVA 가중치 다운로드/검증·episode 전처리](experiments/colab_01_download_data_weights.ipynb)
 2. [AVA-VLA FFT·저장/재개·T1 선택·순차 cache](experiments/colab_02_ava_fft_and_fixed_cache.ipynb)
@@ -193,7 +194,7 @@ Colab에서 사용하는 코드와 노트북은 아래 위치의 일반 파일�
 | `experiments/colab_01_*.ipynb`부터 `colab_05_*.ipynb` | 데이터 준비·모델별 학습·재로딩 점검 노트북 |
 | `configs/` | 모델·데이터·학습 조건과 고정 revision |
 | `experiments/baselines/`, `experiments/manifests/` | 비교 기준과 원본 소스 기록, Colab Git 소스 배포 설정 |
-| `docs/`, `tests/` | 실행·연구 검토 안내와 회귀 검사 |
+| `docs/`, 작업별 `.harness/v1/.../checks/` | 실행 안내와 에이전트 검증 |
 
 노트북과 `experiments/manifests/colab_source.json`은 저장소 루트에서 아래 명령으로 갱신합니다.
 
@@ -202,7 +203,7 @@ python scripts/prepare/generate_colab_notebooks.py
 ```
 
 생성 구현은 `src/vlade/utils/colab_notebooks.py`에 있습니다. 노트북 시작 셀은 Git ref를
-불변 commit으로 확정하고 해당 소스와 AVA submodule을 런타임에 준비합니다. 소스 파일별
+불변 commit으로 확정하고 해당 프로젝트 소스만 런타임에 준비합니다. 소스 파일별
 SHA256 목록은 관리하지 않습니다. `experiments/manifests/colab_source.json`은 Git 저장소/ref
 설정입니다. 로컬 변경은 먼저 commit·push하고, 재개 시 이전 `SOURCE_COMMIT`을 지정하십시오.
 

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "run_group": "prepare-inputs-seed42",
+  "seed": 42,
+  "budget": {
+    "hours": 8,
+    "save_reserve_seconds": 300,
+    "release_colab_on_deadline": true
+  },
+  "task": "prepare",
+  "runtime": "data",
+  "assets": [
+    "hfasset://prepared_d_seed42",
+    "hfasset://ava_t0"
+  ],
+  "registry_revision": null
+}

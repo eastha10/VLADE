@@ -1,0 +1,38 @@
+{
+  "python": "3.11",
+  "packages": [
+    "torch==2.12.0",
+    "torchvision==0.27.0",
+    "transformers==5.9.0",
+    "accelerate",
+    "pillow",
+    "numpy==1.26.4",
+    "sentencepiece",
+    "huggingface_hub==1.16.1",
+    "robosuite==1.4.1",
+    "mujoco==3.3.1",
+    "bddl",
+    "future",
+    "easydict==1.9",
+    "gym==0.25.2",
+    "termcolor",
+    "h5py",
+    "PyYAML",
+    "imageio",
+    "opencv-python<4.12",
+    "evdev; sys_platform == 'linux'"
+  ],
+  "schema_version": 1,
+  "name": "student_eval",
+  "system_packages": [
+    "build-essential",
+    "linux-libc-dev",
+    "libegl1",
+    "libosmesa6",
+    "patchelf"
+  ],
+  "benchmark_source": {
+    "repository": "https://github.com/sylvestf/LIBERO-plus.git",
+    "commit": "4976dc30028e805ff8094b55501d532c48fec182"
+  }
+}

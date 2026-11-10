@@ -1,0 +1,91 @@
+{
+  "schema_version": 2,
+  "architecture": "native_qwen_vlm_with_ava_recurrence",
+  "implementation": "vlade.models.students.qwen_vla.QwenVLA",
+  "status": "implemented_tiny_native_vlm_cpu_validated_pretrained_pending",
+  "student": {
+    "schema_version": 2,
+    "model_id": "Qwen/Qwen3.5-0.8B",
+    "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+    "hidden_size": 1024,
+    "image_size": 256,
+    "patch_grid": 8,
+    "ava_embed_dim": 1024,
+    "action_head_hidden_dim": 4096,
+    "temporal_feature_layer": -2,
+    "max_sequence_length": 2048,
+    "attention_max_steps": 100000
+  },
+  "components": {
+    "vision": "native Qwen3.5 vision transformer, 12 layers, width 768, patch 16",
+    "merger": "native Qwen spatial merger, merge size 2, output 1024; pretrained jointly with vision and language",
+    "language": "native Qwen3.5-0.8B language module, width 1024",
+    "cameras": [
+      "primary",
+      "wrist"
+    ],
+    "visual_tokens_per_camera": 64,
+    "external_vision_projector": false,
+    "proprio": "original AVA 8 -> 1024 -> 1024 GELU projector",
+    "ava": "original AttentionWeightGenerator, internal width 1024, FiLM/cross-attention/self-attention/FFN",
+    "action_head": "original L1RegressionActionHead, two MLPResNet blocks, hidden width 4096",
+    "action_shape": [
+      8,
+      7
+    ],
+    "recurrent_state_shape": [
+      56,
+      1024
+    ],
+    "normalization": "shared sealed LIBERO+ training normalization; environment adapter denormalizes"
+  },
+  "removed_from_student": [
+    "DINOv2",
+    "SigLIP",
+    "PrismaticVisionBackbone",
+    "external 3-layer PrismaticProjector",
+    "OpenVLA initial weights and image processor",
+    "legacy 512-token hardcoded sink coordinates"
+  ],
+  "adaptation": {
+    "full_attention_modulated_layers_zero_based": [
+      3,
+      7,
+      11,
+      15,
+      19,
+      23
+    ],
+    "linear_attention": "18 native DeltaNet layers unchanged",
+    "vision_positions": "native Qwen image placeholders and multimodal RoPE; AVA weights only on actual image-token positions",
+    "image_budget": "square current cameras, 256px -> 16x16 raw patches -> 8x8 merged tokens",
+    "sink_ids": null,
+    "cache": false,
+    "batching": "unpadded equal-length prompts; two current camera grids per sample; explicit same-episode recurrent state",
+    "research_scope": "vision and language backbone replacement; no longer an LLM-only controlled substitution"
+  },
+  "initialization": {
+    "backbone": "hfasset://qwen_initial, full native vision/merger/language at one pinned revision",
+    "trainable_new_modules": "AVA, proprio projector and L1 action head; native merger is not reinitialized",
+    "checkpoint_schema": 2,
+    "old_external_vision_checkpoint_compatible": false
+  },
+  "source": {
+    "ava_student_directory": "src/vlade/models/students/components",
+    "ava_origin_repository": "https://github.com/eastha10/AVA-VLA",
+    "ava_origin_commit": "69ae5dfb90f4eb714259693bd2c222e0b3de6456",
+    "license_file": "src/vlade/models/students/AVA_LICENSE.txt",
+    "teacher_runtime_dependency": false,
+    "paper": "https://arxiv.org/html/2511.18960v4",
+    "qwen_config": "https://huggingface.co/Qwen/Qwen3.5-0.8B/blob/2fc06364715b967f1860aea9cf38778875588b17/config.json"
+  },
+  "validation": {
+    "tiny_native_qwen_vision_merger_language_cpu": true,
+    "original_ava_proprio_action_cpu": true,
+    "native_mrope_unity_attention_equivalence": true,
+    "pretrained_0_8b": false,
+    "gpu_training": false,
+    "rollout_success_rate": null,
+    "existing_colab_trainers_migrated": false
+  }
+}

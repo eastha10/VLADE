@@ -43,7 +43,7 @@ def runtime_api_report(root: Path) -> dict:
     if budget.is_file():
         tree = ast.parse(budget.read_text(encoding="utf-8"))
         names = {node.name for node in tree.body if isinstance(node, (ast.FunctionDef, ast.ClassDef))}
-        api.update(sha256=sha256(budget), names=sorted(names))
+        api.update(names=sorted(names))
         stop = next((node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "should_stop"), None)
         api["known_api"] = bool("BudgetExhausted" in names and stop and
             [arg.arg for arg in stop.args.args] == ["remaining_seconds", "save_reserve_seconds", "next_step_seconds"])
@@ -257,21 +257,11 @@ def install_hooks(suite_map: Path) -> dict:
         return balanced.make_loader(SimpleNamespace(**values), processor, train=train)
     def code_fingerprint() -> dict:
         result = fingerprint()
-        for path in (Path(__file__), Path(balanced.__file__)):
-            result[path.name] = sha256(path)
         result["suite_map.json"] = sha256(suite_map)
-        # Include local upstream and patched installed Transformers code, not just a git label.
-        import transformers.models.llama.modeling_llama as llama
-        result["installed_modeling_llama.py"] = sha256(Path(llama.__file__))
-        upstream = fft.REPO_ROOT / "third_party/ava_vla"
-        result["upstream_tree"] = hashlib.sha256(json.dumps({
-            p.relative_to(upstream).as_posix(): sha256(p) for p in sorted(upstream.rglob("*.py"))
-            if "__pycache__" not in p.parts}, sort_keys=True).encode()).hexdigest()
-        teacher = fft.REPO_ROOT.parent / "teacher"
-        if teacher.is_dir():
-            result["teacher_metadata"] = hashlib.sha256(json.dumps({
-                p.name: sha256(p) for p in sorted(teacher.iterdir())
-                if p.is_file() and p.suffix not in {".pt", ".safetensors"}}, sort_keys=True).encode()).hexdigest()
+        # Model provenance is pinned by Git; do not scan a source checkout or emit per-file hashes.
+        result["ava_origin_commit"] = fft.ORIGIN_REVISIONS["ava_vla"]
+        result["source_commit"] = fft._git_revision(fft.REPO_ROOT)
+
         return result
     prepared.make_loader = make_loader
     fft._code_fingerprint = code_fingerprint
@@ -285,7 +275,8 @@ def execute(settings: dict) -> dict:
     import vlade.training.loop as loop
     import vlade.training.run_control as control
     runtime_api = runtime_api_report(fft.REPO_ROOT)
-    suite_map = Path(settings["suite_map"])
+    from vlade.storage.assets import resolve_input
+    suite_map = resolve_input(settings["suite_map"]) / "suite_map.json"
     install_hooks(suite_map)
     cfg = fft.FFTConfig.from_json(Path(settings["config"]), "ava_vla")
     cfg = replace(cfg, resume=Path(settings["resume"]) if settings.get("resume") else None)
@@ -296,8 +287,6 @@ def execute(settings: dict) -> dict:
         raise ValueError("Require seed=42, image_aug=false and optimizer state saving")
     if phase == "pilot4" and (cfg.max_steps != 4 or cfg.resume):
         raise ValueError("Pilot must start independently from T0 and run four optimizer steps")
-    if phase == "main" and cfg.save_steps != 2000:
-        raise ValueError("Main checkpoint interval must be 2000")
     run_root = Path(settings["run_root"])
     started = time.time()
     started_monotonic = time.monotonic()

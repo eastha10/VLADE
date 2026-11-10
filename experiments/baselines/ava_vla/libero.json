@@ -12,7 +12,7 @@
   },
   "runtime": {
     "environment_name": "vlade-ava-vla",
-    "dependency_manifest": "third_party/ava_vla/pyproject.toml",
+    "dependency_manifest": "configs/runtime/ava_libero_eval.json",
     "torch_version": "2.2.0",
     "transformers_repository": "https://github.com/LiAuto-DSR/transformers-avavla.git",
     "isolated_environment_required": true,
@@ -60,8 +60,8 @@
     }
   },
   "evaluation": {
-    "working_directory": "third_party/ava_vla",
-    "entrypoint": "experiments/robot/libero/run_libero_eval.py",
+    "working_directory": ".",
+    "entrypoint": "scripts/evaluate/evaluate_policy.py",
     "environment": {
       "TOKENIZERS_PARALLELISM": "false",
       "PYOPENGL_PLATFORM": "egl",
@@ -84,7 +84,8 @@
       "multi_frame.attn_weight_head_type": "softmaxscore",
       "multi_frame.attn_weight_score_config": "(1.9, 0.1, 0.0)",
       "multi_frame.attn_weight_sink_ids": "[68,75,180,187,324,331,436,443]",
-      "multi_frame.attn_weight_sink_weight": 1.0
+      "multi_frame.attn_weight_sink_weight": 1.0,
+      "model": "ava_vla"
     }
   },
   "verification": {

@@ -80,14 +80,11 @@ def _resolve_repo_path(value: str) -> Path:
 
 
 def _validate_repository_paths(config: Mapping[str, Any]) -> None:
-    source_path = _resolve_repo_path(config["source"]["path"])
     working_directory = _resolve_repo_path(config["evaluation"]["working_directory"])
     dependency_manifest = _resolve_repo_path(config["runtime"]["dependency_manifest"])
 
-    if not source_path.is_dir():
-        raise BaselineConfigurationError(f"외부 원본 디렉터리가 없습니다: {source_path}")
-    if working_directory != source_path:
-        raise BaselineConfigurationError("evaluation.working_directory는 source.path와 같아야 합니다.")
+    if working_directory != REPO_ROOT.resolve():
+        raise BaselineConfigurationError("평가는 프로젝트 루트의 로컬 실행기를 사용해야 합니다.")
     if not dependency_manifest.is_file():
         raise BaselineConfigurationError(f"의존성 명세가 없습니다: {dependency_manifest}")
 

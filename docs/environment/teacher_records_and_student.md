@@ -132,9 +132,9 @@ torch 2.12.0 의존성을 확인했습니다. 이번 실행은 전역 환경을 
 독립 Student 가상환경에서는 해당 버전으로 설치한 뒤 아래 명령을 사용합니다.
 
 ```bash
-python -m pytest tests/unit -q -p no:cacheprovider --basetemp=.harness/v1/2026-10-29-student-smoke/scratch/unique-run
-python scripts/train/smoke_student.py --output-dir .harness/v1/2026-10-29-student-smoke/scratch/outputs/tiny-random-check
-python scripts/train/smoke_student.py --output-dir .harness/v1/2026-10-29-student-smoke/scratch/outputs/native-input-check \
+python -m pytest .harness/v1/2026-11-11-ava-teacher-code/checks -q -p no:cacheprovider --basetemp=.harness/v1/2026-11-11-ava-teacher-code/scratch/unique-run
+python .harness/v1/2026-11-11-ava-teacher-code/checks/student_smoke.py --output-dir .harness/v1/2026-11-11-ava-teacher-code/scratch/outputs/tiny-random-check
+python .harness/v1/2026-11-11-ava-teacher-code/checks/student_smoke.py --output-dir .harness/v1/2026-11-11-ava-teacher-code/scratch/outputs/native-input-check \
   --processor-dir checkpoints/students/qwen3_5_0_8b
 ```
 

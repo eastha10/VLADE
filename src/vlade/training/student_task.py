@@ -19,6 +19,7 @@ from vlade.models.contracts import masked_action_l1
 from vlade.distillation.action import action_distillation_loss, validate_weights
 from vlade.training.cached_actions import CachedActions
 from vlade.models.students.qwen import HistoryFrame, QwenStudent, StudentConfig, load_processor, prepare_inputs, resolve_pretrained_directory
+from vlade.utils.source_identity import source_identity
 from vlade.training.loop import LoopState, make_scheduler, restore_training_state, run_loop, training_state
 from vlade.training.hub import HubCheckpoints
 from vlade.training.run_control import checkpoint_space, gradient_diagnostics, seal_checkpoint, verify_checkpoint
@@ -64,7 +65,7 @@ def identity(settings: dict, data: EpisodeData, teacher: CachedActions | None = 
                   Path(__file__).parents[1] / "distillation/action.py"]
         cache_identity = {"teacher_cache": teacher.signature}
     return {**cache_identity, "settings": settings, "data_manifest_sha256": sha256(data.root / "manifest.json"),
-            "code_sha256": {path.name: sha256(path) for path in paths},
+            "code_sha256": source_identity(Path(__file__).resolve().parents[3]),
             "torch": torch.__version__, "transformers": importlib.metadata.version("transformers"),
             "initial_download_manifest_sha256": sha256(Path(settings["initial_checkpoint"]) / "download_manifest.json")}
 
@@ -127,7 +128,7 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
     if not all(parameter.requires_grad for parameter in model.parameters()):
         raise ValueError("Student BC expects the full backbone and head to be trainable")
     optimizer = torch.optim.AdamW(model.parameters(), lr=settings["learning_rate"], weight_decay=settings["weight_decay"])
-    scheduler = make_scheduler(optimizer, settings["max_steps"], schedule="constant")
+    scheduler = make_scheduler(optimizer, settings["max_steps"], settings.get("warmup_steps", 0), settings.get("lr_schedule", "constant"))
     state = LoopState()
     if resume:
         payload = torch.load(resume / "trainer_state.pt", map_location="cpu", weights_only=True)

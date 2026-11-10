@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "run_group": "inference-ava-seed42",
+  "seed": 42,
+  "budget": {
+    "hours": 8,
+    "save_reserve_seconds": 300,
+    "release_colab_on_deadline": true
+  },
+  "task": "inference",
+  "runtime": "ava",
+  "model": "ava_vla",
+  "checkpoints": {
+    "T0": "hfasset://ava_t0"
+  },
+  "evaluation": {
+    "task_suite": "libero_spatial",
+    "center_crop": true,
+    "device": "cuda:0"
+  },
+  "instruction": "pick up the object",
+  "registry_revision": null
+}

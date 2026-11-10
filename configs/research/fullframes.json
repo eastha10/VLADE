@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "seed": 42,
+  "budget": {
+    "hours": 8,
+    "save_reserve_seconds": 300,
+    "release_colab_on_deadline": true
+  },
+  "task": "script",
+  "runtime": "data",
+  "run_group": "fullframes-d-seed42",
+  "entrypoint": "scripts/data/prepare_fullframes.py",
+  "arguments": [
+    "--tfds-root",
+    "hfasset://raw_rlds",
+    "--work-root",
+    "{work}/fullframes",
+    "--repo-id",
+    "VLADE-konkuk/libero-plus-fullframes",
+    "--reference-revision",
+    "21a81ee2c9cf120019ed18c5d1cd06bf4336c69e",
+    "--shards-per-unit",
+    "8",
+    "--public"
+  ],
+  "registry_revision": null
+}

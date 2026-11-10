@@ -436,6 +436,33 @@
       },
       "stored_frame_interval_steps": 1,
       "action_horizon": 8
+    },
+    "libero_plus_assets": {
+      "repo_id": "Sylvest/LIBERO-plus",
+      "repo_type": "dataset",
+      "revision": "dd2bd61b7d9a6fef1abc52d606e983b41886a149",
+      "format": "upstream_files",
+      "local_name": "libero-plus-assets",
+      "files": {
+        "assets.zip": {
+          "bytes": 6395849578,
+          "sha256": "96764a4bfbdaea98d4411598caeab235458318fe0f549611b93d1a323027b3cf"
+        }
+      }
+    },
+    "suite_map_seed42": {
+      "repo_id": "VLADE-konkuk/VLADE-checkpoints",
+      "repo_type": "model",
+      "revision": "ca06ce16238d46387b2b972bedc35a35259a4a4c",
+      "format": "directory",
+      "prefix": "assets/suite_map_seed42",
+      "local_name": "suite-map-seed42",
+      "files": {
+        "suite_map.json": {
+          "bytes": 2914,
+          "sha256": "06de171dd29b07bf5e4fb1283a3d1355a2e96a4169c07c850e9ae45253002efa"
+        }
+      }
     }
   }
 }
