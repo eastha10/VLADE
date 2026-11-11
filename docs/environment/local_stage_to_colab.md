@@ -1,5 +1,7 @@
 # 로컬 자료 준비와 Colab A100 이관
 
+현재 실행본은 [통합 노트북](../../experiments/colab_vlade.ipynb)이며 `PROFILE`은 `inference_ava`입니다. 설치·실행 셀은 [연구 실행 안내](research_runs.md)를 따릅니다. 아래의 과거 번호·셀 이름은 이전 실행 기록과 구분하십시오.
+
 > 2026-11-04 이후 로컬/Git 노트북의 실행 기준은 [Git 소스·HF 입력 안내](hf_inputs_and_git_source.md)입니다. 아래 Drive 기반 절차·실행 기록은 기존 버전의 맥락입니다. 진행 중인 세션은 그대로 유지하며 Drive 배포는 별도 명령 후 수행합니다.
 
 2026-10-04 기준, AVA-VLA와 OpenVLA-OFT 공개 가중치는 로컬에 내려받아
@@ -33,7 +35,7 @@ LIBERO+ 주 실험을 구분합니다. 이전 로컬 다운로드 로그와 미�
   압축 해제 경로와 필요 저장공간을 확인해야 합니다. VLADE FFT 코드와 데이터 이름
   등록은 추가했지만, 실제 압축 해제·TFDS/GPU 검증은 아직 수행하지 않았습니다.
 - 데이터셋이나 평가 assets가 없는 단일 입력 추론 점검은
-  [`experiments/colab_inference_smoke.ipynb`](../../experiments/colab_inference_smoke.ipynb)에
+  [`experiments/colab_vlade.ipynb`](../../experiments/colab_vlade.ipynb)에
   실행했습니다. NVIDIA A100-SXM4-40GB(39.5 GiB)에서 두 모델 모두 통과했고,
   결과 JSON과 패키지 버전은 Drive와 로컬의 `experiments/runs/inference_smoke/`에
   저장했습니다. OFT/AVA의 PyTorch 최대 할당 GPU 메모리는 각각 14.97/14.82 GiB입니다.

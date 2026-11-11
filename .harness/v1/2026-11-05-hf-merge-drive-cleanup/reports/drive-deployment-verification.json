@@ -1,0 +1,241 @@
+{
+  "code_commit": "e9d30b7c4278670b6d580e991eafcd885c68ca51",
+  "verified_files": 39,
+  "notebook_outputs_preserved": true,
+  "files": [
+    {
+      "path": ".gitattributes",
+      "id": "120L0NkeUs29iUiM1d4CluIpwj6BuARmF",
+      "bytes": 136,
+      "bytes_equal": true
+    },
+    {
+      "path": "AGENTS.md",
+      "id": "10oTeuqnrn_hQyYAK4LxiSR65k4JzCOJb",
+      "bytes": 20890,
+      "bytes_equal": true
+    },
+    {
+      "path": "README.md",
+      "id": "1mMrtQjmBZ1T-aIcs0QMd10ZhrMi7-9pA",
+      "bytes": 16305,
+      "bytes_equal": true
+    },
+    {
+      "path": "STRUCTURE.md",
+      "id": "17tSMF3m-0Zd7lZF1LzR43p_rVEI3sjbx",
+      "bytes": 16571,
+      "bytes_equal": true
+    },
+    {
+      "path": "configs/storage/hf_assets.lock.json",
+      "id": "1M3XomngIGEonExEvjNWR57OV6VHvoI-X",
+      "bytes": 17776,
+      "bytes_equal": true
+    },
+    {
+      "path": "docs/environment/ava_paper_best_colab.md",
+      "id": "1z2EZUY1OZCJUL5MoyyLVmd_oIyGF109k",
+      "bytes": 5776,
+      "bytes_equal": true
+    },
+    {
+      "path": "docs/environment/colab_kanban_handoff.md",
+      "id": "1h-bVqva6tbFiksMZGEnIPAJ4NytWZ20d",
+      "bytes": 27915,
+      "bytes_equal": true
+    },
+    {
+      "path": "docs/environment/hf_inputs_and_git_source.md",
+      "id": "1TO4G6kOSCClNZswmdHQWz-8GZeX_NTDi",
+      "bytes": 4427,
+      "bytes_equal": true
+    },
+    {
+      "path": "docs/environment/libero_plus_fft_colab.md",
+      "id": "1ku_CllCCIxpNcPO2sm440FSaXnswJBNz",
+      "bytes": 12951,
+      "bytes_equal": true
+    },
+    {
+      "path": "docs/environment/libero_plus_fullframes.md",
+      "id": "1zuZdo-lq1Q4fwSMUUuCjorwatlLXv3yw",
+      "bytes": 8001,
+      "bytes_equal": true
+    },
+    {
+      "path": "docs/environment/local_stage_to_colab.md",
+      "id": "195WtxHI3HjZCMol5tfuzos6fTh7GOvS8",
+      "bytes": 5078,
+      "bytes_equal": true
+    },
+    {
+      "path": "docs/environment/qwen_action_distillation_colab.md",
+      "id": "1tPgAo8yB53BZ20enTKyGqNPH-vyb7BqA",
+      "bytes": 4181,
+      "bytes_equal": true
+    },
+    {
+      "path": "experiments/colab_01_download_data_weights.ipynb",
+      "id": "18ebTvNOxtQ5rnaKMcwlImQlsRpRHMyhg",
+      "bytes": 880468,
+      "bytes_equal": true
+    },
+    {
+      "path": "experiments/colab_02_ava_fft_and_fixed_cache.ipynb",
+      "id": "1AUmqOW3Menl2V5Veo9V22at5BlCa1K8b",
+      "bytes": 59800,
+      "bytes_equal": true
+    },
+    {
+      "path": "experiments/colab_03_qwen_task_only.ipynb",
+      "id": "1dC8f7xDzFbqoTsf-ZVdnRFBVVVU0DMuy",
+      "bytes": 31469,
+      "bytes_equal": true
+    },
+    {
+      "path": "experiments/colab_04_ava_paper_best.ipynb",
+      "id": "1ujuZs-jAd5jFOK61bk-CpSrZzdOA-svr",
+      "bytes": 45154,
+      "bytes_equal": true
+    },
+    {
+      "path": "experiments/colab_05_qwen_action_distillation.ipynb",
+      "id": "16HUYnZZfc21TmVZWWMY0RGXaEH9Bs-Mu",
+      "bytes": 34546,
+      "bytes_equal": true
+    },
+    {
+      "path": "experiments/colab_ava_fft_suite_balanced_cu.ipynb",
+      "id": "1MhqgAKh01iVj2oCGgiXX4DHInzmEu7zr",
+      "bytes": 153320,
+      "bytes_equal": true
+    },
+    {
+      "path": "experiments/colab_inference_smoke.ipynb",
+      "id": "16bD2g90kz926DYw4zDS5fClLvv7pp2jU",
+      "bytes": 30187,
+      "bytes_equal": true
+    },
+    {
+      "path": "experiments/manifests/colab_source.json",
+      "id": "1I9FHxnVvbB7teUmPCSOkZP2JhYSOTNI2",
+      "bytes": 167,
+      "bytes_equal": true
+    },
+    {
+      "path": "scripts/data/select_teacher.py",
+      "id": "16F476iFxT5nKGjirFgKV9AsyWGKiQ9It",
+      "bytes": 2067,
+      "bytes_equal": true
+    },
+    {
+      "path": "scripts/evaluate/run_baseline.py",
+      "id": "1Ot3aeO-7koVSGeHkWQDG5sopji0ksGSw",
+      "bytes": 12330,
+      "bytes_equal": true
+    },
+    {
+      "path": "src/vlade/data/episode_data.py",
+      "id": "1y9GBnHKacnfTjETWuEp-hy9DT7P04G7G",
+      "bytes": 27842,
+      "bytes_equal": true
+    },
+    {
+      "path": "src/vlade/data/fullframes.py",
+      "id": "1-IPK8G7rR5yqjxaK32fsUIOqSUlztGWv",
+      "bytes": 24833,
+      "bytes_equal": true
+    },
+    {
+      "path": "src/vlade/models/students/qwen.py",
+      "id": "1EGm5g_rI53teKSuTRWvnwFJbOb8Mrh_J",
+      "bytes": 10636,
+      "bytes_equal": true
+    },
+    {
+      "path": "src/vlade/storage/assets.py",
+      "id": "13iqXL4byG0ZZbaHDNnM7DM-Ouxa7Sj0d",
+      "bytes": 16333,
+      "bytes_equal": true
+    },
+    {
+      "path": "src/vlade/training/fft.py",
+      "id": "1zcAJbT0jSp36We6Nsgqt7aWwytFb4jQ8",
+      "bytes": 39443,
+      "bytes_equal": true
+    },
+    {
+      "path": "src/vlade/training/paper_ava.py",
+      "id": "1ZZLNPU42JdVlNBqPd1M-crTty39HFAN6",
+      "bytes": 26720,
+      "bytes_equal": true
+    },
+    {
+      "path": "src/vlade/training/student_task.py",
+      "id": "11vyxeRBusLjL_eaiBNEKHJBNFutgVgcx",
+      "bytes": 14280,
+      "bytes_equal": true
+    },
+    {
+      "path": "src/vlade/utils/colab_notebooks.py",
+      "id": "1wZhBI_y8GnEIuoFfSRiwA8mHxCfDJcIM",
+      "bytes": 50201,
+      "bytes_equal": true
+    },
+    {
+      "path": "src/vlade/utils/fullframes_notebook.py",
+      "id": "1_ej_uVxQd7XkbI8EOHSpEyeqIZg3fdH4",
+      "bytes": 1174,
+      "bytes_equal": true
+    },
+    {
+      "path": "src/vlade/utils/hf_notebooks.py",
+      "id": "1rrxYbocM5RakIClek2XTurmu9lH4tHML",
+      "bytes": 13012,
+      "bytes_equal": true
+    },
+    {
+      "path": "src/vlade/utils/source.py",
+      "id": "12poX1ktyPjbf9-r0u9KMzexSRSkuohjX",
+      "bytes": 2420,
+      "bytes_equal": true
+    },
+    {
+      "path": "tests/unit/test_action_distillation.py",
+      "id": "1mjHidioGcHzLVnM0_vaD6sETvc6MpvX6",
+      "bytes": 10474,
+      "bytes_equal": true
+    },
+    {
+      "path": "tests/unit/test_ava_patch_install.py",
+      "id": "1VvvJgSBtzjnGvIaNnjA1s9bEDAZJX_vC",
+      "bytes": 9717,
+      "bytes_equal": true
+    },
+    {
+      "path": "tests/unit/test_colab_source_files.py",
+      "id": "1vtHAibXsF_tZK9XSq76qKiquAsUT79u9",
+      "bytes": 5237,
+      "bytes_equal": true
+    },
+    {
+      "path": "tests/unit/test_compute_budget.py",
+      "id": "1jqjoqQoTXwky6Njlg0Mb8SAtDTn8Tmdn",
+      "bytes": 6867,
+      "bytes_equal": true
+    },
+    {
+      "path": "tests/unit/test_fullframes.py",
+      "id": "1MNPlTTMgDftuyx23MB7oiLl_BhDm2CuC",
+      "bytes": 10527,
+      "bytes_equal": true
+    },
+    {
+      "path": "tests/unit/test_hf_assets.py",
+      "id": "1BFVxoVG-NSK99GTsHnmR8KCRPggv1Fzv",
+      "bytes": 18030,
+      "bytes_equal": true
+    }
+  ]
+}

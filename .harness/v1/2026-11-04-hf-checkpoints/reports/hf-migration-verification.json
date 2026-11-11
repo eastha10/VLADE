@@ -1,0 +1,23 @@
+{
+  "registry_commit": "8602a89f326eb683dc45b79229de03966a371cba",
+  "assets": {
+    "prepared_d_seed42": {
+      "revision": "6d2542577647a9e291554524af4e1dd0928e9df6",
+      "files": 1,
+      "bytes": 11371123200,
+      "remote_hashes_verified": true
+    },
+    "ava_t0": {
+      "revision": "4c12bf032fdccbede71b0527f27528a8be4f90f6",
+      "files": 23,
+      "bytes": 15555626250,
+      "remote_hashes_verified": true
+    },
+    "ava_fft_step_1975": {
+      "revision": "c685b31d7593128ac2f45ff91cf4629e57ba266a",
+      "files": 29,
+      "bytes": 30691562124,
+      "remote_hashes_verified": true
+    }
+  }
+}

@@ -1,7 +1,7 @@
 # AVA FFT를 A100 8시간에 맞추는 실행 정책
 
 날짜: 2026-10-31 (한국 시간). 사용자가 A100 최대 8시간을 지정했습니다.
-정책: `configs/experiments/ava_fft_a100_8h.json`, 실행: `experiments/colab_02_ava_fft_and_fixed_cache.ipynb`.
+정책: `configs/experiments/ava_fft_a100_8h.json`, 실행: `experiments/colab_vlade.ipynb`.
 
 2026-11-11 보완: 새 연구 CLI는 설정의 max_steps와 8시간 상한을 사용하며 AVA FFT는
 [K4·detach2 학습](../environment/ava_sequence_training.md)으로 변경했습니다. 아래

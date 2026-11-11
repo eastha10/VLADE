@@ -1,5 +1,7 @@
 # LIBERO+ 전처리 코드와 AVA 실행 노트북
 
+현재 실행본은 [통합 노트북](../../experiments/colab_vlade.ipynb)이며 `PROFILE`은 `ava_suite / prepare_one_episode / ava_one_step`입니다. 설치·실행 셀은 [연구 실행 안내](research_runs.md)를 따릅니다. 아래의 과거 번호·셀 이름은 이전 실행 기록과 구분하십시오.
+
 ## 전처리 진입점
 
 `scripts/data/prepare_episode_data.py`가 `vlade.data.episode_data.main()`을 호출합니다.
@@ -78,4 +80,4 @@ HF 저장소, 내장 소스와 resume 식별자는 첨부본 그대로이며 이
 `RUN_EVALUATION=False`입니다. 실행 전 사용할 입력과 실행 설정을 확인하십시오.
 이 반영 작업에서 Colab 학습·GPU·rollout을 실행하지 않았습니다.
 
-최신 실행 노트북은 `experiments/colab_ava_fft_suite_balanced_cu.ipynb`입니다. 전달본은 참조용으로 보존하며 최신 Git·HF 입력 계약을 사용하는 실행본을 덮어쓰지 않습니다. 전달본에는 과거 저장소·Drive 경로·실행 설정이 있으므로 그대로 새 런타임의 기본 입력으로 사용하지 마십시오. 새 OFT 및 단일 Episode AVA 점검 노트북은 Git 소스와 검증된 HF 입력을 사용합니다. 단일 Episode 출력은 HF 원본 출처와 canonical identity를 검사한 현재 실행 출력으로만 학습에 연결합니다.
+최신 실행 노트북은 `experiments/colab_vlade.ipynb`입니다. 전달본은 참조용으로 보존하며 최신 Git·HF 입력 계약을 사용하는 실행본을 덮어쓰지 않습니다. 전달본에는 과거 저장소·Drive 경로·실행 설정이 있으므로 그대로 새 런타임의 기본 입력으로 사용하지 마십시오. 새 OFT 및 단일 Episode AVA 점검 노트북은 Git 소스와 검증된 HF 입력을 사용합니다. 단일 Episode 출력은 HF 원본 출처와 canonical identity를 검사한 현재 실행 출력으로만 학습에 연결합니다.

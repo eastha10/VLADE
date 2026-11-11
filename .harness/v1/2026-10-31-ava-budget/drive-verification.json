@@ -1,0 +1,84 @@
+{
+  "date": "2026-10-31",
+  "files": [
+    {
+      "path": "src/vlade/training/compute_budget.py",
+      "matched": true
+    },
+    {
+      "path": "configs/experiments/ava_fft_a100_8h.json",
+      "matched": true
+    },
+    {
+      "path": "docs/decisions/0004-ava-a100-budget.md",
+      "matched": true
+    },
+    {
+      "path": "tests/unit/test_compute_budget.py",
+      "matched": true
+    },
+    {
+      "path": "src/vlade/training/fft.py",
+      "matched": true
+    },
+    {
+      "path": "src/vlade/training/run_control.py",
+      "matched": true
+    },
+    {
+      "path": "src/vlade/utils/colab_notebooks.py",
+      "matched": true
+    },
+    {
+      "path": "README.md",
+      "matched": true
+    },
+    {
+      "path": "docs/environment/colab_kanban_handoff.md",
+      "matched": true
+    },
+    {
+      "path": "docs/environment/libero_plus_fft_colab.md",
+      "matched": true
+    },
+    {
+      "path": "tests/unit/test_colab_pipeline.py",
+      "matched": true
+    },
+    {
+      "path": "experiments/manifests/colab_source.json",
+      "matched": true
+    },
+    {
+      "path": "experiments/colab_01_download_data_weights.ipynb",
+      "matched": true
+    },
+    {
+      "path": "experiments/colab_02_ava_fft_and_fixed_cache.ipynb",
+      "matched": true
+    },
+    {
+      "path": "experiments/colab_03_qwen_task_only.ipynb",
+      "matched": true
+    }
+  ],
+  "notebooks": [
+    {
+      "path": "experiments/colab_01_download_data_weights.ipynb",
+      "digestMatches": true,
+      "userCellRetained": true
+    },
+    {
+      "path": "experiments/colab_02_ava_fft_and_fixed_cache.ipynb",
+      "digestMatches": true,
+      "userCellRetained": null
+    },
+    {
+      "path": "experiments/colab_03_qwen_task_only.ipynb",
+      "digestMatches": true,
+      "userCellRetained": null
+    }
+  ],
+  "manifest_sha256": "7ea7563ad6eb9837f52d70b9fba2623ec922c7e25caab3bac08e3d29473aeb45",
+  "scope": "15 selected formal files; unchanged Drive files and user notebook outputs preserved"
+}

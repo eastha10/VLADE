@@ -1,0 +1,62 @@
+[
+  {
+    "path": "experiments/colab_01_download_data_weights.ipynb",
+    "id": "18ebTvNOxtQ5rnaKMcwlImQlsRpRHMyhg",
+    "sha256": "ce78e78f5a96b5065a51ce66f18034e6ce65dcdce41626d1b6ede8cd76e2ce39"
+  },
+  {
+    "path": "docs/environment/hugging_face_checkpoints.md",
+    "id": "1nlSwBJrBd0N_VoDf1Z3_yZvBoDAcIUyH",
+    "sha256": "81c245ba39a71cf8d78ef4336dd51bc9091fd71113b65ff1df5a0054ef1c6230"
+  },
+  {
+    "path": "src/vlade/storage/migrate.py",
+    "id": "1XYKnki5X17a_lu0wTut-_rxOhIcJNOPD",
+    "sha256": "2d78b2803348e472991b3d020b936597cbf533a801efd5ce901ce4dc6df7ef09"
+  },
+  {
+    "path": "experiments/colab_04_ava_paper_best.ipynb",
+    "id": "1ujuZs-jAd5jFOK61bk-CpSrZzdOA-svr",
+    "sha256": "b72bd4cdf818ec301a5129fb7512905f123e91dd63a1f33ddb9b21a2c03030b8"
+  },
+  {
+    "path": "experiments/colab_ava_fft_suite_balanced_cu.ipynb",
+    "id": "1MhqgAKh01iVj2oCGgiXX4DHInzmEu7zr",
+    "sha256": "b7cf9860f145ddc24c99c7db8566cfe85b38033335aaca7b08d982c3f7400db1"
+  },
+  {
+    "path": "src/vlade/utils/hf_notebooks.py",
+    "id": "1rrxYbocM5RakIClek2XTurmu9lH4tHML",
+    "sha256": "6b38408e608f4353dd144130734240836c79d30e3bc66c42d19c9c2f08eae648"
+  },
+  {
+    "path": "experiments/colab_02_ava_fft_and_fixed_cache.ipynb",
+    "id": "1AUmqOW3Menl2V5Veo9V22at5BlCa1K8b",
+    "sha256": "931c1ae769b230b79db037daab139f3d44d298470f14aaf3fcd9bd51572ce4e4"
+  },
+  {
+    "path": "experiments/manifests/colab_source.json",
+    "id": "1I9FHxnVvbB7teUmPCSOkZP2JhYSOTNI2",
+    "sha256": "9e773e7a4413eca35f9b2ad3a8e380a1c251743774c3b559e85c6975083d81f9"
+  },
+  {
+    "path": "tests/unit/test_hf_assets.py",
+    "id": "1BFVxoVG-NSK99GTsHnmR8KCRPggv1Fzv",
+    "sha256": "fddb4aa6586011141acb021060da9a890be4d2ca9559076283e675beafaa3980"
+  },
+  {
+    "path": "experiments/colab_05_qwen_action_distillation.ipynb",
+    "id": "16HUYnZZfc21TmVZWWMY0RGXaEH9Bs-Mu",
+    "sha256": "38fd15b28410abf8f39adfa38d8ddb7ca69cc8385ab2e877b3ea243d0ea392ed"
+  },
+  {
+    "path": "experiments/colab_03_qwen_task_only.ipynb",
+    "id": "1dC8f7xDzFbqoTsf-ZVdnRFBVVVU0DMuy",
+    "sha256": "e97eaad34a23363d7f89f7b92313f69f7b0e9e4cfe7b0a2e9f60b4fb662a8061"
+  },
+  {
+    "path": "src/vlade/storage/drive_checkpoint.py",
+    "id": "1Il_qpCR4yAfy59YrPfUsQrlG0IgZItf4",
+    "sha256": "bca4a1988010dc3c1490663e69658a1205d4785538d6e63441849f625a1187ff"
+  }
+]

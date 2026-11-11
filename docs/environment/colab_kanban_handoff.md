@@ -1,5 +1,7 @@
 # 27일 마감 업무 · Colab 실행·검토 인계
 
+현재 실행본은 [통합 노트북](../../experiments/colab_vlade.ipynb)이며 `PROFILE`은 `prepare_inputs / ava_fft / oft_fft / qwen_task`입니다. 설치·실행 셀은 [연구 실행 안내](research_runs.md)를 따릅니다. 아래의 과거 번호·셀 이름은 이전 실행 기록과 구분하십시오.
+
 현재 유지 관리되는 Colab의 설치·설정·실행은 [연구 실행 안내](research_runs.md)를 우선합니다. 아래의 이전 셀 이름은 당시 흐름의 설명이며 현재 실행 셀과 구분합니다.
 
 > 2026-11-04 이후 로컬/Git 노트북의 실행 기준은 [Git 소스·HF 입력 안내](hf_inputs_and_git_source.md)입니다. 아래 Drive 기반 절차·실행 기록은 기존 버전의 맥락입니다. 진행 중인 세션은 그대로 유지하며 Drive 배포는 별도 명령 후 수행합니다.
@@ -31,10 +33,10 @@
 | `scripts/train/` | 학습 실행·CPU smoke·실제 checkpoint 재로딩 검사 명령 |
 | `scripts/prepare/generate_colab_notebooks.py` | 인자 없이 노트북과 source manifest를 갱신하는 명령 |
 | `src/vlade/utils/colab_notebooks.py` | 위 노트북 생성 명령의 실제 구현 |
-| `experiments/colab_01_download_data_weights.ipynb` | Drive 데이터·AVA 가중치 준비·전처리 |
-| `experiments/colab_02_ava_fft_and_fixed_cache.ipynb` | AVA FFT·파일럿·T1 선정·cache |
-| `experiments/colab_03_qwen_task_only.ipynb` | Qwen 가중치·파일럿·overfit·Task-only |
-| `experiments/colab_04_openvla_oft_fft.ipynb` | OpenVLA-OFT 독립 환경 FFT·저장/재로딩 |
+| `experiments/colab_vlade.ipynb` | Drive 데이터·AVA 가중치 준비·전처리 |
+| `experiments/colab_vlade.ipynb` | AVA FFT·파일럿·T1 선정·cache |
+| `experiments/colab_vlade.ipynb` | Qwen 가중치·파일럿·overfit·Task-only |
+| `experiments/colab_vlade.ipynb` | OpenVLA-OFT 독립 환경 FFT·저장/재로딩 |
 | `experiments/manifests/colab_source.json` | 사용할 파일 목록과 파일별 SHA256·source revision |
 | `experiments/baselines/`, 원본 source manifests | 원본 비교 조건과 소스 이양 기록 |
 | `configs/` | 모델·학습 조건·고정 revision |
@@ -106,7 +108,7 @@ Teacher/Student는 공통 seed 기반 episode shuffle을 사용하고 episode �
    준비합니다. GitHub HEAD만 clone한 사본에는 미커밋 구현이 빠질 수 있으므로 실제 작업 파일과
    그 파일에서 생성한 manifest를 함께 사용하십시오.
 2. 이 파일 트리를 Drive의 `/content/drive/MyDrive/colab/VLADE`에 배치하고 `experiments/`의
-   `colab_01_download_data_weights.ipynb`를 Colab에서 엽니다. 모든 노트북 모두 `ROOT`와
+   `colab_vlade.ipynb`를 Colab에서 엽니다. 모든 노트북 모두 `ROOT`와
    `PROJECT_ROOT=ROOT`를 같은 실제 저장소 루트로 지정합니다. 시작 셀의 manifest·파일 SHA 검증이
    통과하면 필요한 일반 파일이 `/content`의 실행 디렉터리로 복사됩니다.
 3. 공식 LIBERO+ `.z01/.z02/.zip` 세 part와 공개 AVA/OFT 전체 bundle을 Drive에 받고,
@@ -116,7 +118,7 @@ Teacher/Student는 공통 seed 기반 episode shuffle을 사용하고 episode �
    raw state의 첫 6+마지막 2차원 proprio, 상대 action 6차원과 gripper 규약을 사용합니다.
    exact action+state group을 canonical manifest와 대조해 split을 적용하고 train 전체 timestep만으로
    q01/q99를 재검산합니다. Query JPEG/PNG payload와 숫자 trajectory의 해시를 저장합니다.
-5. A100에서 `colab_02_ava_fft_and_fixed_cache.ipynb`를 실행합니다. Python 3.11·AVA
+5. A100에서 `colab_vlade.ipynb`를 실행합니다. Python 3.11·AVA
    Transformers fork를 별도로 설치합니다. 실제 1-step backward/save/reload를 먼저
    확인한 뒤 실제 query 수·설정 epoch에 맞는 별도 실험을 실행합니다. 본 학습 플래그는
    기본 False입니다. dtype BF16, batch 1, 누적 8,
@@ -128,7 +130,7 @@ Teacher/Student는 공통 seed 기반 episode shuffle을 사용하고 episode �
    생성합니다. 기본은 action-only이며 `SAVE_HIDDEN=True`는 layer -2 `[56,D]` 저장입니다.
    두 모드는 별도 경로를 사용합니다. 최대 3개 고르게 떨어진 episode의 전체 query를 재실행
    비교합니다. hidden JSON의 실제 용량을 먼저 측정하십시오.
-8. 별도 환경에서 `colab_03_qwen_task_only.ipynb`를 실행합니다. 실제 Qwen 가중치는
+8. 별도 환경에서 `colab_vlade.ipynb`를 실행합니다. 실제 Qwen 가중치는
    이 노트북에서 별도 다운로드합니다. 1-step·재로딩, 1-episode 50-step overfit를
    확인한 다음 동일 split·초기 revision·seed와 실제 query/epoch budget의 BC를 실행합니다.
    Overfit loss 초기/마지막 5개 중앙값 비율이 기본 0.8 이하여야 본 학습 검사를 통과합니다.

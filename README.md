@@ -1,6 +1,6 @@
 # VLADE
 
-현재 Colab 실행은 [설정 기반 연구 명령](docs/environment/research_runs.md)을 사용합니다. 훈련 step·평가 rollout 수는 `configs/research/`에서 제어합니다.
+현재 Colab 실행은 단일 [colab_vlade.ipynb](experiments/colab_vlade.ipynb)에서 작업을 선택하며, [설정 기반 연구 명령](docs/environment/research_runs.md)을 사용합니다. 훈련 step·평가 rollout 수는 `configs/research/`에서 제어합니다.
 
 새 AVA FFT·Suite-balanced는 [연속 K4 시퀀스 학습](docs/environment/ava_sequence_training.md)을 사용합니다.
 훈련은 시퀀스 시작에, 추론은 Episode 시작에 상태를 초기화합니다. 기존 전처리본과 Episode 분할은 보존합니다.
@@ -13,7 +13,7 @@
 
 원본의 모든 프레임을 별도 공개 HF 데이터셋으로 보존하는 CPU 재처리는
 [전체 프레임 데이터 안내](docs/environment/libero_plus_fullframes.md)를 참고하십시오.
-Colab 01 맨 위의 전용 셀을 사용하며 기존 비공개 자료·학습 기본값은 유지합니다.
+통합 노트북의 `PROFILE='fullframes'`를 선택하며 기존 비공개 자료·학습 기본값은 유지합니다.
 
 **Vision-Language-Action Distillation for Edge Deployment**
 
@@ -47,25 +47,24 @@ A100 단일 추론은 통과했으며, 실제 benchmark 평가 결과는 아직 
 FFT 실행 방법과 AVA temporal 학습의 조건은
 [`docs/environment/libero_plus_fft_colab.md`](docs/environment/libero_plus_fft_colab.md)에
 정리했습니다.
-현재 `colab_02`는 설정으로 max_steps와 총 8시간 예산을 제어합니다. K4 파일럿에서 실제
+통합 노트북의 `ava_fft`는 설정으로 max_steps와 총 8시간 예산을 제어합니다. K4 파일럿에서 실제
 속도·메모리를 먼저 확인해야 합니다. 기존 1 epoch 예산 추정은 과거 단일 query 정책입니다.
 FFT의 LR·전체 파라미터 학습은 논문 LoRA 설정과 다릅니다.
 정책과 차이는 [예산 결정](docs/decisions/0004-ava-a100-budget.md)에 있습니다.
 
-별도 [colab_04_ava_paper_best.ipynb](experiments/colab_04_ava_paper_best.ipynb)는 논문 v4
+통합 노트북의 `ava_paper` 프로필은 논문 v4
 Appendix D.1의 최고 보고 설정(사전학습 OpenVLA 초기화·100,000 step·batch 256)을 준비합니다.
 rank 32 LoRA·K=4/2-frame TBPTT·attention 정규화 경로를 별도로 구현했습니다.
 다운로드/설치/파일럿/학습은 기본 미실행이며 실제 GPU·LIBERO(+) 성능은 미검증입니다.
 LIBERO+ 데이터와 세부 구현 차이는 [04 실행 안내](docs/environment/ava_paper_best_colab.md)에 기록합니다.
 
-Colab A100에서 데이터셋 없이 두 공개 체크포인트의 단일 액션 추론을 점검할
-노트북은 [`experiments/colab_inference_smoke.ipynb`](experiments/colab_inference_smoke.ipynb)에
-보관합니다. 2026-10-04에 A100에서 두 모델 모두 유한한 8×7 액션 생성을
+단일 액션 추론은 [통합 노트북](experiments/colab_vlade.ipynb)의 `inference_ava`에서 실행합니다.
+2026-10-04에는 당시 A100 단일 추론 검사에서 AVA/OFT 두 모델 모두 유한한 8×7 액션 생성을
 통과했습니다. 실행 조건과 결과 JSON은 `experiments/runs/inference_smoke/`에
 보관했으며, Colab 런타임 종료와 활성 세션 없음까지 확인했습니다. 이 검사는
 LIBERO(+) 성공률이나 FFT 학습 검증을 포함하지 않습니다.
 
-별도 [colab05](experiments/colab_05_qwen_action_distillation.ipynb)는 02의 전체 T1 action cache를
+통합 노트북의 `qwen_kd` 프로필은 `cache_teacher`로 생성한 전체 T1 action cache를
 사용하는 Qwen 오프라인 액션 증류를 준비합니다. GT L1과 Teacher L1의 가중합, cache/원본 데이터
 대조, 저장·재개를 연결하며 실행 스위치는 모두 기본 False입니다.
 사용 순서는 [액션 증류 안내](docs/environment/qwen_action_distillation_colab.md)에 정리했습니다.
@@ -182,11 +181,20 @@ Teacher action/GT token/hidden-state 저장·로드와 provenance·episode 순�
 
 유지 관리되는 노트북은 Git 소스·HF 입력과 설정 기반 CLI를 사용합니다. [현재 실행 안내](docs/environment/research_runs.md)를 우선합니다.
 
-1. [LIBERO+·AVA 가중치 다운로드/검증·episode 전처리](experiments/colab_01_download_data_weights.ipynb)
-2. [AVA-VLA FFT·저장/재개·T1 선택·순차 cache](experiments/colab_02_ava_fft_and_fixed_cache.ipynb)
-3. [Qwen Task-only·실제 가중치 로딩·overfit·저장/재개](experiments/colab_03_qwen_task_only.ipynb)
-4. [OpenVLA-OFT 독립 환경 FFT·체크포인트 재로딩](experiments/colab_04_openvla_oft_fft.ipynb)
-5. [AVA A100 Canonical Train 1-Episode·1-step FFT·별도 프로세스 재로딩](experiments/colab_05_ava_a100_one_step_reload.ipynb)
+[통합 Colab 노트북](experiments/colab_vlade.ipynb) 하나에서 `PROFILE`을 선택합니다.
+
+| 작업 | PROFILE |
+|---|---|
+| HF 입력·단일 Episode·전체 프레임 준비 | `prepare_inputs`, `prepare_one_episode`, `fullframes` |
+| AVA FFT·Suite-balanced·논문 LoRA | `ava_fft`, `ava_suite`, `ava_paper` |
+| OFT FFT·AVA 한 step 재로딩 | `oft_fft`, `ava_one_step` |
+| Teacher 선택·순차 cache | `select_teacher`, `cache_teacher` |
+| Qwen Task-only·Action KD | `qwen_task`, `qwen_kd` |
+| LIBERO+·원본 LIBERO 평가·단일 추론 | `evaluate_*`, `inference_ava` |
+
+소스·인증 → 작업 선택 → 계획 확인 → 환경 설치 → 실행 순서입니다.
+설치·실행은 기본 False이며, 작업별 run group과 모델별 환경은 분리됩니다.
+Suite pilot4/main은 같은 실험 ID를 사용하고, 재개는 최초 run group을 명시합니다.
 
 Colab에서 사용하는 코드와 노트북은 아래 위치의 일반 파일을 정본으로 관리합니다.
 
@@ -194,7 +202,7 @@ Colab에서 사용하는 코드와 노트북은 아래 위치의 일반 파일�
 |---|---|
 | `src/vlade/data/`, `src/vlade/training/` | 다운로드·episode 데이터·FFT·cache·Student 학습의 실제 구현 |
 | `scripts/data/`, `scripts/train/` | 위 구현을 실행하는 명령과 checkpoint 재로딩 검사 |
-| `experiments/colab_01_*.ipynb`부터 `colab_05_*.ipynb` | 데이터 준비·모델별 학습·재로딩 점검 노트북 |
+| `experiments/colab_vlade.ipynb` | 데이터 준비·모델별 학습·재로딩 점검 노트북 |
 | `configs/` | 모델·데이터·학습 조건과 고정 revision |
 | `experiments/baselines/`, `experiments/manifests/` | 비교 기준과 원본 소스 기록, Colab Git 소스 배포 설정 |
 | `docs/`, 작업별 `.harness/v1/.../checks/` | 실행 안내와 에이전트 검증 |
@@ -240,8 +248,8 @@ normalization을 그대로 사용합니다. A100 실측값은 Colab에서 실제
 데이터·가중치 입력은 `hfasset://키`를 사용하고, `src/vlade/storage/`가 HF
 레지스트리의 고정 commit과 SHA256을 확인하여 로컬 캐시에 준비합니다. 학습 진입점은 HF 키 또는 검증된 HF 캐시만 외부 입력으로 받습니다. 로컬·Colab·GitHub는
 같은 참조 설정을 사용합니다. `configs/storage/hf_assets.lock.json`과
-`scripts/data/hf_assets.py`가 입력 버전과 준비를 관리하고, `migrate_hf_assets.py`는
-기존 Drive 자료를 조직 저장소에 이관합니다. Colab 01의 원래 다운로드·전처리 기능은
-접힌 구역에 보존합니다. 새 Colab 실험 출력은 `/content/vlade_runs`에 저장하고 봉인된
+`scripts/data/hf_assets.py`가 입력 버전과 준비를 관리합니다. 기존 Drive 자료의 승인된 이관은
+`migrate_hf_assets.py`로 수행합니다. 통합 노트북은 고정 HF 입력을 사용하며 현재 실행 출력은
+기본 `/content/vlade_work/runs`에 저장하고 봉인된
 중간·best·final checkpoint를 HF에 전송합니다. 원본 Drive 자료는 자동 삭제하지 않습니다.
 자세한 인증·이관·재개 방법은 [HF 안내](docs/environment/hugging_face_checkpoints.md)를 참조하십시오.

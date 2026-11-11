@@ -1,0 +1,57 @@
+[
+  {
+    "path": "experiments/manifests/colab_source.json",
+    "id": "1I9FHxnVvbB7teUmPCSOkZP2JhYSOTNI2",
+    "sha256": "6f858250481448b6bcecc6a6012c671aef11bfb459f50be1d1fdcfac6328ea79"
+  },
+  {
+    "path": "experiments/colab_02_ava_fft_and_fixed_cache.ipynb",
+    "id": "1AUmqOW3Menl2V5Veo9V22at5BlCa1K8b",
+    "sha256": "ed291251d2cb0a74ad82f4bc150a2525bcc7d9dd1aed2f04f30d1612219a24fa"
+  },
+  {
+    "path": "experiments/colab_03_qwen_task_only.ipynb",
+    "id": "1dC8f7xDzFbqoTsf-ZVdnRFBVVVU0DMuy",
+    "sha256": "2d5adaa9d3157bbf1a363997152cd939e5730fcb4b1fbc87a9796210acca189f"
+  },
+  {
+    "path": "src/vlade/utils/hf_notebooks.py",
+    "id": "1rrxYbocM5RakIClek2XTurmu9lH4tHML",
+    "sha256": "3f3cdce5fe7c2b08decf70914de2b7cde8a7a9c535797588494ad7a1dc8abfda"
+  },
+  {
+    "path": "experiments/colab_05_qwen_action_distillation.ipynb",
+    "id": "16HUYnZZfc21TmVZWWMY0RGXaEH9Bs-Mu",
+    "sha256": "458ac2b053591763750fb8c01322872a521fcad66977a409a6d6ed94dcc9d051"
+  },
+  {
+    "path": "experiments/colab_04_ava_paper_best.ipynb",
+    "id": "1ujuZs-jAd5jFOK61bk-CpSrZzdOA-svr",
+    "sha256": "726a4e050fa6e1cf0c00ff8a2d393f76d342b3067fe690aec3c6b6ec3d98464c"
+  },
+  {
+    "path": "tests/unit/test_hf_assets.py",
+    "id": "1BFVxoVG-NSK99GTsHnmR8KCRPggv1Fzv",
+    "sha256": "619e72f7d0528a5e251e0eb919512a0078485e0841b18e3bff75595bface768e"
+  },
+  {
+    "path": "experiments/colab_ava_fft_suite_balanced_cu.ipynb",
+    "id": "1MhqgAKh01iVj2oCGgiXX4DHInzmEu7zr",
+    "sha256": "23b1889222be2a04133c539cb38b62f06a7b493eba20586258fa639d74edf7af"
+  },
+  {
+    "path": "src/vlade/storage/migrate.py",
+    "id": "1XYKnki5X17a_lu0wTut-_rxOhIcJNOPD",
+    "sha256": "998366c08347012311d8056bd735e01527d6fc499e892bbcd4bf79963b97c0e6"
+  },
+  {
+    "path": "configs/storage/hf_assets.lock.json",
+    "id": "1M3XomngIGEonExEvjNWR57OV6VHvoI-X",
+    "sha256": "739f0e12fcf608cd55b97d1d0b9823992858bab9d1e33b4dcaab6afd6ddce640"
+  },
+  {
+    "path": "experiments/colab_01_download_data_weights.ipynb",
+    "id": "18ebTvNOxtQ5rnaKMcwlImQlsRpRHMyhg",
+    "sha256": "f96b47472d05a850eee2b8407baae86f981dfb4cb801cdf5b3137b81dc316f82"
+  }
+]

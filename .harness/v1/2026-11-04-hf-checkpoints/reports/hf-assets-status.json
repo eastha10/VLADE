@@ -1,0 +1,23 @@
+{
+  "model_repo": "VLADE-konkuk/VLADE-checkpoints",
+  "model_private": true,
+  "model_commit": "4e2004da178adbc3c901aa3f932bc6349a0335b0",
+  "dataset_repo": "VLADE-konkuk/libero-plus-prepared",
+  "dataset_private": true,
+  "dataset_commit": "0f2007be85a89243d524c39ea57e6d7526775b26",
+  "assets": [
+    "openvla_oft_libero_10",
+    "openvla_oft_libero_goal",
+    "openvla_oft_libero_object",
+    "openvla_oft_libero_spatial",
+    "openvla_oft_t0",
+    "openvla_pretrained",
+    "qwen_initial",
+    "raw_rlds"
+  ],
+  "pending": [
+    "prepared_d_seed42",
+    "ava_t0",
+    "ava_fft_step_1975"
+  ]
+}

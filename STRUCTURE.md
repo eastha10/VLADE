@@ -14,7 +14,7 @@
 `src/vlade/data/tfrecord_frames.py`는 원본 CRC 검사와 연속 action query를,
 `src/vlade/data/fullframes.py`는 모든 프레임의 Parquet 변환·구간별 HF 게시·재시작을 담당합니다.
 `scripts/data/prepare_fullframes.py`가 실행 진입점이며
-`src/vlade/utils/fullframes_notebook.py`가 Colab 01의 단일 CPU 내보내기 셀을 관리합니다.
+통합 노트북의 `fullframes` 프로필이 `configs/research/fullframes.json`을 실행합니다.
 기존 희소 데이터 어댑터와 구분하며 `docs/environment/libero_plus_fullframes.md`에 사용법을 둡니다.
 
 ```text
@@ -43,13 +43,7 @@ vlade/
 │  ├─ baselines/            # 외부 원본별 실행 설정(원본 코드는 복제하지 않음)
 │  ├─ ablations/            # 구성요소별 제거·교체 실험
 │  ├─ manifests/            # 원본 소스 기록·colab_source.json의 Git 배포 설정
-│  ├─ colab_01_*.ipynb      # 데이터·AVA 가중치 준비
-│  ├─ colab_02_*.ipynb      # AVA FFT·T1 선택·cache
-│  ├─ colab_03_*.ipynb      # Qwen Task-only
-│  ├─ colab_04_*.ipynb      # AVA 논문 최고 보고 설정 · K=4 LoRA 준비
-│  ├─ colab_05_*.ipynb      # Qwen 고정 T1 액션 증류 · Task+Action KD
-│  ├─ colab_04_*.ipynb      # OpenVLA-OFT 독립 환경 FFT·재로딩
-│  ├─ colab_05_*.ipynb      # AVA canonical Train 1-Episode A100 1-step·재로딩
+│  ├─ colab_vlade.ipynb     # 모든 연구 작업의 통합 Colab 실행 클라이언트
 │  └─ runs/                 # 실제 실행별 기록
 ├─ tests/                   # 사용자 지정 연구 검사 경계 (에이전트 검증은 하네스)
 ├─ docs/                    # 의사결정·프로토콜·환경·논문 메모
@@ -177,7 +171,7 @@ vlade/
 
 ## Colab 실행 연결 (2026-10-28)
 
-- `experiments/colab_01_*.ipynb` → `colab_02_*.ipynb` / `colab_04_*.ipynb`: 공통 데이터 준비 후 AVA와 OFT를 독립 환경에서 실행합니다. `colab_03_*.ipynb`는 별도 Qwen Task-only 단계입니다.
+- `experiments/colab_vlade.ipynb`: PROFILE으로 데이터 준비·AVA/OFT·Qwen·cache·평가를 선택합니다. 모델별 실행 환경과 작업별 run group은 분리합니다.
 - `src/vlade/data/colab_assets.py`, `episode_data.py`: Drive 자료 준비·공통 episode split/query/정규화.
 - `scripts/data/prepare_single_canonical_episode.py`: 전체 전처리 없이 canonical Train 1-Episode smoke 입력 준비.
 - `src/vlade/data/canonical_split.py`, `canonical_normalization.py`: 확정 D/seed-42 manifest 검증·exact group 배정·Train 전용 통계.
@@ -201,7 +195,7 @@ HF에서 `/content/vlade_hf_assets`로 받고 현재 실행 출력은 `/content/
 - `src/vlade/training/debug_records.py`: 정확한 저장 checkpoint hash에 연결된 bounded 학습 debug 기록.
 - `src/vlade/utils/filesystem.py`: 같은 parent의 완료 staging을 덮어쓰기 없이 게시하고 일시적인 잠금만 제한 재시도.
 
-- `experiments/colab_ava_fft_suite_balanced_cu.ipynb`: 유지 관리되는 AVA Suite-balanced FFT 실행본.
+- `experiments/colab_vlade.ipynb`: 유지 관리되는 단일 실행본. `ava_suite`가 Suite-balanced FFT를 담당합니다.
 - `notebooks/references/colab_ava_fft_suite_balanced_supplied.ipynb`: PR의 전달본 원본 참조.
 - `notebooks/references/colab_ava_libero_plus_paired_rollout_hf.ipynb`: 첨부 LIBERO+ paired rollout 실행 소스.
 - `docs/environment/libero_plus_preprocessing_handoff.md`: 전처리 진입점·입력·첨부본 실행 설정 안내.
@@ -212,8 +206,8 @@ HF에서 `/content/vlade_hf_assets`로 받고 현재 실행 출력은 `/content/
 데이터·가중치 입력은 `hfasset://키`를 사용하고, `src/vlade/storage/`가 비공개 HF
 레지스트리의 고정 commit과 SHA256을 확인하여 로컬 캐시에 준비합니다. 로컬·Colab·GitHub는
 같은 참조 설정을 사용합니다. `configs/storage/hf_assets.lock.json`과
-`scripts/data/hf_assets.py`가 입력 버전과 준비를 관리하고, `migrate_hf_assets.py`는
-기존 Drive 자료를 조직 저장소에 이관합니다. Colab 01의 원래 다운로드·전처리 기능은
-접힌 구역에 보존합니다. 새 Colab 실험 출력은 `/content/vlade_runs`에 저장하고 봉인된
+`scripts/data/hf_assets.py`가 입력 버전과 준비를 관리합니다. 기존 Drive 자료의 승인된 이관은
+`migrate_hf_assets.py`로 수행합니다. 통합 노트북은 고정 HF 입력을 사용하며 현재 실행 출력은
+기본 `/content/vlade_work/runs`에 저장하고 봉인된
 중간·best·final checkpoint를 HF에 전송합니다. 원본 Drive 자료는 자동 삭제하지 않습니다.
 자세한 인증·이관·재개 방법은 [HF 안내](docs/environment/hugging_face_checkpoints.md)를 참조하십시오.

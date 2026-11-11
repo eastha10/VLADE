@@ -1,0 +1,48 @@
+{
+  "commit": "e9d30b7c4278670b6d580e991eafcd885c68ca51",
+  "files": 39,
+  "notebooks": [
+    {
+      "path": "experiments/colab_01_download_data_weights.ipynb",
+      "prior_cells_preserved": 15,
+      "archived_cells": 9,
+      "outputs_preserved": true
+    },
+    {
+      "path": "experiments/colab_02_ava_fft_and_fixed_cache.ipynb",
+      "prior_cells_preserved": 17,
+      "archived_cells": 0,
+      "outputs_preserved": true
+    },
+    {
+      "path": "experiments/colab_03_qwen_task_only.ipynb",
+      "prior_cells_preserved": 11,
+      "archived_cells": 0,
+      "outputs_preserved": true
+    },
+    {
+      "path": "experiments/colab_04_ava_paper_best.ipynb",
+      "prior_cells_preserved": 12,
+      "archived_cells": 0,
+      "outputs_preserved": true
+    },
+    {
+      "path": "experiments/colab_05_qwen_action_distillation.ipynb",
+      "prior_cells_preserved": 12,
+      "archived_cells": 0,
+      "outputs_preserved": true
+    },
+    {
+      "path": "experiments/colab_ava_fft_suite_balanced_cu.ipynb",
+      "prior_cells_preserved": 20,
+      "archived_cells": 1,
+      "outputs_preserved": true
+    },
+    {
+      "path": "experiments/colab_inference_smoke.ipynb",
+      "prior_cells_preserved": 10,
+      "archived_cells": 0,
+      "outputs_preserved": true
+    }
+  ]
+}

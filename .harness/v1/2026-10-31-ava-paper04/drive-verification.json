@@ -1,0 +1,91 @@
+{
+  "files": [
+    {
+      "path": "configs/experiments/ava_paper_best.json",
+      "matched": true
+    },
+    {
+      "path": "src/vlade/training/paper_ava.py",
+      "matched": true
+    },
+    {
+      "path": "src/vlade/utils/paper_notebook.py",
+      "matched": true
+    },
+    {
+      "path": "scripts/train/run_paper_ava.py",
+      "matched": true
+    },
+    {
+      "path": "docs/environment/ava_paper_best_colab.md",
+      "matched": true
+    },
+    {
+      "path": "tests/unit/test_paper_ava.py",
+      "matched": true
+    },
+    {
+      "path": "experiments/colab_04_ava_paper_best.ipynb",
+      "matched": true
+    },
+    {
+      "path": "README.md",
+      "matched": true
+    },
+    {
+      "path": "STRUCTURE.md",
+      "matched": true
+    },
+    {
+      "path": "src/vlade/utils/colab_notebooks.py",
+      "matched": true
+    },
+    {
+      "path": "tests/unit/test_colab_source_files.py",
+      "matched": true
+    },
+    {
+      "path": "experiments/manifests/colab_source.json",
+      "matched": true
+    },
+    {
+      "path": "experiments/colab_01_download_data_weights.ipynb",
+      "matched": true
+    },
+    {
+      "path": "experiments/colab_02_ava_fft_and_fixed_cache.ipynb",
+      "matched": true
+    },
+    {
+      "path": "experiments/colab_03_qwen_task_only.ipynb",
+      "matched": true
+    }
+  ],
+  "notebooks": [
+    {
+      "path": "experiments/colab_04_ava_paper_best.ipynb",
+      "digestMatches": true,
+      "userCellRetained": null,
+      "outputs": 0
+    },
+    {
+      "path": "experiments/colab_01_download_data_weights.ipynb",
+      "digestMatches": true,
+      "userCellRetained": true,
+      "outputs": 5
+    },
+    {
+      "path": "experiments/colab_02_ava_fft_and_fixed_cache.ipynb",
+      "digestMatches": true,
+      "userCellRetained": null,
+      "outputs": 0
+    },
+    {
+      "path": "experiments/colab_03_qwen_task_only.ipynb",
+      "digestMatches": true,
+      "userCellRetained": null,
+      "outputs": 0
+    }
+  ],
+  "manifest_sha256": "7ca1ef3a3662200a825e06a69a2583af75d3f053d7548e0fd24e25d5c70c072a"
+}

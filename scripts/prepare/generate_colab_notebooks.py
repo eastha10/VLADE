@@ -1,4 +1,4 @@
-"""Generate the Colab pipeline notebooks and their ordinary-source manifest."""
+"""Generate the unified Colab research notebook and its Git-source manifest."""
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))

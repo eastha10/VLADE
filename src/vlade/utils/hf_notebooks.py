@@ -1,12 +1,11 @@
-"""Compatibility names for regenerating the maintained HF/Git notebook clients."""
-
+"""Compatibility entry points that regenerate the single maintained notebook."""
 from pathlib import Path
-from vlade.utils.colab_notebooks import PROFILES, write_thin_notebook
+from vlade.utils.colab_notebooks import NOTEBOOK_NAME, write_unified_notebook
 
 
 def apply_hf_storage(path: Path, root: Path) -> None:
-    profile, title = PROFILES[path.name]
-    write_thin_notebook(path, profile, title)
+    """Refresh the unified notebook without recreating retired notebook paths."""
+    write_unified_notebook(root / "experiments" / NOTEBOOK_NAME)
 
 
 def refresh_suite_sources(path: Path, root: Path, digest=None) -> None:

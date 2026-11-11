@@ -1,6 +1,6 @@
 # 설정으로 실행하는 연구 절차
 
-유지 관리되는 Colab 노트북은 Git commit을 확정하고 HF 인증·설정·계획 확인·설치·실행만 호출합니다.
+유지 관리되는 Colab 실행본은 [colab_vlade.ipynb](../../experiments/colab_vlade.ipynb) 하나입니다. 노트북은 Git commit을 확정하고 HF 인증·설정·계획 확인·설치·실행만 호출합니다.
 모델, 데이터 처리, 학습, cache, rollout 로직은 프로젝트 Python 모듈에 있습니다.
 `third_party/`는 원본 출처를 확인하는 보관본이며 이 실행 경로에는 필요하지 않습니다.
 PyTorch·timm·Transformers·시뮬레이터 등 설치된 실행 의존성은 필요합니다.
@@ -10,6 +10,22 @@ AVA FFT·Suite-balanced·논문 학습의 연속 구간, 시퀀스별 훈련 상
 8 sequences / 32 query 예측이며, 기존 단일 query 실행과 노출량이 다릅니다.
 
 ## Colab
+
+기존 개별 실행 노트북 10개를 통합했습니다. 소스·인증 셀을 실행한 다음
+설정 셀의 `PROFILE`을 선택하고 계획·설치·실행 셀을 사용합니다.
+18개 `configs/research/*.json`을 모두 선택할 수 있습니다. 모든 작업을 차례로 자동 실행하지 않습니다.
+
+`EXPERIMENT_ID`는 셀 재실행 시 유지되며 기본 run group은 `<EXPERIMENT_ID>-<PROFILE>`입니다.
+따라서 같은 task 종류를 사용하는 데이터 준비 작업이나 Student 실험도 출력이 섞이지 않습니다.
+Suite pilot4/main·논문 pilot/main은 같은 `EXPERIMENT_ID`를 유지합니다.
+새 실험은 새 ID, 재개는 `RUN_GROUP_OVERRIDE`에 최초 run group을 지정합니다.
+`OVERRIDES`에는 실제 변경할 설정만 넣습니다. 변경 후 계획 셀을 실행하지 않으면 setup/run은 거부합니다.
+실행할 준비가 됐을 때만 `RUN_SETUP`·`RUN_EXPERIMENT`를 True로 바꿉니다.
+
+단일 Episode 진단은 `prepare_one_episode` 이후 같은 WORKSPACE의 `ava_one_step`을 실행합니다.
+`fullframes`는 별도 공개 게시 작업입니다. 이미 완료된 데이터 이용에는 재실행이 필요 없습니다.
+Teacher 선택·cache는 `select_teacher`·`cache_teacher`를 선택합니다. 실제 검증 보고서와 고정 T1이 필요합니다.
+
 
 노트북의 소스·인증 셀을 실행한 뒤 다음처럼 사용합니다. `WORKSPACE`는 현재 런타임 SSD입니다.
 `RUN_GROUP`은 새 실험마다 고유하게 정하고 재개 시 같은 값을 사용합니다.
@@ -26,6 +42,78 @@ job(CONFIG, action='run', workspace=WORKSPACE, overrides=OVERRIDES)
 `plan`은 설치·다운로드·실험을 시작하지 않습니다. 배포된 노트북의 설치·실행 스위치는 기본 False입니다.
 실험 실행 전 코드·설정은 Git에 commit되어야 하며, 실행 중 소스를 교체하지 않습니다.
 로컬의 미커밋 구현 검증과 정식 연구 실행을 구분합니다. 이 작업에서 commit/push를 자동 수행하지 않습니다.
+
+CLI는 저장소 루트에서 같은 설정을 사용합니다.
+
+```bash
+python -m scripts.research.run --config configs/research/ava_suite.json --workspace /content/vlade_work --action plan
+```
+
+설치할 때는 `--action setup`, 실행할 때는 `--action run`을 사용합니다.
+새 실험 run group은 설정 또는 `--set`으로 지정합니다. 노트북 생성은
+`python -m scripts.prepare.generate_colab_notebooks`이며 개별 노트북을 재생성하지 않습니다.
+참조용 `notebooks/references/`의 사용자 전달본은 실행본과 별도로 보존합니다.
+
+## AVA K4를 4,000스텝 학습하는 방법
+
+### Suite-balanced: 파일럿 후 본 학습
+
+처음에는 "작업 선택과 설정" 셀의 해당 값을 아래처럼 바꿉니다.
+소스·HF 인증 이후 설정 → 계획 확인 → 환경 설치 → 실행 셀 순서로 실행합니다.
+
+```python
+PROFILE = "ava_suite"
+OVERRIDES = {}  # 기본 pilot4: optimizer 4 step
+RUN_SETUP = True
+RUN_EXPERIMENT = True
+```
+
+pilot4가 완료되면 같은 SOURCE_COMMIT·WORKSPACE·EXPERIMENT_ID·RUN_GROUP_OVERRIDE를
+유지한 채, 같은 설정 셀의 값을 아래처럼 바꿉니다.
+설정 → 계획 확인 → 실행 셀 순서로 실행합니다. 설치가 끝났으므로 setup은 생략합니다.
+
+```python
+PROFILE = "ava_suite"
+OVERRIDES = {
+    "settings.phase": "main",
+    "train.max_steps": 4000,
+    "train.warmup_steps": 400,
+    "train.save_steps": 250,
+    "train.eval_steps": 100,
+}
+RUN_SETUP = False
+RUN_EXPERIMENT = True
+```
+
+warmup 400·저장 주기 250·검증 주기 100은 이 실행 예시의 값입니다.
+파일럿 4 step과 본 학습 4,000 step은 별도 실행입니다.
+main은 초기 T0에서 시작하므로 pilot checkpoint를 resume에 넣지 않습니다.
+기존 1,000-step main을 시작한 동일 run group의 목표만 4,000으로 변경하지 마십시오.
+그 경우 새 EXPERIMENT_ID로 파일럿부터 실행합니다.
+
+### 일반 AVA FFT를 사용하는 경우
+
+새 실험 ID에서 아래 값을 설정하고 계획 → 환경 설치(필요할 때) → 실행합니다.
+일반 FFT는 Suite의 pilot 보고서를 요구하지 않으므로 최소 GPU 파일럿을 먼저 별도 실행으로 확인하십시오.
+
+```python
+PROFILE = "ava_fft"
+OVERRIDES = {
+    "train.max_steps": 4000,
+    "train.warmup_steps": 400,
+    "train.save_steps": 250,
+    "train.eval_steps": 100,
+}
+RUN_SETUP = False  # 아직 환경이 없으면 True
+RUN_EXPERIMENT = True
+```
+
+K4·batch 1·누적 8은 기존 기본값을 사용합니다. 4,000은 optimizer step 수이며,
+이 설정에서 총 32,000개 시퀀스·128,000개 query 예측에 해당합니다.
+복원 추출이므로 고유 데이터 수나 epoch 수를 뜻하지 않습니다.
+기본 세션 상한은 설치 포함 8시간입니다. 4,000 step을 그 시간 안에 완료한다는 보장은 없습니다.
+예산 종료 시 final로 기록하지 않으며, 같은 4,000-step 목표·원래 설정·run group으로
+검증된 Hub checkpoint에서 재개합니다. 기존 settings 비교·Suite pilot 복구 제약도 유지합니다.
 
 ## 설정 선택
 

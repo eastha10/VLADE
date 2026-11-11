@@ -1,5 +1,7 @@
 # Git 소스 · Hugging Face 입력 실행 방식
 
+현재 실행본은 [통합 노트북](../../experiments/colab_vlade.ipynb)이며 `PROFILE`은 `prepare_inputs`입니다. 설치·실행 셀은 [연구 실행 안내](research_runs.md)를 따릅니다. 아래의 과거 번호·셀 이름은 이전 실행 기록과 구분하십시오.
+
 2026-11-04 로컬/Git 개편 기준입니다. 기존 Drive 노트북이나 실행 중인 Colab은 자동 갱신하지 않습니다. Drive 배포는 사용자의 별도 명령을 받은 뒤 수행합니다.
 
 ## 소스 배포

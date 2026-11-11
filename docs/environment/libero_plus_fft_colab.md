@@ -1,5 +1,7 @@
 # LIBERO+ FFT 실행 경로 (Colab A100)
 
+현재 실행본은 [통합 노트북](../../experiments/colab_vlade.ipynb)이며 `PROFILE`은 `ava_fft / oft_fft / ava_one_step`입니다. 설치·실행 셀은 [연구 실행 안내](research_runs.md)를 따릅니다. 아래의 과거 번호·셀 이름은 이전 실행 기록과 구분하십시오.
+
 현재 유지 관리되는 Colab의 설치·설정·실행은 [연구 실행 안내](research_runs.md)를 우선합니다. 아래의 이전 셀 이름은 당시 흐름의 설명이며 현재 실행 셀과 구분합니다.
 
 2026-11-11부터 AVA FFT는 [K4 시퀀스 학습](ava_sequence_training.md)을 사용합니다.
@@ -76,11 +78,11 @@ Colab에서 공식 분할 ZIP 3개를 직접 받은 다음
 실행 전 압축 해제된 TFDS의 `dataset_info.json`과 shards가 있는지 확인하십시오.
 원본 평가 assets는 학습 입력이 아니므로 이 단계에서 설치할 필요가 없습니다.
 
-`colab_01_download_data_weights.ipynb`는 canonical manifest로 각 action+state trajectory
+`colab_vlade.ipynb`는 canonical manifest로 각 action+state trajectory
 group을 대조한 뒤에만 prepared dataset을 게시합니다. 임의 해시 재분할은 하지 않으며,
 확정 Train 전체 transition에서 재계산한 통계가 저장된 canonical normalization과 다르면
-실패합니다. `colab_02_ava_fft_and_fixed_cache.ipynb`와
-`colab_04_openvla_oft_fft.ipynb`는 서로 독립된 Transformers 환경을 사용합니다.
+실패합니다. `colab_vlade.ipynb`와
+`colab_vlade.ipynb`는 서로 독립된 Transformers 환경을 사용합니다.
 
 ## 실행
 
@@ -200,7 +202,7 @@ TensorFlow RNG와 validation 샘플 순서는 복원하지 않습니다. `val_l1
 
 ## AVA A100 1-step·재로딩 전용 경로
 
-`experiments/colab_05_ava_a100_one_step_reload.ipynb`는 현재 Drive 배치
+`experiments/colab_vlade.ipynb`는 현재 Drive 배치
 (`/content/real_drive/MyDrive/VLADE`)에서 다음 셀을 순서대로 실행하도록 고정합니다.
 
 1. manifest로 일반 소스 파일을 검증해 `/content`에 stage합니다.
