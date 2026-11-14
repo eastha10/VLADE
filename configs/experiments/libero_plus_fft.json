@@ -80,7 +80,11 @@
   "fft_runs": {
     "ava_vla": {
       "checkpoint": "hfasset://ava_t0",
-      "output_dir": "artifacts/training/libero_plus_fft/ava_vla"
+      "output_dir": "artifacts/training/libero_plus_fft/ava_vla",
+      "sequence_length": 4,
+      "sequence_sampling": "episode_uniform",
+      "detach_every": 2,
+      "temporal_feature_layer": -2
     },
     "openvla_oft": {
       "checkpoint": "hfasset://openvla_oft_t0",

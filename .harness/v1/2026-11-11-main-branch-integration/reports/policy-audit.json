@@ -1,0 +1,16 @@
+{
+  "changed_python_files_compiled": [
+    "src/vlade/data/episode_data.py",
+    "src/vlade/training/prepared_fft_suite_balanced.py",
+    "src/vlade/training/colab_suite_fft.py",
+    "src/vlade/models/students/configuration_qwen_vla.py"
+  ],
+  "hf_boundary_and_current_policy_preserved": true,
+  "project_upstream_imports": 0,
+  "agent_tests_outside_harness": 0,
+  "frozen_v0_git_diff": [],
+  "submodule_gitlinks": [
+    "160000 commit 69ae5dfb90f4eb714259693bd2c222e0b3de6456\tthird_party/ava_vla",
+    "160000 commit e4287e94541f459edc4feabc4e181f537cd569a8\tthird_party/openvla_oft"
+  ]
+}

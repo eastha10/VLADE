@@ -1,0 +1,109 @@
+{
+  "verified": [
+    {
+      "path": "README.md",
+      "id": "1mMrtQjmBZ1T-aIcs0QMd10ZhrMi7-9pA",
+      "sha256": "ed07b053ae6adf41de894c6215f32a517f9764195fe610db582417206aea9632"
+    },
+    {
+      "path": "STRUCTURE.md",
+      "id": "17tSMF3m-0Zd7lZF1LzR43p_rVEI3sjbx",
+      "sha256": "298cda2a34b01b048bd1d12460e19c6fce85c841b9838b52f05a12fd4fbb5cb9"
+    },
+    {
+      "path": "src/vlade/training/student_task.py",
+      "id": "11vyxeRBusLjL_eaiBNEKHJBNFutgVgcx",
+      "sha256": "7328e06d7cef6bcc737c20638042106c80ce1196747792c46d9729db9e8d50d4"
+    },
+    {
+      "path": "src/vlade/training/run_control.py",
+      "id": "12Vge6J3qF23f2ggW2oeCQIFYIGGGQC3R",
+      "sha256": "e0408de966898ae091a437c18afeb952ee52fc8983f716d84d8173e3d6f57bbc"
+    },
+    {
+      "path": "src/vlade/utils/colab_notebooks.py",
+      "id": "1wZhBI_y8GnEIuoFfSRiwA8mHxCfDJcIM",
+      "sha256": "02963db7cabd44aab84f0eada043b909b875cf0d1bf8d7df6fb878a3336785e3"
+    },
+    {
+      "path": "scripts/prepare/generate_colab_notebooks.py",
+      "id": "1FwWN1Wef2kncKugDkLo6OMi6zU2Eio7m",
+      "sha256": "6373569fc3bea03b03cfd1735a816cb4eadaa61e46ee713044b622510a9cb897"
+    },
+    {
+      "path": "docs/environment/teacher_records_and_student.md",
+      "id": "1AkESzRJPbdAu6OH2Ip1f0P9tFyYV7oxT",
+      "sha256": "2a61e7843cae7294230f1bfd40c2651f01393a91e80d1f8493dce53cfeb905f5"
+    },
+    {
+      "path": "tests/unit/test_colab_source_files.py",
+      "id": "1vtHAibXsF_tZK9XSq76qKiquAsUT79u9",
+      "sha256": "4ca5b579a532d2a8c556c0cd130620e00a83807cc43602f5dd819c65947c5b98"
+    },
+    {
+      "path": "src/vlade/distillation/action.py",
+      "id": "1GBEMWs15wq4U9OH50BvFCuoMzBm8nPrX",
+      "sha256": "361a40c35fabbdb19ac992c49cabf4b87d8405a696181a1ab8995034996ec5fe"
+    },
+    {
+      "path": "src/vlade/training/cached_actions.py",
+      "id": "1Cpose9CUVrU7AcFxWzaUjZVK-Sy4-Z78",
+      "sha256": "4386b9c9061b62a05f43377fde3f73008b6e07082f0c8fb05dddf30bc6ac048d"
+    },
+    {
+      "path": "src/vlade/utils/kd_notebook.py",
+      "id": "1WzuxgH4s0P_jfC0bJcRs7VJrpa1YzcpP",
+      "sha256": "18c304c387b9caa1bdd8d3bb531266f8226799479277668b9fc36b02680d18ae"
+    },
+    {
+      "path": "scripts/train/run_student_kd.py",
+      "id": "10WR25QDrdK_MsBYEgHTUof-Nl1Da3zyi",
+      "sha256": "decb8b1ce7a99f36afa34669e2e34a784870538ad57cc06d2ee84e59abafdaf1"
+    },
+    {
+      "path": "configs/experiments/qwen_action_kd.json",
+      "id": "1OIQAatXEgcy43ylOB_4VYIPeCrx9clBf",
+      "sha256": "f2381de2e227aeec128c692c6a0dc08867da6d54d14dc956e202f0081694d440"
+    },
+    {
+      "path": "docs/environment/qwen_action_distillation_colab.md",
+      "id": "1tPgAo8yB53BZ20enTKyGqNPH-vyb7BqA",
+      "sha256": "e06e2d9d73c97e3a654f73d281b85ddd13470ec8e97c80d44edd64eb3351ec5e"
+    },
+    {
+      "path": "tests/unit/test_action_distillation.py",
+      "id": "1mjHidioGcHzLVnM0_vaD6sETvc6MpvX6",
+      "sha256": "5afa4bf8c91521fa8c434c18b978464784ea6a3904122eed54dccdc69aad4231"
+    },
+    {
+      "path": "experiments/colab_01_download_data_weights.ipynb",
+      "id": "18ebTvNOxtQ5rnaKMcwlImQlsRpRHMyhg",
+      "sha256": "ad17cdac834115fc0faf1d5fad2541407d459875f60f641bec9892dc8c68dcc1"
+    },
+    {
+      "path": "experiments/colab_02_ava_fft_and_fixed_cache.ipynb",
+      "id": "1AUmqOW3Menl2V5Veo9V22at5BlCa1K8b",
+      "sha256": "1fb30e142041acb8df71a5808d7d95acc56a4c922a6091743e993aec12731334"
+    },
+    {
+      "path": "experiments/colab_03_qwen_task_only.ipynb",
+      "id": "1dC8f7xDzFbqoTsf-ZVdnRFBVVVU0DMuy",
+      "sha256": "cd9d024c35927a2bb677d242144bf57e579a7475dd80d213246ea29940597d16"
+    },
+    {
+      "path": "experiments/colab_04_ava_paper_best.ipynb",
+      "id": "1ujuZs-jAd5jFOK61bk-CpSrZzdOA-svr",
+      "sha256": "542397951d98fcd2d26924bca1b37355d8fd18b990d321ed0fe92bb92612fe6f"
+    },
+    {
+      "path": "experiments/colab_05_qwen_action_distillation.ipynb",
+      "id": "16HUYnZZfc21TmVZWWMY0RGXaEH9Bs-Mu",
+      "sha256": "351cd609fd488bf0e09d828bdf2e2ad7177175848a0c499e9168c2a3b49074e0"
+    },
+    {
+      "path": "experiments/manifests/colab_source.json",
+      "id": "1I9FHxnVvbB7teUmPCSOkZP2JhYSOTNI2",
+      "sha256": "381e42f89a8607b327f85ddd289678521ac2b35952085e3b3f076cab75d37411"
+    }
+  ]
+}

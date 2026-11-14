@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "seed": 42,
+  "budget": {
+    "hours": 8,
+    "save_reserve_seconds": 300,
+    "release_colab_on_deadline": true
+  },
+  "task": "script",
+  "runtime": "data",
+  "run_group": "select-teacher-t1",
+  "entrypoint": "scripts/data/select_teacher.py",
+  "arguments": [
+    "--checkpoint",
+    "hfasset://ava_t1",
+    "--validation-report",
+    "{work}/teacher_validation_report.json",
+    "--reason",
+    "measured validation and original LIBERO comparison",
+    "--data",
+    "hfasset://prepared_d_seed42",
+    "--output",
+    "{work}/teacher_selection.json"
+  ],
+  "registry_revision": null
+}

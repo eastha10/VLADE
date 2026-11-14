@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "run_group": "ava-paper-seed42",
+  "seed": 42,
+  "budget": {
+    "hours": 8,
+    "save_reserve_seconds": 300,
+    "release_colab_on_deadline": true
+  },
+  "task": "paper",
+  "runtime": "ava",
+  "model": "ava_vla",
+  "base_config": "configs/experiments/ava_paper_best.json",
+  "train": {
+    "max_steps": 100000,
+    "warmup_steps": 10000,
+    "save_steps": 2000,
+    "learning_rate": 0.0005,
+    "sequence_sampling": "episode_uniform"
+  },
+  "resume": null,
+  "pilot": false,
+  "hub": {
+    "enabled": true,
+    "repo": "VLADE-konkuk/VLADE-checkpoints"
+  },
+  "registry_revision": null
+}

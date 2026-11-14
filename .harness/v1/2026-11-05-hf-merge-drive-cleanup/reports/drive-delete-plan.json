@@ -1,0 +1,149 @@
+[
+  {
+    "name": "data/raw/libero_plus_rlds",
+    "id": "1ZD-RtK9ulbp6Csx3-TVmvcUwwhdd5WdW",
+    "reason": "Official immutable ZIP files verified against Drive download manifest",
+    "hf_asset": "raw_rlds",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "data/processed/libero_plus_tfds",
+    "id": "1o92_i1SHyWOrRweRYfoMP6aCjISCgvG5",
+    "reason": "Single TFDS source subtree; metadata and complete full-frame export verified",
+    "hf_asset": "raw_rlds + fullframes_d_seed42",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "data/splits/prepared copy 1",
+    "id": "168mAerATy2pagFi-pIB98Fei23Tex82Z",
+    "reason": "Canonical prepared manifest and split bytes match the published TAR",
+    "hf_asset": "prepared_d_seed42",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "data/splits/prepared copy 2",
+    "id": "1SxBSR2fv-IR2832HnkKa_4kxf8Otn-cq",
+    "reason": "Canonical prepared manifest and split bytes match the published TAR",
+    "hf_asset": "prepared_d_seed42",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "data/splits/prepared copy 3/episodes",
+    "id": "13AS61YF2n8kVyE9qdCgdJCOcaOrL7TvU",
+    "reason": "Canonical prepared manifest and split bytes match; preserve adjacent suite_map.json",
+    "hf_asset": "prepared_d_seed42",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "data/splits/prepared copy 3/.checkpoints",
+    "id": "1MltNJVNJDdlKXEucSYzDOWqsiTM_KXeG",
+    "reason": "Empty preprocessing scratch folder",
+    "hf_asset": "prepared_d_seed42",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "data/splits/prepared copy 3/manifest.json",
+    "id": "1_JK5O0XCGX6YGe0XBjMj8eOQ8Mslmsu_",
+    "reason": "Exact canonical SHA256 verified against published identity",
+    "hf_asset": "prepared_d_seed42",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "data/splits/prepared copy 3/splits.json",
+    "id": "1llRTRMx3502novMT_SBWxMiHlLaTWLh7",
+    "reason": "Exact canonical SHA256 verified against published identity",
+    "hf_asset": "prepared_d_seed42",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "data/splits/libero_plus_episode80_d_seed42.tar",
+    "id": "17Nim7jPu0dC-wKNkNjAtPyUJAre4QYnM",
+    "reason": "Published archive pinned and remote SHA256 verified",
+    "hf_asset": "prepared_d_seed42",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "checkpoints/fft/step-0001975",
+    "id": "1YF8pC6rg55KIQrLWAVE5lcvdXAvAhHCB",
+    "reason": "All 29 sealed files and optimizer state match verified HF record",
+    "hf_asset": "ava_fft_step_1975",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "checkpoints/baselines/openvla_oft/model",
+    "id": "13EnF0bsB2_T4hjQo6kYK_Vp3hwkWdBrn",
+    "reason": "All 24 model/adapter files match verified HF record; extras are download metadata",
+    "hf_asset": "openvla_oft_t0",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "hf_cache",
+    "id": "1YoVPL82DXubGQEzrbP0BCFgVFp9WAsjE",
+    "reason": "Only generated modules/hub/xet caches; new notebooks use runtime SSD caches",
+    "hf_asset": "rebuildable cache",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "checkpoints/teacher/avavla-libero-4in1/model-00003-of-00004.safetensors",
+    "id": "1FfniwlNwskANsHecifXPwaxb7vtDy-3z",
+    "reason": "Published payload matches official download manifest and HF SHA256",
+    "hf_asset": "ava_t0",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "checkpoints/teacher/avavla-libero-4in1/model-00002-of-00004.safetensors",
+    "id": "1f1uS5PiHpvPeXbk-GZBRO1uCl7FblLqn",
+    "reason": "Published payload matches official download manifest and HF SHA256",
+    "hf_asset": "ava_t0",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "checkpoints/teacher/avavla-libero-4in1/model-00004-of-00004.safetensors",
+    "id": "1vOevbj2YEUv7KSY5aJtrGyEmx2OswgbU",
+    "reason": "Published payload matches official download manifest and HF SHA256",
+    "hf_asset": "ava_t0",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "checkpoints/teacher/avavla-libero-4in1/model-00001-of-00004.safetensors",
+    "id": "1N6fGwj6ToQzEQnY1ZNCWNFN3T0O6pjYp",
+    "reason": "Published payload matches official download manifest and HF SHA256",
+    "hf_asset": "ava_t0",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "checkpoints/teacher/avavla-libero-4in1/vision_attn_weight_generator--40000_checkpoint.pt",
+    "id": "1jBte18-0dkHedrf8x-XSoykRl48CYfCd",
+    "reason": "Published payload matches official download manifest and HF SHA256",
+    "hf_asset": "ava_t0",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "checkpoints/teacher/avavla-libero-4in1/proprio_projector--40000_checkpoint.pt",
+    "id": "1J9lboit9QCmq7G5kZX5YoDKGacKPav1K",
+    "reason": "Published payload matches official download manifest and HF SHA256",
+    "hf_asset": "ava_t0",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "checkpoints/teacher/avavla-libero-4in1/action_head--40000_checkpoint.pt",
+    "id": "1QeWe2jCE5lMg9Df_Ek2oFvYqYJYkbHk6",
+    "reason": "Published payload matches official download manifest and HF SHA256",
+    "hf_asset": "ava_t0",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "data/splits/prepared copy 3/normalization.json",
+    "id": "1easQxxQdXKzs88xfQ1LgibM9SOmsQ3qb",
+    "reason": "Verified canonical metadata of the completed prepared copy",
+    "hf_asset": "prepared_d_seed42",
+    "status": "verified_candidate"
+  },
+  {
+    "name": "data/splits/prepared copy 3/COMPLETE",
+    "id": "1X4nkwlSrDhtGCJilTVX1_tI9uGKpLWOq",
+    "reason": "Verified canonical metadata of the completed prepared copy",
+    "hf_asset": "prepared_d_seed42",
+    "status": "verified_candidate"
+  }
+]

@@ -7,6 +7,7 @@ AVA 시간 상태, proprio projector, L1 action head는 유지합니다.
 구현은 `src/vlade/models/students/qwen_vla.py`의 `QwenVLA`,
 설정은 `configs/models/student/qwen_vla_0_8b.json`입니다.
 기존 `qwen.py`의 native VLM + 독립 query head 초안 및 Colab 03/05 trainer는
+
 이 변경과 별도로 보존합니다. 새 모델의 Task-only 학습은 [S0 실행 안내](qwen_vla_s0.md)를 따릅니다.
 
 ## 구성과 교체 근거
@@ -96,6 +97,10 @@ episode 초기화, BF16 저장·재로딩, 잘못된 이미지 grid와 schema �
 AVA 가중이 1일 때 native multimodal Qwen forward와 동일한 hidden state/M-RoPE 경로를
 유지하는지도 확인합니다. pretrained 0.8B·GPU 학습·LIBERO+ rollout·Jetson은 미검증입니다.
 
+```bash
+python .harness/v1/2026-11-11-ava-teacher-code/checks/qwen_vla_smoke.py --output-dir .harness/v1/2026-11-11-ava-teacher-code/scratch/smoke-native-vision
+python -m pytest .harness/v1/2026-11-11-ava-teacher-code/checks/test_qwen_vla.py -q -p no:cacheprovider --basetemp=.harness/v1/2026-11-11-ava-teacher-code/scratch/pytest-native-vision
+```
 
 ## 1차 자료
 

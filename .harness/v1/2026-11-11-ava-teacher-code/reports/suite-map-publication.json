@@ -1,0 +1,32 @@
+{
+  "status": "published_verified",
+  "repo": "VLADE-konkuk/VLADE-checkpoints",
+  "private": true,
+  "asset_key": "suite_map_seed42",
+  "record": {
+    "repo_id": "VLADE-konkuk/VLADE-checkpoints",
+    "repo_type": "model",
+    "revision": "ca06ce16238d46387b2b972bedc35a35259a4a4c",
+    "format": "directory",
+    "prefix": "assets/suite_map_seed42",
+    "local_name": "suite-map-seed42",
+    "files": {
+      "suite_map.json": {
+        "bytes": 2914,
+        "sha256": "06de171dd29b07bf5e4fb1283a3d1355a2e96a4169c07c850e9ae45253002efa"
+      }
+    }
+  },
+  "registry_revision": "cafe64bc4267a3fa200a15743d7d8a24dc5436c4",
+  "drive_file_id": "1Qaod3lYklGRd0vdzq42AoInOk9yoJFju",
+  "instruction_count": 40,
+  "suite_counts": {
+    "spatial": 10,
+    "object": 10,
+    "goal": 10,
+    "libero_10": 10
+  },
+  "pending": false,
+  "native_resolve_input_verified": true,
+  "mapping_parser_verified": true
+}

@@ -1,7 +1,11 @@
 {
   "schema_version": 1,
   "teacher_name": "ava_vla",
-  "integration_stage": "source_imported",
+  "integration_stage": "teacher_local_libero_l1",
+  "implementation": "vlade.models.teachers.ava_vla.OpenVLAForActionPrediction",
+  "implementation_directory": "src/vlade/models/teachers",
+  "license_file": "src/vlade/models/teachers/AVA_LICENSE.txt",
+  "code_scope": "active LIBERO continuous L1, native DINOv2/SigLIP, Llama and softmaxscore AVA recurrence",
   "source": {
     "path": "third_party/ava_vla",
     "repository": "https://github.com/eastha10/AVA-VLA.git",
@@ -10,7 +14,7 @@
   },
   "runtime": {
     "installed": false,
-    "upstream_requirements": "third_party/ava_vla/pyproject.toml",
+    "upstream_requirements": "configs/runtime/ava.json",
     "torch_version": "2.2.0",
     "transformers_repository": "https://github.com/LiAuto-DSR/transformers-avavla.git",
     "transformers_commit_to_validate": "a03eee5da1794c45f5a911b60a9a4545e6e0ed1f"
@@ -45,5 +49,12 @@
     "model_loaded": false,
     "baseline_reproduced": false,
     "distillation_implemented": false
+  },
+  "language_backbone": {
+    "family": "Llama 2",
+    "configuration_id": "llama2-7b-pure",
+    "class": "transformers.LlamaForCausalLM",
+    "adapter": "vlade.models.teachers.backbones.llama.build_llama_backbone",
+    "ava_attention_backend": "pinned transformers-avavla fork"
   }
 }

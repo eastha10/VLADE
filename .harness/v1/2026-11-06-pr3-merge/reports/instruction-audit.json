@@ -1,0 +1,37 @@
+{
+  "date_kst": "2026-11-06",
+  "revision": "9fbeb1dedede0dbfb609bbabf28c78834e4c97f7",
+  "pull": "git pull --ff-only --no-recurse-submodules origin main: Already up to date",
+  "scope": "PR #3 병합 변경과 현재 AGENTS.md, 관련 이전 사용자 대화의 최신 지시 대조",
+  "findings": [
+    {
+      "priority": "P1",
+      "file": "src/vlade/data/episode_data.py",
+      "line": 887,
+      "instruction": "모든 외부 가중치·데이터·Teacher cache 입력은 고정된 Hugging Face revision 또는 검증된 HF 캐시를 사용",
+      "finding": "전처리 CLI는 hfasset: 문자열일 때만 resolve_input을 호출하며 일반 로컬 TFDS는 출처 검증 없이 _preparation_source로 전달한다. 새 normalization CLI도 data_dir를 직접 읽는다.",
+      "verification": "기존 local_tfds fixture와 CLI 회귀 테스트의 정상 입력 케이스를 사용했다. resolve_input 호출 시 실패하도록 교체해도 정상 통과하여 HF resolver 미호출과 검증 영수증 없는 로컬 입력 수락을 확인했다. 실제 prepare와 TFDS 순회는 대역 함수로 막았다."
+    },
+    {
+      "priority": "P2",
+      "file": ".harness/v0/2026-10-28-libero-plus-canonical-split/README.md",
+      "line": 1,
+      "instruction": "v0 보관본에 새 파일 추가·복제 금지, 새 반영 기록은 v1 사용",
+      "finding": "기록 원본 커밋은 2026-10-28의 783ef78이지만 이번 PR 병합으로 main의 v0에 새 파일이 추가되었다. 동결된 v0 트리를 변경하지 않는 규칙과 맞지 않는다. 과거 기록은 점검 중 이동·수정·삭제하지 않았다."
+    }
+  ],
+  "reference_only_caveat": {
+    "path": "notebooks/references/",
+    "details": "전달본 원본에는 Drive 마운트·소스 SHA 목록·VLADE-konkuk/checkpoint 및 main revision·RUN_MAIN_FFT=True가 남아 있다. docs/environment/libero_plus_preprocessing_handoff.md는 참조용이며 최신 실행본을 대체하지 말라고 명시한다. 기본 실행 경로의 회귀와는 구분하되 현재 규약을 따르는 실행본으로 간주할 수 없다."
+  },
+  "preserved": [
+    "configs/storage/hf_assets.lock.json 및 fullframes 고정 revision",
+    "AGENTS.md, .gitmodules, 두 submodule gitlink",
+    "Hub checkpoint 업로드·재시도 구현",
+    "기존 paper_ava·student_task·cached_actions·action distillation·fullframes 구현",
+    "Drive 별도 명령 반영 규칙",
+    "원래 미추적 사용자 파일"
+  ],
+  "source_edits": false,
+  "commit_push_drive_gpu_or_data_download": false
+}

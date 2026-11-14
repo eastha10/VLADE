@@ -1,0 +1,16 @@
+[
+  {
+    "name": "dataset_info.json",
+    "id": "1lpm397oeRMwy10F4lFJNR_pPJ8zo5ciF",
+    "sha256": "d30a03246c8e4c6380780fa98eb23f9cae8dce427555c2af0725d85f98a420e8"
+  },
+  {
+    "name": "features.json",
+    "id": "19vtfMufWf1JOsgCGWVDKicXL4xFWvoPJ",
+    "sha256": "d6f56537585d15aa99772c6da942e5957cceda26b57a18098ef8e3164cdaffde"
+  },
+  {
+    "upstream_zip_revision": "fb0c7029b076030d5d57227229e4f7460def1f7c",
+    "verified_archive_bytes": 75544257300
+  }
+]

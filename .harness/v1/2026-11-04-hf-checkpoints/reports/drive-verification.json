@@ -1,0 +1,74 @@
+[
+  {
+    "path": "README.md",
+    "sha256": "ad8ab799d617edd6577e329237d42d73eac48d9146e16ca05349b81652c60fd9"
+  },
+  {
+    "path": "STRUCTURE.md",
+    "sha256": "88572018184001f9f1503c90d889c684f78dbc8c19d8a59f455df2567a2efe7d"
+  },
+  {
+    "path": "experiments/colab_01_download_data_weights.ipynb",
+    "sha256": "8ab221fb4385e3b7634f86bc6cd70568637fd9384cd153153f518ae09917d700"
+  },
+  {
+    "path": "experiments/colab_02_ava_fft_and_fixed_cache.ipynb",
+    "sha256": "8ca3acfac13c95adb41afec7a2e6b5afe6094edea903988079bd9fd27ecfc922"
+  },
+  {
+    "path": "experiments/colab_03_qwen_task_only.ipynb",
+    "sha256": "a7da89de2f09e8aa074a3e5d198c0ad451ac39d198197b20874646ea1759e56a"
+  },
+  {
+    "path": "experiments/colab_04_ava_paper_best.ipynb",
+    "sha256": "b71a3ec96333c54e6ea8040a0a08509c388793994cc249329acb5413029dd265"
+  },
+  {
+    "path": "experiments/colab_05_qwen_action_distillation.ipynb",
+    "sha256": "67962024a3b5e3bd32da319ef4adb66bf71af48cb1e727e99c59189430380ce0"
+  },
+  {
+    "path": "experiments/colab_ava_fft_suite_balanced_cu.ipynb",
+    "sha256": "d0a904c6e7d10d0b13046005173a61e5c797df35089d733e854368275f7147fe"
+  },
+  {
+    "path": "docs/environment/hugging_face_checkpoints.md",
+    "sha256": "d077bb1474ed6dca3835d418ff0266aa2c2599e4382aa62ef91f3cd82932208a"
+  },
+  {
+    "path": "experiments/manifests/colab_source.json",
+    "sha256": "a6b4c924df671f0386063ae3f6236c5e4c9fad155141a0da1a987b512e9c0825"
+  },
+  {
+    "path": "scripts/train/hub_checkpoints.py",
+    "sha256": "7c70414c0adc3a19760b7e5e0a7db93e9c177e3ccdb65694611a75f905249693"
+  },
+  {
+    "path": "src/vlade/training/colab_suite_fft.py",
+    "sha256": "4f88f623b65685901286171a807b345c5148ee70597f8ec2d6be2ece1c43387e"
+  },
+  {
+    "path": "src/vlade/training/fft.py",
+    "sha256": "8e4740021541c89af628b3f2240ddbfcf7a0443f3fc654b65c6d24c1ccc237fd"
+  },
+  {
+    "path": "src/vlade/training/hub.py",
+    "sha256": "9705c458dd9163c62044435f9532139a89e8103fe0b987566d8a01d67c5b1c78"
+  },
+  {
+    "path": "src/vlade/training/paper_ava.py",
+    "sha256": "1cf61efe12636a0948aaf35c72cf8f5c59b0232665330937d93fe5e10470fabd"
+  },
+  {
+    "path": "src/vlade/training/student_task.py",
+    "sha256": "a8095856d622561211a2d4cac7d54abc73fc5f5304bc22815430ae427edfecc7"
+  },
+  {
+    "path": "src/vlade/utils/colab_notebooks.py",
+    "sha256": "d39a9350e5ae4fb7968cd4a1a0527e79150fe455ab96d5412dc0cc8a64783b5a"
+  },
+  {
+    "path": "tests/unit/test_hub_checkpoints.py",
+    "sha256": "7d580044ebac9899d0e579500a3f3854e3e1cecfd718dbbd343de7c46868fb72"
+  }
+]

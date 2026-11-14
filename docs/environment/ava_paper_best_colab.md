@@ -1,11 +1,14 @@
 # 04 · AVA-VLA 최고 보고 설정 준비
 
+현재 실행본은 [통합 노트북](../../experiments/colab_vlade.ipynb)이며 `PROFILE`은 `ava_paper`입니다. 설치·실행 셀은 [연구 실행 안내](research_runs.md)를 따릅니다. 아래의 과거 번호·셀 이름은 이전 실행 기록과 구분하십시오.
+
 > 2026-11-04 이후 로컬/Git 노트북의 실행 기준은 [Git 소스·HF 입력 안내](hf_inputs_and_git_source.md)입니다. 아래 Drive 기반 절차·실행 기록은 기존 버전의 맥락입니다. 진행 중인 세션은 그대로 유지하며 Drive 배포는 별도 명령 후 수행합니다.
 
 2026-10-31: 사용자가 기본 40K/batch64 대신 **최고 보고 성능의 100K/batch256** 설정을 선택했습니다.
-노트북은 `experiments/colab_04_ava_paper_best.ipynb`, 설정은 `configs/experiments/ava_paper_best.json`,
+노트북은 `experiments/colab_vlade.ipynb`, 설정은 `configs/experiments/ava_paper_best.json`,
 실행 경로는 `scripts/train/run_paper_ava.py`/`src/vlade/training/paper_ava.py`입니다.
-기존 02의 zero-context FFT, 실행 경로, 예산 설정과 분리합니다.
+02의 전체 파라미터 FFT와 LoRA·예산 설정을 분리합니다. 2026-11-11부터 두 경로는
+공통 시퀀스 모듈을 사용하며, [상태 초기화·입력 순서](ava_sequence_training.md)를 따릅니다.
 
 ## 논문 근거와 해석
 

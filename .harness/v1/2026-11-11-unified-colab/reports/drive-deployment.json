@@ -1,0 +1,206 @@
+{
+  "files_verified_by_size": 20,
+  "files": [
+    {
+      "path": "experiments/colab_vlade.ipynb",
+      "id": "1hlRAwu6JAoyiQsdPyBiIztBYrC_ILcu3",
+      "size": 16591,
+      "name": "colab_vlade.ipynb",
+      "parents": [
+        "1c094iHVYTrruKWs5pXsZ7vr_5FODnO-P"
+      ],
+      "url": "https://drive.google.com/file/d/1hlRAwu6JAoyiQsdPyBiIztBYrC_ILcu3/view?usp=drivesdk"
+    },
+    {
+      "path": "README.md",
+      "id": "1mMrtQjmBZ1T-aIcs0QMd10ZhrMi7-9pA",
+      "size": 18891,
+      "name": "README.md",
+      "parents": [
+        "1jbXOZooUbe-SM9oUrKmNac_4Dfthkgs0"
+      ],
+      "url": "https://drive.google.com/file/d/1mMrtQjmBZ1T-aIcs0QMd10ZhrMi7-9pA/view?usp=drivesdk"
+    },
+    {
+      "path": "STRUCTURE.md",
+      "id": "17tSMF3m-0Zd7lZF1LzR43p_rVEI3sjbx",
+      "size": 19448,
+      "name": "STRUCTURE.md",
+      "parents": [
+        "1jbXOZooUbe-SM9oUrKmNac_4Dfthkgs0"
+      ],
+      "url": "https://drive.google.com/file/d/17tSMF3m-0Zd7lZF1LzR43p_rVEI3sjbx/view?usp=drivesdk"
+    },
+    {
+      "path": "docs/decisions/0004-ava-a100-budget.md",
+      "id": "1NwEAgQZaJfRAGiqMzXHB1Jb6OLSIf7Hp",
+      "size": 3728,
+      "name": "0004-ava-a100-budget.md",
+      "parents": [
+        "1GtajxfrCKABrTCGSb5IjetWsW7i689OZ"
+      ],
+      "url": "https://drive.google.com/file/d/1NwEAgQZaJfRAGiqMzXHB1Jb6OLSIf7Hp/view?usp=drivesdk"
+    },
+    {
+      "path": "docs/environment/ava_paper_best_colab.md",
+      "id": "1z2EZUY1OZCJUL5MoyyLVmd_oIyGF109k",
+      "size": 6187,
+      "name": "ava_paper_best_colab.md",
+      "parents": [
+        "1_dgP_mTBdxASPp2Pdu1IxkTbx6nTVl3z"
+      ],
+      "url": "https://drive.google.com/file/d/1z2EZUY1OZCJUL5MoyyLVmd_oIyGF109k/view?usp=drivesdk"
+    },
+    {
+      "path": "docs/environment/colab_kanban_handoff.md",
+      "id": "1h-bVqva6tbFiksMZGEnIPAJ4NytWZ20d",
+      "size": 29041,
+      "name": "colab_kanban_handoff.md",
+      "parents": [
+        "1_dgP_mTBdxASPp2Pdu1IxkTbx6nTVl3z"
+      ],
+      "url": "https://drive.google.com/file/d/1h-bVqva6tbFiksMZGEnIPAJ4NytWZ20d/view?usp=drivesdk"
+    },
+    {
+      "path": "docs/environment/hf_inputs_and_git_source.md",
+      "id": "1TO4G6kOSCClNZswmdHQWz-8GZeX_NTDi",
+      "size": 5332,
+      "name": "hf_inputs_and_git_source.md",
+      "parents": [
+        "1_dgP_mTBdxASPp2Pdu1IxkTbx6nTVl3z"
+      ],
+      "url": "https://drive.google.com/file/d/1TO4G6kOSCClNZswmdHQWz-8GZeX_NTDi/view?usp=drivesdk"
+    },
+    {
+      "path": "docs/environment/hugging_face_checkpoints.md",
+      "id": "1nlSwBJrBd0N_VoDf1Z3_yZvBoDAcIUyH",
+      "size": 15320,
+      "name": "hugging_face_checkpoints.md",
+      "parents": [
+        "1_dgP_mTBdxASPp2Pdu1IxkTbx6nTVl3z"
+      ],
+      "url": "https://drive.google.com/file/d/1nlSwBJrBd0N_VoDf1Z3_yZvBoDAcIUyH/view?usp=drivesdk"
+    },
+    {
+      "path": "docs/environment/libero_plus_fft_colab.md",
+      "id": "1ku_CllCCIxpNcPO2sm440FSaXnswJBNz",
+      "size": 17558,
+      "name": "libero_plus_fft_colab.md",
+      "parents": [
+        "1_dgP_mTBdxASPp2Pdu1IxkTbx6nTVl3z"
+      ],
+      "url": "https://drive.google.com/file/d/1ku_CllCCIxpNcPO2sm440FSaXnswJBNz/view?usp=drivesdk"
+    },
+    {
+      "path": "docs/environment/libero_plus_fullframes.md",
+      "id": "1zuZdo-lq1Q4fwSMUUuCjorwatlLXv3yw",
+      "size": 8318,
+      "name": "libero_plus_fullframes.md",
+      "parents": [
+        "1_dgP_mTBdxASPp2Pdu1IxkTbx6nTVl3z"
+      ],
+      "url": "https://drive.google.com/file/d/1zuZdo-lq1Q4fwSMUUuCjorwatlLXv3yw/view?usp=drivesdk"
+    },
+    {
+      "path": "docs/environment/libero_plus_preprocessing_handoff.md",
+      "id": "1cMHiRh0rxVUOaWcoFr777ozRF_tSOFFK",
+      "size": 6251,
+      "name": "libero_plus_preprocessing_handoff.md",
+      "parents": [
+        "1_dgP_mTBdxASPp2Pdu1IxkTbx6nTVl3z"
+      ],
+      "url": "https://drive.google.com/file/d/1cMHiRh0rxVUOaWcoFr777ozRF_tSOFFK/view?usp=drivesdk"
+    },
+    {
+      "path": "docs/environment/local_stage_to_colab.md",
+      "id": "195WtxHI3HjZCMol5tfuzos6fTh7GOvS8",
+      "size": 5345,
+      "name": "local_stage_to_colab.md",
+      "parents": [
+        "1_dgP_mTBdxASPp2Pdu1IxkTbx6nTVl3z"
+      ],
+      "url": "https://drive.google.com/file/d/195WtxHI3HjZCMol5tfuzos6fTh7GOvS8/view?usp=drivesdk"
+    },
+    {
+      "path": "docs/environment/qwen_action_distillation_colab.md",
+      "id": "1tPgAo8yB53BZ20enTKyGqNPH-vyb7BqA",
+      "size": 4438,
+      "name": "qwen_action_distillation_colab.md",
+      "parents": [
+        "1_dgP_mTBdxASPp2Pdu1IxkTbx6nTVl3z"
+      ],
+      "url": "https://drive.google.com/file/d/1tPgAo8yB53BZ20enTKyGqNPH-vyb7BqA/view?usp=drivesdk"
+    },
+    {
+      "path": "docs/environment/research_runs.md",
+      "id": "1nQLswMM-r7PDsXw8ZU6eApfOh3qrvTKU",
+      "size": 13331,
+      "name": "research_runs.md",
+      "parents": [
+        "1_dgP_mTBdxASPp2Pdu1IxkTbx6nTVl3z"
+      ],
+      "url": "https://drive.google.com/file/d/1nQLswMM-r7PDsXw8ZU6eApfOh3qrvTKU/view?usp=drivesdk"
+    },
+    {
+      "path": "docs/environment/teacher_records_and_student.md",
+      "id": "1AkESzRJPbdAu6OH2Ip1f0P9tFyYV7oxT",
+      "size": 12060,
+      "name": "teacher_records_and_student.md",
+      "parents": [
+        "1_dgP_mTBdxASPp2Pdu1IxkTbx6nTVl3z"
+      ],
+      "url": "https://drive.google.com/file/d/1AkESzRJPbdAu6OH2Ip1f0P9tFyYV7oxT/view?usp=drivesdk"
+    },
+    {
+      "path": "scripts/prepare/generate_colab_notebooks.py",
+      "id": "1FwWN1Wef2kncKugDkLo6OMi6zU2Eio7m",
+      "size": 268,
+      "name": "generate_colab_notebooks.py",
+      "parents": [
+        "1zsH19j8qhEInG0GOWXrHHz14xoxWNjNm"
+      ],
+      "url": "https://drive.google.com/file/d/1FwWN1Wef2kncKugDkLo6OMi6zU2Eio7m/view?usp=drivesdk"
+    },
+    {
+      "path": "src/vlade/utils/colab_notebooks.py",
+      "id": "1wZhBI_y8GnEIuoFfSRiwA8mHxCfDJcIM",
+      "size": 17196,
+      "name": "colab_notebooks.py",
+      "parents": [
+        "1Hg_Djj2bHEQKVn4yFlnmMWThL0xYKUg-"
+      ],
+      "url": "https://drive.google.com/file/d/1wZhBI_y8GnEIuoFfSRiwA8mHxCfDJcIM/view?usp=drivesdk"
+    },
+    {
+      "path": "src/vlade/utils/hf_notebooks.py",
+      "id": "1rrxYbocM5RakIClek2XTurmu9lH4tHML",
+      "size": 607,
+      "name": "hf_notebooks.py",
+      "parents": [
+        "1Hg_Djj2bHEQKVn4yFlnmMWThL0xYKUg-"
+      ],
+      "url": "https://drive.google.com/file/d/1rrxYbocM5RakIClek2XTurmu9lH4tHML/view?usp=drivesdk"
+    },
+    {
+      "path": "src/vlade/utils/kd_notebook.py",
+      "id": "1WzuxgH4s0P_jfC0bJcRs7VJrpa1YzcpP",
+      "size": 387,
+      "name": "kd_notebook.py",
+      "parents": [
+        "1Hg_Djj2bHEQKVn4yFlnmMWThL0xYKUg-"
+      ],
+      "url": "https://drive.google.com/file/d/1WzuxgH4s0P_jfC0bJcRs7VJrpa1YzcpP/view?usp=drivesdk"
+    },
+    {
+      "path": "src/vlade/utils/paper_notebook.py",
+      "id": "1IsyeRvuOc92yRK90Ff0ZFpw7Wk6HrQLc",
+      "size": 392,
+      "name": "paper_notebook.py",
+      "parents": [
+        "1Hg_Djj2bHEQKVn4yFlnmMWThL0xYKUg-"
+      ],
+      "url": "https://drive.google.com/file/d/1IsyeRvuOc92yRK90Ff0ZFpw7Wk6HrQLc/view?usp=drivesdk"
+    }
+  ],
+  "git_status": "blocked: local metadata write denied; integration returned 403"
+}

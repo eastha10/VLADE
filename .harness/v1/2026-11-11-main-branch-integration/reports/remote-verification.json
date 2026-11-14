@@ -1,0 +1,26 @@
+{
+  "verified_code_merge": "8ec3b1b3cf66511af5cfe9962c5cd23086abd83f",
+  "remote_main_matches_local": true,
+  "pull_ff_only_completed": true,
+  "branches": {
+    "codex/ava-transformers-patch-a": {
+      "commit": "deb8bec447e8963159c357c362bad22070b9db7e",
+      "included_in_main": true
+    },
+    "dev/eastha": {
+      "commit": "42999217fac1addae091b6bea1783b80d77dcf13",
+      "included_in_main": true
+    },
+    "dev/fish13031e": {
+      "commit": "9600d423586179fb6db9df6ce6fb9653092f3ab2",
+      "included_in_main": true
+    },
+    "main": {
+      "commit": "8ec3b1b3cf66511af5cfe9962c5cd23086abd83f",
+      "included_in_main": true
+    }
+  },
+  "tracked_worktree_clean": true,
+  "verified_before_record_commit": true,
+  "scratch_removed": true
+}

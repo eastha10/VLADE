@@ -1,0 +1,15 @@
+{
+  "python": "3.11",
+  "packages": [
+    "numpy==1.26.4",
+    "pillow==10.4.0",
+    "huggingface_hub==0.36.2",
+    "tensorflow==2.15.0",
+    "tensorflow-datasets==4.9.3",
+    "tensorflow-metadata==1.15.0",
+    "pyarrow==19.0.1",
+    "google-crc32c"
+  ],
+  "schema_version": 1,
+  "name": "data"
+}

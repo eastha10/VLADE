@@ -1,5 +1,7 @@
 # VLADE · 비공개 Hugging Face 체크포인트
 
+현재 실행본은 [통합 노트북](../../experiments/colab_vlade.ipynb)이며 `PROFILE`은 `각 학습 프로필`입니다. 설치·실행 셀은 [연구 실행 안내](research_runs.md)를 따릅니다. 아래의 과거 번호·셀 이름은 이전 실행 기록과 구분하십시오.
+
 ## 적용 범위
 
 기존 학습 루프·손실·누적·LR schedule·optimizer·초기 모델을 유지하고 완료 체크포인트만

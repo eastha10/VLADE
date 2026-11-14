@@ -1,5 +1,7 @@
 # LIBERO+ 원본 전체 프레임 재처리
 
+현재 실행본은 [통합 노트북](../../experiments/colab_vlade.ipynb)이며 `PROFILE`은 `fullframes`입니다. 설치·실행 셀은 [연구 실행 안내](research_runs.md)를 따릅니다. 아래의 과거 번호·셀 이름은 이전 실행 기록과 구분하십시오.
+
 > 2026-11-04 이후 로컬/Git 노트북의 실행 기준은 [Git 소스·HF 입력 안내](hf_inputs_and_git_source.md)입니다. 아래 Drive 기반 절차·실행 기록은 기존 버전의 맥락입니다. 진행 중인 세션은 그대로 유지하며 Drive 배포는 별도 명령 후 수행합니다.
 
 ## 저장소와 보존 범위
@@ -41,10 +43,10 @@ Parquet 파일 합계는 60,862,121,397 bytes입니다. 기존 희소 학습 입
 
 ## Colab 실행과 재시작
 
-Colab 01의 맨 위 **원본 전체 프레임 → 공개 Hugging Face** 셀에서
-`RUN_FULLFRAME_EXPORT = True`로 바꾸고 실행합니다. 기존 Secrets `HF_TOKEN`을 사용합니다.
+통합 노트북에서 `PROFILE='fullframes'`를 선택하고 계획 확인·환경 설치 후
+`RUN_EXPERIMENT=True`로 실행합니다. 기존 Secrets `HF_TOKEN`을 사용합니다.
 토큰 소유 계정에는 새 조직 dataset 생성/쓰기와 기존 비공개 registry 쓰기 권한이 필요합니다.
-기존 이관·설치·다운로드·전처리 셀은 실행할 필요가 없으며 출력과 함께 접어 보존합니다.
+다른 학습 프로필은 실행할 필요가 없습니다. 완료된 전체 프레임 입력을 이용할 때는 내보내기를 다시 실행하지 않습니다.
 
 TensorFlow와 GPU를 사용하지 않는 독립 CPU 환경을 만듭니다.
 Python의 기본 pip bootstrap에 의존하지 않도록 `venv --without-pip` 후 host pip의

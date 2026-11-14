@@ -1,0 +1,291 @@
+{
+  "samples": [
+    {
+      "checked_at_utc": "2026-11-04T10:33:54.721271+00:00",
+      "private": true,
+      "model_commit": "4e2004da178adbc3c901aa3f932bc6349a0335b0",
+      "dataset_commit": "0f2007be85a89243d524c39ea57e6d7526775b26",
+      "completed": {},
+      "pending": [
+        "prepared_d_seed42",
+        "ava_t0",
+        "ava_fft_step_1975"
+      ],
+      "prepared_repo_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 2504
+        }
+      ]
+    },
+    {
+      "checked_at_utc": "2026-11-04T10:36:55.560446+00:00",
+      "private": true,
+      "model_commit": "48997396c8335b57e8818b5b8f23aa5d4496d7ce",
+      "dataset_commit": "6d2542577647a9e291554524af4e1dd0928e9df6",
+      "completed": {
+        "prepared_d_seed42": "6d2542577647a9e291554524af4e1dd0928e9df6"
+      },
+      "pending": [
+        "ava_t0",
+        "ava_fft_step_1975"
+      ],
+      "prepared_repo_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 2504
+        },
+        {
+          "path": "assets/prepared_d_seed42/asset_manifest.json",
+          "bytes": 843
+        },
+        {
+          "path": "assets/prepared_d_seed42/libero_plus_episode80_d_seed42.tar",
+          "bytes": 11371123200
+        }
+      ]
+    },
+    {
+      "checked_at_utc": "2026-11-04T10:38:54.585121+00:00",
+      "private": true,
+      "model_commit": "48997396c8335b57e8818b5b8f23aa5d4496d7ce",
+      "dataset_commit": "6d2542577647a9e291554524af4e1dd0928e9df6",
+      "completed": {
+        "prepared_d_seed42": "6d2542577647a9e291554524af4e1dd0928e9df6"
+      },
+      "pending": [
+        "ava_t0",
+        "ava_fft_step_1975"
+      ],
+      "prepared_repo_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 2504
+        },
+        {
+          "path": "assets/prepared_d_seed42/asset_manifest.json",
+          "bytes": 843
+        },
+        {
+          "path": "assets/prepared_d_seed42/libero_plus_episode80_d_seed42.tar",
+          "bytes": 11371123200
+        }
+      ]
+    },
+    {
+      "checked_at_utc": "2026-11-04T10:40:14.429095+00:00",
+      "private": true,
+      "model_commit": "48997396c8335b57e8818b5b8f23aa5d4496d7ce",
+      "dataset_commit": "6d2542577647a9e291554524af4e1dd0928e9df6",
+      "completed": {
+        "prepared_d_seed42": "6d2542577647a9e291554524af4e1dd0928e9df6"
+      },
+      "pending": [
+        "ava_t0",
+        "ava_fft_step_1975"
+      ],
+      "prepared_repo_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 2504
+        },
+        {
+          "path": "assets/prepared_d_seed42/asset_manifest.json",
+          "bytes": 843
+        },
+        {
+          "path": "assets/prepared_d_seed42/libero_plus_episode80_d_seed42.tar",
+          "bytes": 11371123200
+        }
+      ]
+    },
+    {
+      "checked_at_utc": "2026-11-04T10:41:57.330981+00:00",
+      "private": true,
+      "model_commit": "48997396c8335b57e8818b5b8f23aa5d4496d7ce",
+      "dataset_commit": "6d2542577647a9e291554524af4e1dd0928e9df6",
+      "completed": {
+        "prepared_d_seed42": "6d2542577647a9e291554524af4e1dd0928e9df6"
+      },
+      "pending": [
+        "ava_t0",
+        "ava_fft_step_1975"
+      ],
+      "prepared_repo_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 2504
+        },
+        {
+          "path": "assets/prepared_d_seed42/asset_manifest.json",
+          "bytes": 843
+        },
+        {
+          "path": "assets/prepared_d_seed42/libero_plus_episode80_d_seed42.tar",
+          "bytes": 11371123200
+        }
+      ]
+    },
+    {
+      "checked_at_utc": "2026-11-04T10:43:28.625481+00:00",
+      "private": true,
+      "model_commit": "48997396c8335b57e8818b5b8f23aa5d4496d7ce",
+      "dataset_commit": "6d2542577647a9e291554524af4e1dd0928e9df6",
+      "completed": {
+        "prepared_d_seed42": "6d2542577647a9e291554524af4e1dd0928e9df6"
+      },
+      "pending": [
+        "ava_t0",
+        "ava_fft_step_1975"
+      ],
+      "prepared_repo_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 2504
+        },
+        {
+          "path": "assets/prepared_d_seed42/asset_manifest.json",
+          "bytes": 843
+        },
+        {
+          "path": "assets/prepared_d_seed42/libero_plus_episode80_d_seed42.tar",
+          "bytes": 11371123200
+        }
+      ]
+    },
+    {
+      "checked_at_utc": "2026-11-04T10:44:50.056941+00:00",
+      "private": true,
+      "model_commit": "48997396c8335b57e8818b5b8f23aa5d4496d7ce",
+      "dataset_commit": "6d2542577647a9e291554524af4e1dd0928e9df6",
+      "completed": {
+        "prepared_d_seed42": "6d2542577647a9e291554524af4e1dd0928e9df6"
+      },
+      "pending": [
+        "ava_t0",
+        "ava_fft_step_1975"
+      ],
+      "prepared_repo_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 2504
+        },
+        {
+          "path": "assets/prepared_d_seed42/asset_manifest.json",
+          "bytes": 843
+        },
+        {
+          "path": "assets/prepared_d_seed42/libero_plus_episode80_d_seed42.tar",
+          "bytes": 11371123200
+        }
+      ]
+    },
+    {
+      "checked_at_utc": "2026-11-04T10:46:39.997275+00:00",
+      "private": true,
+      "model_commit": "48997396c8335b57e8818b5b8f23aa5d4496d7ce",
+      "dataset_commit": "6d2542577647a9e291554524af4e1dd0928e9df6",
+      "completed": {
+        "prepared_d_seed42": "6d2542577647a9e291554524af4e1dd0928e9df6"
+      },
+      "pending": [
+        "ava_t0",
+        "ava_fft_step_1975"
+      ],
+      "prepared_repo_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 2504
+        },
+        {
+          "path": "assets/prepared_d_seed42/asset_manifest.json",
+          "bytes": 843
+        },
+        {
+          "path": "assets/prepared_d_seed42/libero_plus_episode80_d_seed42.tar",
+          "bytes": 11371123200
+        }
+      ]
+    },
+    {
+      "checked_at_utc": "2026-11-04T10:49:01.025432+00:00",
+      "private": true,
+      "model_commit": "ee164cd7129973e1347263404885f426b2fbc6e8",
+      "dataset_commit": "6d2542577647a9e291554524af4e1dd0928e9df6",
+      "completed": {
+        "prepared_d_seed42": "6d2542577647a9e291554524af4e1dd0928e9df6",
+        "ava_t0": "4c12bf032fdccbede71b0527f27528a8be4f90f6"
+      },
+      "pending": [
+        "ava_fft_step_1975"
+      ],
+      "prepared_repo_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 2504
+        },
+        {
+          "path": "assets/prepared_d_seed42/asset_manifest.json",
+          "bytes": 843
+        },
+        {
+          "path": "assets/prepared_d_seed42/libero_plus_episode80_d_seed42.tar",
+          "bytes": 11371123200
+        }
+      ]
+    },
+    {
+      "checked_at_utc": "2026-11-04T11:56:37.800341+00:00",
+      "private": true,
+      "model_commit": "ee164cd7129973e1347263404885f426b2fbc6e8",
+      "dataset_commit": "6d2542577647a9e291554524af4e1dd0928e9df6",
+      "completed": {
+        "prepared_d_seed42": "6d2542577647a9e291554524af4e1dd0928e9df6",
+        "ava_t0": "4c12bf032fdccbede71b0527f27528a8be4f90f6"
+      },
+      "pending": [
+        "ava_fft_step_1975"
+      ],
+      "prepared_repo_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 2504
+        },
+        {
+          "path": "assets/prepared_d_seed42/asset_manifest.json",
+          "bytes": 843
+        },
+        {
+          "path": "assets/prepared_d_seed42/libero_plus_episode80_d_seed42.tar",
+          "bytes": 11371123200
+        }
+      ]
+    },
+    {
+      "checked_at_utc": "2026-11-04T12:08:16.910869+00:00",
+      "private": true,
+      "model_commit": "8602a89f326eb683dc45b79229de03966a371cba",
+      "dataset_commit": "6d2542577647a9e291554524af4e1dd0928e9df6",
+      "completed": {
+        "prepared_d_seed42": "6d2542577647a9e291554524af4e1dd0928e9df6",
+        "ava_t0": "4c12bf032fdccbede71b0527f27528a8be4f90f6",
+        "ava_fft_step_1975": "c685b31d7593128ac2f45ff91cf4629e57ba266a"
+      },
+      "pending": [],
+      "prepared_repo_files": [
+        {
+          "path": ".gitattributes",
+          "bytes": 2504
+        },
+        {
+          "path": "assets/prepared_d_seed42/asset_manifest.json",
+          "bytes": 843
+        },
+        {
+          "path": "assets/prepared_d_seed42/libero_plus_episode80_d_seed42.tar",
+          "bytes": 11371123200
+        }
+      ]
+    }
+  ]
+}

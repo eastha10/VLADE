@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "run_group": "evaluate-oft-seed42",
+  "seed": 42,
+  "budget": {
+    "hours": 8,
+    "save_reserve_seconds": 300,
+    "release_colab_on_deadline": true
+  },
+  "task": "evaluate",
+  "runtime": "oft_eval",
+  "model": "openvla_oft",
+  "checkpoints": {
+    "T0": "hfasset://openvla_oft_t0"
+  },
+  "evaluation": {
+    "task_suites": [
+      "libero_spatial",
+      "libero_object",
+      "libero_goal",
+      "libero_10"
+    ],
+    "tasks_per_suite": 15,
+    "rollouts_per_task": 1,
+    "open_loop_steps": 8,
+    "max_steps": null,
+    "settle_steps": 10,
+    "environment_seed": 0,
+    "resolution": 256,
+    "center_crop": true,
+    "temporal_feature_layer": -2,
+    "repeat_initial_states": false,
+    "assets": "hfasset://libero_plus_assets",
+    "benchmark_revision": "4976dc30028e805ff8094b55501d532c48fec182",
+    "expected_task_counts": {
+      "libero_spatial": 2402,
+      "libero_object": 2518,
+      "libero_goal": 2591,
+      "libero_10": 2519
+    }
+  },
+  "registry_revision": null
+}

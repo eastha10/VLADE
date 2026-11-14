@@ -1,5 +1,13 @@
 # LIBERO+ FFT 실행 경로 (Colab A100)
 
+현재 실행본은 [통합 노트북](../../experiments/colab_vlade.ipynb)이며 `PROFILE`은 `ava_fft / oft_fft / ava_one_step`입니다. 설치·실행 셀은 [연구 실행 안내](research_runs.md)를 따릅니다. 아래의 과거 번호·셀 이름은 이전 실행 기록과 구분하십시오.
+
+현재 유지 관리되는 Colab의 설치·설정·실행은 [연구 실행 안내](research_runs.md)를 우선합니다. 아래의 이전 셀 이름은 당시 흐름의 설명이며 현재 실행 셀과 구분합니다.
+
+2026-11-11부터 AVA FFT는 [K4 시퀀스 학습](ava_sequence_training.md)을 사용합니다.
+현재 연구 CLI는 설정의 max_steps와 시간 상한을 사용합니다. 아래 1 epoch/8시간 추정은
+기존 단일 query 정책이며 K4 GPU 파일럿 없이 그대로 전용하지 않습니다.
+
 > 2026-11-04 이후 로컬/Git 노트북의 실행 기준은 [Git 소스·HF 입력 안내](hf_inputs_and_git_source.md)입니다. 아래 Drive 기반 절차·실행 기록은 기존 버전의 맥락입니다. 진행 중인 세션은 그대로 유지하며 Drive 배포는 별도 명령 후 수행합니다.
 
 2026-10-28에 Drive 다운로드·공통 episode split·FFT/cache·Qwen Task-only를 연결하는
@@ -42,11 +50,10 @@ VLADE의 `scripts/train/run_fft.py`는 upstream의 LoRA 전용 학습 스크립�
 `vision_attn_weight_generator`를 초기화·학습·저장합니다. checkpoint는
 `save_pretrained` 형식의 전체 VLA와 구성요소 `.pt`를 함께 보관합니다.
 
-이 코드는 CPU 단위 테스트를 통과했지만, 아직 두 모델의 Colab GPU 학습을
-실행하거나 LIBERO+ 성공률을 검증하지 않았습니다. 특히 AVA의 RLDS 학습 샘플은
-이전 시점의 행동 특징을 제공하지 않습니다. 현재 FFT는 공개 AVA generator의
-zero-context 경로를 학습하며, 에피소드 간 temporal context를 활용하는 원본
-평가와 동등하다고 주장할 수 없습니다.
+실제 두 모델의 Colab GPU 학습이나 LIBERO+ 성공률은 검증하지 않았습니다.
+현재 AVA FFT loader는 같은 Episode의 연속 4-query를 묶어 이전 action hidden을
+전달합니다. 훈련 시 시퀀스 시작 zero state와 두 query마다 detach를 적용합니다.
+OFT와 재로딩 진단용 `ava_one_step`은 단일 query 경로를 유지합니다.
 
 ## 데이터 준비
 
@@ -71,19 +78,18 @@ Colab에서 공식 분할 ZIP 3개를 직접 받은 다음
 실행 전 압축 해제된 TFDS의 `dataset_info.json`과 shards가 있는지 확인하십시오.
 원본 평가 assets는 학습 입력이 아니므로 이 단계에서 설치할 필요가 없습니다.
 
-`colab_01_download_data_weights.ipynb`는 canonical manifest로 각 action+state trajectory
+`colab_vlade.ipynb`는 canonical manifest로 각 action+state trajectory
 group을 대조한 뒤에만 prepared dataset을 게시합니다. 임의 해시 재분할은 하지 않으며,
 확정 Train 전체 transition에서 재계산한 통계가 저장된 canonical normalization과 다르면
-실패합니다. `colab_02_ava_fft_and_fixed_cache.ipynb`와
-`colab_04_openvla_oft_fft.ipynb`는 서로 독립된 Transformers 환경을 사용합니다.
+실패합니다. `colab_vlade.ipynb`와
+`colab_vlade.ipynb`는 서로 독립된 Transformers 환경을 사용합니다.
 
 ## 실행
 
 두 upstream은 서로 다른 Transformers 포크를 사용합니다. 동일한 Python 런타임에
-둘을 함께 설치하지 말고 모델별로 별도 Colab 런타임을 사용하십시오. 선택한
-`third_party/<model>/pyproject.toml`의 의존성을 설치하고 `bitsandbytes`를
-추가합니다. Colab의 Python·CUDA 버전과 해당 핀의 호환성을 먼저 확인해야
-합니다. 아래 명령은 VLADE 루트에서 실행합니다.
+둘을 함께 설치하지 말고 모델별로 별도 Colab 런타임을 사용하십시오. 현재는
+`configs/runtime/`와 연구 CLI의 `setup`으로 의존성을 설치합니다. `third_party/`는
+실행에 필요하지 않습니다. 아래 명령은 VLADE 루트에서 실행합니다.
 
 ```bash
 python scripts/train/run_fft.py --model ava_vla --preflight
@@ -146,8 +152,8 @@ peak Torch allocated bytes를 매 optimizer step 기록합니다. 이 메모리�
 검사합니다. 아래 경로는 아직 없는 새 디렉터리여야 합니다.
 
 ```bash
-python -m pytest tests/unit -q
-python scripts/train/smoke_loop.py --output-dir artifacts/training/cpu-loop-smoke
+python -m pytest .harness/v1/2026-11-11-ava-teacher-code/checks -q
+python .harness/v1/2026-11-11-ava-teacher-code/checks/training_smoke.py --output-dir .harness/v1/2026-11-11-ava-teacher-code/scratch/cpu-loop-smoke
 ```
 
 이 검증은 실제 AVA/OFT forward, bitsandbytes, RLDS 또는 GPU 실행의 증거가 아닙니다.
@@ -196,7 +202,7 @@ TensorFlow RNG와 validation 샘플 순서는 복원하지 않습니다. `val_l1
 
 ## AVA A100 1-step·재로딩 전용 경로
 
-`experiments/colab_05_ava_a100_one_step_reload.ipynb`는 현재 Drive 배치
+`experiments/colab_vlade.ipynb`는 현재 Drive 배치
 (`/content/real_drive/MyDrive/VLADE`)에서 다음 셀을 순서대로 실행하도록 고정합니다.
 
 1. manifest로 일반 소스 파일을 검증해 `/content`에 stage합니다.

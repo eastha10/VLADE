@@ -1,5 +1,7 @@
 # LIBERO+ 전처리 코드와 AVA 실행 노트북
 
+현재 실행본은 [통합 노트북](../../experiments/colab_vlade.ipynb)이며 `PROFILE`은 `ava_suite / prepare_one_episode / ava_one_step`입니다. 설치·실행 셀은 [연구 실행 안내](research_runs.md)를 따릅니다. 아래의 과거 번호·셀 이름은 이전 실행 기록과 구분하십시오.
+
 ## 전처리 진입점
 
 `scripts/data/prepare_episode_data.py`가 `vlade.data.episode_data.main()`을 호출합니다.
@@ -51,17 +53,19 @@ Train 전체 transition의 정규화 통계를 사용하며, loader가 query별 
 chunk와 tail mask를 구성합니다. 재개할 때만 같은 입력·출력 계약으로 `--resume`을
 추가합니다. 데이터·가중치·전처리 결과는 이번 Git 변경에 포함하지 않습니다.
 
-## Suite-balanced FFT 샘플 순서
+## AVA FFT·Suite-balanced의 연속 시퀀스
 
 전처리본은 에피소드 안의 시간 순서와 8개 행동 묶음, tail mask를 보존합니다.
-Suite-balanced FFT는 개별 Query를 섞어 현재 시점의 관측만 읽습니다. suite별
-배정량과 재표집 규칙은 유지하고, 같은 optimizer update에서 이미 읽은 궤적
-그룹이 다시 나오면 그 suite의 남은 Query 중 다른 그룹을 우선합니다. 대안이
-없을 때는 원래 Query를 사용합니다. Validation·Teacher 캐시의 에피소드 순서는
-기존 방식입니다.
+2026-11-11부터 새 AVA 실행은 Episode와 시작점을 무작위로 선택해 연속 query
+4개(t,t+8,t+16,t+24)를 묶습니다. 미니배치는 시퀀스 단위이며 내부 순서는 고정합니다.
+Suite-balanced는 시퀀스 단위 suite 균형과 가능한 경우 update 내 다른 궤적 group 우선을
+적용합니다. Validation은 별도 Episode의 결정적 구간만 사용합니다.
+훈련 상태는 각 시퀀스 시작에 초기화하며 두 query마다 gradient를 끊습니다.
+추론·Teacher cache 상태는 같은 Episode 안에서 전달하고 경계에서 초기화합니다.
+4 query 미만 Episode는 제외하고 수를 기록합니다. [설정·차이·검증 범위](ava_sequence_training.md)를 확인하십시오.
 
-재개 시 seed와 완료 step으로 동일한 Query 위치를 재현합니다. 이전 순서로
-만든 체크포인트는 당시의 고정 소스로 재개해야 합니다.
+재개 시 seed와 완료 step으로 동일한 시퀀스 위치를 재현합니다. 이전 개별 Query
+순서의 체크포인트는 당시 고정 소스로 재개해야 하며 K4의 재개 입력으로 사용하지 않습니다.
 
 ## 첨부 노트북 보관
 
@@ -76,4 +80,4 @@ HF 저장소, 내장 소스와 resume 식별자는 첨부본 그대로이며 이
 `RUN_EVALUATION=False`입니다. 실행 전 사용할 입력과 실행 설정을 확인하십시오.
 이 반영 작업에서 Colab 학습·GPU·rollout을 실행하지 않았습니다.
 
-최신 실행 노트북은 `experiments/colab_ava_fft_suite_balanced_cu.ipynb`입니다. 전달본은 참조용으로 보존하며 최신 Git·HF 입력 계약을 사용하는 실행본을 덮어쓰지 않습니다. 전달본에는 과거 저장소·Drive 경로·실행 설정이 있으므로 그대로 새 런타임의 기본 입력으로 사용하지 마십시오. 새 OFT 및 단일 Episode AVA 점검 노트북은 Git 소스와 검증된 HF 입력을 사용합니다. 단일 Episode 출력은 HF 원본 출처와 canonical identity를 검사한 현재 실행 출력으로만 학습에 연결합니다.
+최신 실행 노트북은 `experiments/colab_vlade.ipynb`입니다. 전달본은 참조용으로 보존하며 최신 Git·HF 입력 계약을 사용하는 실행본을 덮어쓰지 않습니다. 전달본에는 과거 저장소·Drive 경로·실행 설정이 있으므로 그대로 새 런타임의 기본 입력으로 사용하지 마십시오. 새 OFT 및 단일 Episode AVA 점검 노트북은 Git 소스와 검증된 HF 입력을 사용합니다. 단일 Episode 출력은 HF 원본 출처와 canonical identity를 검사한 현재 실행 출력으로만 학습에 연결합니다.

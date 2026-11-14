@@ -1,0 +1,242 @@
+[
+  {
+    "path": "STRUCTURE.md",
+    "id": "17tSMF3m-0Zd7lZF1LzR43p_rVEI3sjbx",
+    "sha256": "440f4078dff77f50918ef966600d606f030bd6980f045f895477a03ad42ccd31",
+    "matches": true
+  },
+  {
+    "path": "README.md",
+    "id": "1mMrtQjmBZ1T-aIcs0QMd10ZhrMi7-9pA",
+    "sha256": "f71af1cf17d3a3438098a528a817123124cf16b5f05119e1488cdeed830ffbf4",
+    "matches": true
+  },
+  {
+    "path": "docs/environment/hugging_face_checkpoints.md",
+    "id": "1nlSwBJrBd0N_VoDf1Z3_yZvBoDAcIUyH",
+    "sha256": "05b760cef9a7c42189f907dd703efee8771a6cd04554fffa615bf7a572df17ef",
+    "matches": true
+  },
+  {
+    "path": "configs/models/teacher/ava_vla.json",
+    "id": "12G3MDFzXkw8qlUwyrmRPOeMjfqZOb2V-",
+    "sha256": "8a9adfd3b1f846977c255bf4676a8d037a2365608157d26cf97884e82c488eb7",
+    "matches": true
+  },
+  {
+    "path": "configs/experiments/ava_paper_best.json",
+    "id": "1-rzjXfelJPnO-V-vs2P55sUCXJKYVuwe",
+    "sha256": "79723b699102dd6efe951ed24460da2cfdadf5081be44e5b3d0dc5d0f5fc96aa",
+    "matches": true
+  },
+  {
+    "path": "configs/experiments/qwen_action_kd.json",
+    "id": "1OIQAatXEgcy43ylOB_4VYIPeCrx9clBf",
+    "sha256": "752c324b807c35ef6805f30cd6eefc142b5f3e8933fc3a7946c458638edb4379",
+    "matches": true
+  },
+  {
+    "path": "configs/storage/hf_assets.lock.json",
+    "id": "1M3XomngIGEonExEvjNWR57OV6VHvoI-X",
+    "sha256": "2e09afcc5fba1ece7c78533e9dd91221422f165eeb9dd7231fa5261f47da64f2",
+    "matches": true
+  },
+  {
+    "path": "configs/experiments/libero_plus_fft.json",
+    "id": "1zKzsR4sRdKmXQP515OomucOyIA62-G4c",
+    "sha256": "dece02e8b0dd41fefb816564ede1129e70957226e064c77533dfa916cdf7a73b",
+    "matches": true
+  },
+  {
+    "path": "experiments/colab_03_qwen_task_only.ipynb",
+    "id": "1dC8f7xDzFbqoTsf-ZVdnRFBVVVU0DMuy",
+    "sha256": "28ec0d8b19cca263ac0b77fccb950e53420c685a84435b5548d5ab25d274e5b4",
+    "matches": true
+  },
+  {
+    "path": "experiments/colab_05_qwen_action_distillation.ipynb",
+    "id": "16HUYnZZfc21TmVZWWMY0RGXaEH9Bs-Mu",
+    "sha256": "05e966d455f149014f6e85536025cead5024ff7b09cd3d607c072d1cf38c6d07",
+    "matches": true
+  },
+  {
+    "path": "experiments/colab_ava_fft_suite_balanced_cu.ipynb",
+    "id": "1MhqgAKh01iVj2oCGgiXX4DHInzmEu7zr",
+    "sha256": "87a943b650fc5c82616966c80a3952f4cb8b10914e56c502a333cdd4c426fdba",
+    "matches": true
+  },
+  {
+    "path": "experiments/colab_02_ava_fft_and_fixed_cache.ipynb",
+    "id": "1AUmqOW3Menl2V5Veo9V22at5BlCa1K8b",
+    "sha256": "fc1907eb983ef2c748916d55bc85fb551fbd6174d8d9706dce1f73d5f7eb85e8",
+    "matches": true
+  },
+  {
+    "path": "experiments/baselines/ava_vla/libero.json",
+    "id": "1umpMUgEpYtTjRWdZsMNjMtUx5sTTBorc",
+    "sha256": "c24fdf016b5a383f975ae4544feca729efc63519f871469fcea433a9070b5893",
+    "matches": true
+  },
+  {
+    "path": "experiments/colab_04_ava_paper_best.ipynb",
+    "id": "1ujuZs-jAd5jFOK61bk-CpSrZzdOA-svr",
+    "sha256": "bb98f7569f924fd5f21900377a309a00ea93f46f3ff38a29a7d14f9a2e8f41ae",
+    "matches": true
+  },
+  {
+    "path": "experiments/colab_01_download_data_weights.ipynb",
+    "id": "18ebTvNOxtQ5rnaKMcwlImQlsRpRHMyhg",
+    "sha256": "f9edef979439d38eb4c44ebecadf698d5f1135b5ec33f00945653da1a844c3c1",
+    "matches": true
+  },
+  {
+    "path": "experiments/baselines/openvla_oft/libero.json",
+    "id": "19apPvWvso3wvrcclY9-8vGVAPE-u5tOP",
+    "sha256": "0f68e98e38ec307c874ac95215ebfc0405c9465d129e160e01e80de5ba329976",
+    "matches": true
+  },
+  {
+    "path": "scripts/data/migrate_hf_assets.py",
+    "id": "13-8749lE_eKsVxMiefPHygqJFuLiJLih",
+    "sha256": "4f07b200d70d562435f74689afdfadd82498c1ff42ef59303343261a2e032330",
+    "matches": true
+  },
+  {
+    "path": "scripts/evaluate/run_baseline.py",
+    "id": "1Ot3aeO-7koVSGeHkWQDG5sopji0ksGSw",
+    "sha256": "90643ae581eb123124c80603122047a8e7b76ac0d6d3f452bee6ee8bc843a7eb",
+    "matches": true
+  },
+  {
+    "path": "scripts/train/check_fft_checkpoint.py",
+    "id": "1PQhb6jITvMitfc_O3m1Zq3GsbkWHMMuL",
+    "sha256": "55ffac8ad7391e4fb5eb209c0d1bc097fb5bf0cf8ffe074696de3e40cee500c6",
+    "matches": true
+  },
+  {
+    "path": "experiments/manifests/colab_source.json",
+    "id": "1I9FHxnVvbB7teUmPCSOkZP2JhYSOTNI2",
+    "sha256": "3657f2a4ec1b7cd88959b4c3578f983a701c93f13c6d29afc9e579ae8daf6dd6",
+    "matches": true
+  },
+  {
+    "path": "scripts/data/hf_assets.py",
+    "id": "19Q3QgrX-xogFHKZPSL2Aw2IFhgK10l0V",
+    "sha256": "d2a650f99b81df8ae8e807a764b6239e79a57cc98644216b7677949dec7ae9cf",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/data/episode_data.py",
+    "id": "1y9GBnHKacnfTjETWuEp-hy9DT7P04G7G",
+    "sha256": "2b381df37a0cb0853a7b52724d023186248f4115e9bcd7c11053c938577a8b1d",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/storage/__init__.py",
+    "id": "1L3gmpKY0wxO4B4MmRpc-Ljli05-GLhfB",
+    "sha256": "19aea017e8d67fcb8b03dc7b21aaa67b9c262c24c219229f37baa89136aeb117",
+    "matches": true
+  },
+  {
+    "path": "scripts/train/hub_checkpoints.py",
+    "id": "1UfS26HZ4cOFr5mDervo2g_tUPuEaaYmO",
+    "sha256": "7c70414c0adc3a19760b7e5e0a7db93e9c177e3ccdb65694611a75f905249693",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/training/hub.py",
+    "id": "1-vDboArDsTiblLrMgFr1umPGQM3I9etW",
+    "sha256": "6233f783795e2e47bf018238858b19293a05ed4704695923d467438edf438241",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/training/paper_ava.py",
+    "id": "1ZZLNPU42JdVlNBqPd1M-crTty39HFAN6",
+    "sha256": "0232dc91013d2d75b6282219a3eae0e366da4db1bf2e4dbd2071a388472c3941",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/training/fixed_cache.py",
+    "id": "1d95gB4E6ilajDc6ricz9iPreXpM1ahgf",
+    "sha256": "b805a24654ce4eb85f2b5b3071c30875375a6760a95d060f1650e09b7856cbd4",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/training/cached_actions.py",
+    "id": "1Cpose9CUVrU7AcFxWzaUjZVK-Sy4-Z78",
+    "sha256": "b89a63811c5be7052fe642e44d03fc2e8676b480d71b7acfa68c42d5fc04c277",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/storage/migrate.py",
+    "id": "1XYKnki5X17a_lu0wTut-_rxOhIcJNOPD",
+    "sha256": "67235c88d54e22b4717f262bdc8a39cca31bd0275f97f3b7588b1f7f2ac3766d",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/storage/assets.py",
+    "id": "13iqXL4byG0ZZbaHDNnM7DM-Ouxa7Sj0d",
+    "sha256": "6be9a37714f7b56eec82c012fabec6b22f5a95d8f5853575aa54cbd458f8aceb",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/training/colab_suite_fft.py",
+    "id": "1_nr9YMYeLUGQ70nz7DCDDEKYey8NmrQC",
+    "sha256": "4f88f623b65685901286171a807b345c5148ee70597f8ec2d6be2ece1c43387e",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/training/fft.py",
+    "id": "1zcAJbT0jSp36We6Nsgqt7aWwytFb4jQ8",
+    "sha256": "6915c6113cb4e3707a6a1ed7e8a5c4b7f2864c3ce486f01cb48336decb2409fe",
+    "matches": true
+  },
+  {
+    "path": "tests/unit/test_hf_assets.py",
+    "id": "1BFVxoVG-NSK99GTsHnmR8KCRPggv1Fzv",
+    "sha256": "723b59c567a30cb27f059daac5dc20497bd375164f5819b27413a8447546a5a3",
+    "matches": true
+  },
+  {
+    "path": "tests/unit/test_baseline_runner.py",
+    "id": "1M8rqcykUutsZnMqff2E-lRa6AkKK5oRH",
+    "sha256": "838b9803501830b92958af314fc9d5602ca4bbcca2c22a31dcaf56bd1dc5a8bb",
+    "matches": true
+  },
+  {
+    "path": "tests/unit/test_hub_checkpoints.py",
+    "id": "1DiEbU7RLWjM-pRP8mNPvryR0aIeH7cU-",
+    "sha256": "bf1e15b04192fccf1396750886a25ccbe836c2a5fe8fae813de36ead83f4ba48",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/training/prepared_fft_suite_balanced.py",
+    "id": "1di1X1HkhXko-2LbaxlGI3FTvD0nEezTf",
+    "sha256": "83e0cfa764167e3082bbf078db9bfb12ec4158169889e0ffd58239b473f3fcb0",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/utils/hf_notebooks.py",
+    "id": "1rrxYbocM5RakIClek2XTurmu9lH4tHML",
+    "sha256": "4d77a94cbe6e11fe67a8cd9aef55490c978cd373a2ce620378dc7bf33c057897",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/training/run_control.py",
+    "id": "12Vge6J3qF23f2ggW2oeCQIFYIGGGQC3R",
+    "sha256": "af52e5042a04be7c09e1b9bc47dd4cad7413ff580795389f1ffc7eb81c2545e6",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/training/student_task.py",
+    "id": "11vyxeRBusLjL_eaiBNEKHJBNFutgVgcx",
+    "sha256": "8c3f86f5b94ec2607e28eca06a870c4e332e057ae96e233404429f2422316bfc",
+    "matches": true
+  },
+  {
+    "path": "src/vlade/utils/colab_notebooks.py",
+    "id": "1wZhBI_y8GnEIuoFfSRiwA8mHxCfDJcIM",
+    "sha256": "6b2080d3dde8ae85bbbfcd5d439fa0ba7b668fea05ea6d75612cc424758cfb0d",
+    "matches": true
+  }
+]

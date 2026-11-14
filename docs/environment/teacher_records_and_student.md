@@ -1,5 +1,7 @@
 # Teacher 출력 저장 및 Qwen Student 계약
 
+현재 실행본은 [통합 노트북](../../experiments/colab_vlade.ipynb)이며 `PROFILE`은 `select_teacher / cache_teacher / qwen_task / qwen_kd`입니다. 설치·실행 셀은 [연구 실행 안내](research_runs.md)를 따릅니다. 아래의 과거 번호·셀 이름은 이전 실행 기록과 구분하십시오.
+
 기준일: 2026-10-26, 연결 카드:
 [저장 코드](https://app.notion.com/p/3e7b5dd06870807384e4f2c0c53b30d3),
 [Student 계약](https://app.notion.com/p/403b5dd06870816aa6dec171db863bd1).
@@ -104,7 +106,7 @@ native vision을 제공하는 Qwen3.5를 우선합니다. 성능·엣지 효율�
 
 ## 고정 액션 cache의 증류 연결
 
-`colab_05_qwen_action_distillation.ipynb`와 `scripts/train/run_student_kd.py`는
+`colab_vlade.ipynb`와 `scripts/train/run_student_kd.py`는
 02의 전체 train cache를 실제 Student 학습 입력에 연결합니다. task L1과 Teacher action L1을
 가중합하며 원본 episode/query·관측·GT·mask·provenance를 검사합니다.
 검증 손실은 held-out GT 기준입니다. 특징 증류는 별도 후속 작업이며 실제 GPU 증류는 미검증입니다.
@@ -132,9 +134,9 @@ torch 2.12.0 의존성을 확인했습니다. 이번 실행은 전역 환경을 
 독립 Student 가상환경에서는 해당 버전으로 설치한 뒤 아래 명령을 사용합니다.
 
 ```bash
-python -m pytest tests/unit -q -p no:cacheprovider --basetemp=.harness/v1/2026-10-29-student-smoke/scratch/unique-run
-python scripts/train/smoke_student.py --output-dir .harness/v1/2026-10-29-student-smoke/scratch/outputs/tiny-random-check
-python scripts/train/smoke_student.py --output-dir .harness/v1/2026-10-29-student-smoke/scratch/outputs/native-input-check \
+python -m pytest .harness/v1/2026-11-11-ava-teacher-code/checks -q -p no:cacheprovider --basetemp=.harness/v1/2026-11-11-ava-teacher-code/scratch/unique-run
+python .harness/v1/2026-11-11-ava-teacher-code/checks/student_smoke.py --output-dir .harness/v1/2026-11-11-ava-teacher-code/scratch/outputs/tiny-random-check
+python .harness/v1/2026-11-11-ava-teacher-code/checks/student_smoke.py --output-dir .harness/v1/2026-11-11-ava-teacher-code/scratch/outputs/native-input-check \
   --processor-dir checkpoints/students/qwen3_5_0_8b
 ```
 

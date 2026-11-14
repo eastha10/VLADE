@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vlade-research"
+version = "0.1.0"
+description = "VLADE research entry points; model environments are installed separately"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+vlade-research = "vlade.research.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = true

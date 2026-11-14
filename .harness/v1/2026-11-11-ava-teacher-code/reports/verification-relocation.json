@@ -1,0 +1,109 @@
+{
+  "moved": [
+    {
+      "original": "tests/unit/test_action_distillation.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_action_distillation.py"
+    },
+    {
+      "original": "tests/unit/test_ava_patch_install.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_ava_patch_install.py"
+    },
+    {
+      "original": "tests/unit/test_ava_teacher.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_ava_teacher.py"
+    },
+    {
+      "original": "tests/unit/test_baseline_runner.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_baseline_runner.py"
+    },
+    {
+      "original": "tests/unit/test_canonical_libero_plus_split.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_canonical_libero_plus_split.py"
+    },
+    {
+      "original": "tests/unit/test_colab_pipeline.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_colab_pipeline.py"
+    },
+    {
+      "original": "tests/unit/test_colab_source_files.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_colab_source_files.py"
+    },
+    {
+      "original": "tests/unit/test_compute_budget.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_compute_budget.py"
+    },
+    {
+      "original": "tests/unit/test_episode_backup.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_episode_backup.py"
+    },
+    {
+      "original": "tests/unit/test_episode_data_input.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_episode_data_input.py"
+    },
+    {
+      "original": "tests/unit/test_fft.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_fft.py"
+    },
+    {
+      "original": "tests/unit/test_final_cache_review.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_final_cache_review.py"
+    },
+    {
+      "original": "tests/unit/test_final_data_review.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_final_data_review.py"
+    },
+    {
+      "original": "tests/unit/test_final_run_review.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_final_run_review.py"
+    },
+    {
+      "original": "tests/unit/test_fullframes.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_fullframes.py"
+    },
+    {
+      "original": "tests/unit/test_hf_assets.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_hf_assets.py"
+    },
+    {
+      "original": "tests/unit/test_hub_checkpoints.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_hub_checkpoints.py"
+    },
+    {
+      "original": "tests/unit/test_paper_ava.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_paper_ava.py"
+    },
+    {
+      "original": "tests/unit/test_qwen_vla.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_qwen_vla.py"
+    },
+    {
+      "original": "tests/unit/test_student_contract.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_student_contract.py"
+    },
+    {
+      "original": "tests/unit/test_teacher_records.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_teacher_records.py"
+    },
+    {
+      "original": "tests/unit/test_training_loop.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/test_training_loop.py"
+    },
+    {
+      "original": "src/vlade/models/students/smoke.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/student_smoke.py"
+    },
+    {
+      "original": "src/vlade/models/students/qwen_vla_smoke.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/qwen_vla_smoke.py"
+    },
+    {
+      "original": "src/vlade/training/smoke.py",
+      "check": ".harness/v1/2026-11-11-ava-teacher-code/checks/training_smoke.py"
+    }
+  ],
+  "removed_redundant_wrappers": [
+    "scripts/train/smoke_loop.py",
+    "scripts/train/smoke_student.py",
+    "scripts/train/smoke_qwen_vla.py"
+  ]
+}
