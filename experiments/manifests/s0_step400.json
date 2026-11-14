@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "checkpoint_id": "S0-400",
+  "optimizer_step": 400,
+  "checkpoint_directory": "step-0000400",
+  "backup": {
+    "kind": "split_tar",
+    "access": "private_google_drive",
+    "total_bytes": 11381114880,
+    "archive_sha256": null,
+    "source_copy_sha256_comparison": "passed_in_colab_reported_by_owner"
+  },
+  "parts": [
+    {
+      "name": "step-0000400.tar.part-00",
+      "bytes": 1073741824
+    },
+    {
+      "name": "step-0000400.tar.part-01",
+      "bytes": 1073741824
+    },
+    {
+      "name": "step-0000400.tar.part-02",
+      "bytes": 1073741824
+    },
+    {
+      "name": "step-0000400.tar.part-03",
+      "bytes": 1073741824
+    },
+    {
+      "name": "step-0000400.tar.part-04",
+      "bytes": 1073741824
+    },
+    {
+      "name": "step-0000400.tar.part-05",
+      "bytes": 1073741824
+    },
+    {
+      "name": "step-0000400.tar.part-06",
+      "bytes": 1073741824
+    },
+    {
+      "name": "step-0000400.tar.part-07",
+      "bytes": 1073741824
+    },
+    {
+      "name": "step-0000400.tar.part-08",
+      "bytes": 1073741824
+    },
+    {
+      "name": "step-0000400.tar.part-09",
+      "bytes": 1073741824
+    },
+    {
+      "name": "step-0000400.tar.part-10",
+      "bytes": 643696640
+    }
+  ]
+}

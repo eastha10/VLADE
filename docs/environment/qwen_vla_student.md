@@ -7,7 +7,8 @@ AVA 시간 상태, proprio projector, L1 action head는 유지합니다.
 구현은 `src/vlade/models/students/qwen_vla.py`의 `QwenVLA`,
 설정은 `configs/models/student/qwen_vla_0_8b.json`입니다.
 기존 `qwen.py`의 native VLM + 독립 query head 초안 및 Colab 03/05 trainer는
-이 변경과 별도로 보존합니다. 기존 학습 진입점은 아직 새 모델로 이관하지 않았습니다.
+
+이 변경과 별도로 보존합니다. 새 모델의 Task-only 학습은 [S0 실행 안내](qwen_vla_s0.md)를 따릅니다.
 
 ## 구성과 교체 근거
 
