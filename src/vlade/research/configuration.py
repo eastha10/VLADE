@@ -88,6 +88,27 @@ def validate(value: dict) -> None:
     if type(value.get("seed", 42)) is not int:
         raise ValueError("seed must be an integer")
     if value["task"] == "student":
+        initialization = value.get("initialization", "pretrained_backbone")
+        if initialization not in {"pretrained_backbone", "student_checkpoint"}:
+            raise ValueError("Unknown Student initialization")
+        kd = value.get("distillation", {})
+        if kd.get("method") == "action_kd":
+            mode = kd.get("teacher_mode", "cache")
+            if mode not in {"cache", "inference"}:
+                raise ValueError("Unknown action KD Teacher mode")
+            if mode == "inference":
+                if value.get("teacher_runtime") != "ava" or not kd.get("teacher_checkpoint"):
+                    raise ValueError("T1 inference requires teacher_runtime=ava and teacher_checkpoint")
+                timeout = kd.get("teacher_timeout_seconds", 600)
+                if type(timeout) not in (int, float) or not math.isfinite(timeout) or timeout <= 0:
+                    raise ValueError("Teacher timeout must be finite and positive")
+                if not isinstance(kd.get("teacher_device", "cuda:0"), str) or not kd.get("teacher_device", "cuda:0"):
+                    raise ValueError("Teacher device must be a nonempty device string")
+            for key in ("task_weight", "action_kd_weight"):
+                weight = kd.get(key)
+                if (type(weight) not in (int, float) or not math.isfinite(weight)
+                        or weight < 0 or (key == "action_kd_weight" and weight == 0)):
+                    raise ValueError(f"Invalid distillation.{key}")
         pilot = value.get("pilot", {})
         if type(pilot.get("overfit_steps")) is not int or pilot["overfit_steps"] < 10:
             raise ValueError("Student pilot requires at least ten overfit steps")

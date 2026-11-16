@@ -1,4 +1,4 @@
-"""Train Qwen with ground-truth supervision and cached T1 action distillation."""
+"""Train Qwen with GT supervision and frozen T1 inference or cached actions."""
 import argparse
 import json
 from pathlib import Path

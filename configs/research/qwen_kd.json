@@ -9,9 +9,11 @@
   },
   "task": "student",
   "runtime": "student",
+  "teacher_runtime": "ava",
   "model": "qwen",
   "data": "hfasset://prepared_d_seed42",
-  "checkpoint": "hfasset://qwen_initial",
+  "checkpoint": "hfasset://student_s0",
+  "initialization": "student_checkpoint",
   "model_config": "configs/models/student/qwen3_5_0_8b.json",
   "train": {
     "max_steps": 1000,
@@ -33,10 +35,13 @@
   },
   "distillation": {
     "method": "action_kd",
-    "teacher_cache": "hfasset://teacher_cache_t1",
+    "teacher_mode": "inference",
+    "teacher_checkpoint": "hfasset://teacher_t1",
+    "teacher_timeout_seconds": 600,
+    "teacher_device": "cuda:0",
     "task_weight": 1.0,
     "action_kd_weight": 1.0,
-    "description": "Masked normalized L1: task_weight * demonstration + action_kd_weight * frozen T1. Weights are configurable starting values, not tuned results. Hidden features are not used."
+    "description": "Notion 11-06 Tasks: L_BC(S, GT) + lambda * L_KD(S, T1). Load the full S0, infer frozen T1 actions in the AVA runtime; task_weight=1, action_kd_weight=lambda. No Teacher cache is required."
   },
   "pilot": {
     "overfit_steps": 50,

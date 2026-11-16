@@ -1,6 +1,9 @@
 # VLADE
 
-현재 Colab 실행은 단일 [colab_vlade.ipynb](experiments/colab_vlade.ipynb)에서 작업을 선택하며, [설정 기반 연구 명령](docs/environment/research_runs.md)을 사용합니다. 훈련 step·평가 rollout 수는 `configs/research/`에서 제어합니다.
+일반 Colab 실행은 [colab_vlade.ipynb](experiments/colab_vlade.ipynb)에서 작업을 선택하며, [설정 기반 연구 명령](docs/environment/research_runs.md)을 사용합니다. 훈련 step·평가 rollout 수는 `configs/research/`에서 제어합니다.
+
+`qwen_kd`는 [HF T1 추론 → S0 Action-level Distillation](docs/environment/action_level_distillation.md)을 사용합니다. T1·S0 asset과 λ를 설정으로 선택하며 Teacher cache는 필수가 아닙니다.
+증류 전용 [colab_action_distillation.ipynb](experiments/colab_action_distillation.ipynb)에 HF 인증·가중치 경로/commit 연결·환경 준비·파일럿·본 학습·재개 절차를 담았습니다.
 
 새 AVA FFT·Suite-balanced는 [연속 K4 시퀀스 학습](docs/environment/ava_sequence_training.md)을 사용합니다.
 훈련은 시퀀스 시작에, 추론은 Episode 시작에 상태를 초기화합니다. 기존 전처리본과 Episode 분할은 보존합니다.
@@ -64,9 +67,10 @@ LIBERO+ 데이터와 세부 구현 차이는 [04 실행 안내](docs/environment
 보관했으며, Colab 런타임 종료와 활성 세션 없음까지 확인했습니다. 이 검사는
 LIBERO(+) 성공률이나 FFT 학습 검증을 포함하지 않습니다.
 
-통합 노트북의 `qwen_kd` 프로필은 `cache_teacher`로 생성한 전체 T1 action cache를
-사용하는 Qwen 오프라인 액션 증류를 준비합니다. GT L1과 Teacher L1의 가중합, cache/원본 데이터
-대조, 저장·재개를 연결하며 실행 스위치는 모두 기본 False입니다.
+통합 노트북의 `qwen_kd` 프로필은 HF T1의 직접 추론으로 S0를 학습합니다.
+GT L1과 Teacher L1의 가중합, 입력 무결성 확인, 저장·재개를 연결합니다.
+기존 `cache_teacher` 출력의 오프라인 증류도 `teacher_mode='cache'` 설정으로 지원합니다.
+전용 증류 노트북의 실행 스위치는 모두 기본 False입니다.
 사용 순서는 [액션 증류 안내](docs/environment/qwen_action_distillation_colab.md)에 정리했습니다.
 실제 GPU 증류와 성공률은 아직 검증하지 않았습니다.
 

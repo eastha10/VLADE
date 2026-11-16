@@ -6,7 +6,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 import torch
 from vlade.data.episode_data import EpisodeData, write_json
-from vlade.models.students.qwen import QwenStudent, load_processor
+from vlade.models.students.qwen import QwenStudent
+from vlade.training.student_initialization import saved_processor
 from vlade.training.student_task import batches, identity
 from vlade.training.run_control import pilot_context, verify_checkpoint
 
@@ -24,7 +25,7 @@ sealed = verify_checkpoint(args.checkpoint, accumulation=saved_identity["setting
 if identity(saved_identity["settings"], data) != saved_identity:
     raise ValueError("Checkpoint data/code/environment mismatch; rerun the pilot")
 model = QwenStudent.load(args.checkpoint / "model").to("cuda:0").eval()
-processor = load_processor(model.student_config, directory=args.checkpoint / "processor")
+processor = saved_processor(model.student_config, args.checkpoint / "processor")
 inputs, proprio, _, _ = next(batches(data, processor, model.student_config, split="train"))
 inputs = {key: value.to("cuda:0") for key, value in inputs.items()}
 with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):

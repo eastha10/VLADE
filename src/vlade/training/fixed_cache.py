@@ -65,14 +65,16 @@ def validate_selection(selection: dict, data: EpisodeData) -> Path:
 
 
 class SequentialTeacher:
-    def __init__(self, checkpoint: Path):
+    def __init__(self, checkpoint: Path, *, device: str = "cuda:0", temporal_feature_layer: int = -2):
         from vlade.storage.assets import resolve_path
         checkpoint = resolve_path(checkpoint)
         from vlade.training.fft import FFTConfig, _activate_upstream, _make_model_and_components
         configure_tensorflow_cpu()
         _activate_upstream("ava_vla")
         cfg = FFTConfig("ava_vla", checkpoint, Path("."), Path("."), gradient_checkpointing=False)
-        self.model, self.processor, self.head, self.proprio, self.generator = _make_model_and_components(cfg, torch.device("cuda:0"))
+        self.device = torch.device(device)
+        self.temporal_feature_layer = temporal_feature_layer
+        self.model, self.processor, self.head, self.proprio, self.generator = _make_model_and_components(cfg, self.device)
         for module in (self.model, self.head, self.proprio, self.generator):
             module.eval()
             module.requires_grad_(False)
@@ -92,12 +94,12 @@ class SequentialTeacher:
         inputs = self.processor(prompt, data.image(sample, "primary"), return_tensors="pt")
         wrist = self.processor(prompt, data.image(sample, "wrist"), return_tensors="pt")
         inputs["pixel_values"] = torch.cat((inputs["pixel_values"], wrist["pixel_values"]), dim=1)
-        inputs = {key: value.to("cuda:0", dtype=torch.bfloat16 if value.is_floating_point() else value.dtype)
+        inputs = {key: value.to(self.device, dtype=torch.bfloat16 if value.is_floating_point() else value.dtype)
                   for key, value in inputs.items()}
         action, hidden, *_ = self.model.predict_action(
             **inputs, unnorm_key="vlade_normalized", proprio=sample["proprio"],
             proprio_projector=self.proprio, action_head=self.head,
-            temporal_context=self.context, temporal_feature_layer=-2,
+            temporal_context=self.context, temporal_feature_layer=self.temporal_feature_layer,
             vision_attn_weight_generator=self.generator, do_sample=False)
         if hidden.shape != (1, 56, self.model.llm_dim):
             raise ValueError(f"Unexpected temporal feature shape: {hidden.shape}")

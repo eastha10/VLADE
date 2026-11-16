@@ -44,6 +44,7 @@ vlade/
 │  ├─ ablations/            # 구성요소별 제거·교체 실험
 │  ├─ manifests/            # 원본 소스 기록·colab_source.json의 Git 배포 설정
 │  ├─ colab_vlade.ipynb     # 모든 연구 작업의 통합 Colab 실행 클라이언트
+│  ├─ colab_action_distillation.ipynb # HF T1→S0 증류 전용 실행·연결 안내
 │  └─ runs/                 # 실제 실행별 기록
 ├─ tests/                   # 사용자 지정 연구 검사 경계 (에이전트 검증은 하네스)
 ├─ docs/                    # 의사결정·프로토콜·환경·논문 메모
@@ -135,6 +136,12 @@ vlade/
 검증 전용 Python은 `.harness/v1/2026-11-11-ava-teacher-code/checks/`로 옮겼습니다.
 
 ## 학습 구현
+
+- `src/vlade/training/teacher_inference.py`: 별도 AVA 환경의 고정 T1 추론·Episode 상태 복원·액션 전달.
+- `src/vlade/training/student_initialization.py`: HF S0 전체 가중치·학습된 헤드·processor 검증 및 초기화.
+- `src/vlade/storage/checkpoint_inputs.py`: 기존 HF runs checkpoint의 불변 SHA·seal·LFS 검증과 런타임 입력 pin.
+- `src/vlade/utils/action_kd_notebook.py`, `scripts/prepare/generate_action_kd_notebook.py`: 증류 전용 노트북 정본 생성.
+- `docs/environment/action_level_distillation.md`: T1/S0 HF 선택, 노션 손실 수식, 파일럿·재개 계약.
 
 - `src/vlade/training/loop.py`: 모델과 독립적인 optimizer step 루프·검증·학습 상태
 - `src/vlade/training/fft.py`: 기존 AVA/OFT의 모델·RLDS·L1·checkpoint 어댑터
