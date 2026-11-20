@@ -86,9 +86,14 @@ def encode_observation(backbone: nn.Module, config: QwenVLAConfig, inputs: dict[
 
 
 def load_processor(config: QwenVLAConfig, *, qwen_initial: str | Path = "hfasset://qwen_initial"):
+    return load_saved_processor(config, verified_initial(config, qwen_initial))
+
+
+def load_saved_processor(config: QwenVLAConfig, directory: Path):
+    """Load the processor from a previously verified native Qwen checkpoint."""
     from transformers import AutoProcessor
-    checkpoint = verified_initial(config, qwen_initial)
-    return AutoProcessor.from_pretrained(str(checkpoint), local_files_only=True, trust_remote_code=False,
+
+    return AutoProcessor.from_pretrained(str(directory), local_files_only=True, trust_remote_code=False,
         use_fast=False, size={"shortest_edge": config.image_size**2, "longest_edge": config.image_size**2})
 
 

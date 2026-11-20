@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import random
+from contextlib import nullcontext
 from dataclasses import asdict, dataclass
 from typing import Any, Callable, Iterable, Sequence
 
@@ -112,6 +113,7 @@ def run_loop(
     backward_fn: Callable[[Any, int, float], Any] | None = None,
     on_before_step: Callable[[LoopState], None] | None = None,
     on_step: Callable[[LoopState, dict[str, float]], None] | None = None,
+    timings: Any | None = None,
 ) -> LoopState:
     """Run complete accumulation windows; reject truncated streams and NaN/Inf.
 
@@ -139,10 +141,12 @@ def run_loop(
     if state.step == max_steps:
         return state
     iterator = iter(batches)
+    invocation_first_step = state.step + 1
     while state.step < max_steps:
+        step_started = timings.start() if timings is not None else None
         total = 0.0
         try:
-            for _ in range(accumulation_steps):
+            for micro_index in range(accumulation_steps):
                 batch = next(iterator)
                 loss = (
                     backward_fn(batch, state.step, 1 / accumulation_steps)
@@ -152,28 +156,46 @@ def run_loop(
                 if loss.ndim != 0 or not torch.isfinite(loss).item():
                     raise FloatingPointError(f"Non-finite or non-scalar loss at step {state.step}")
                 if backward_fn is None:
-                    (loss / accumulation_steps).backward()
+                    with (timings.measure("s0_backward", step=state.step + 1, phase="train",
+                                          microstep=state.microsteps + micro_index + 1,
+                                          is_warmup=state.step + 1 == invocation_first_step)
+                          if timings is not None else nullcontext()):
+                        (loss / accumulation_steps).backward()
                 total += loss.detach().float().item()
-            # error_if_nonfinite guards gradients even when the scalar loss is finite.
-            norm = torch.nn.utils.clip_grad_norm_(params, max_grad_norm, error_if_nonfinite=True)
-            if on_before_step is not None:
-                on_before_step(state)
-            lr = optimizer.param_groups[0]["lr"]
-            optimizer.step()
-            scheduler.step()
-            optimizer.zero_grad(set_to_none=True)
+            with (timings.measure("s0_optimizer", step=state.step + 1, phase="train")
+                  if timings is not None else nullcontext()):
+                # error_if_nonfinite guards gradients even when the scalar loss is finite.
+                norm = torch.nn.utils.clip_grad_norm_(params, max_grad_norm, error_if_nonfinite=True)
+                if on_before_step is not None:
+                    on_before_step(state)
+                lr = optimizer.param_groups[0]["lr"]
+                optimizer.step()
+                scheduler.step()
+                optimizer.zero_grad(set_to_none=True)
         except StopIteration as exc:
             optimizer.zero_grad(set_to_none=True)
+            if timings is not None:
+                timings.finish(step_started, "s0_training_step", step=state.step + 1,
+                               status="failed", error_type="StopIteration", phase="train")
             raise RuntimeError(f"Data stream ended before optimizer step {state.step + 1}") from exc
-        except BaseException:
+        except BaseException as error:
             optimizer.zero_grad(set_to_none=True)
+            if timings is not None:
+                timings.finish(step_started, "s0_training_step", step=state.step + 1,
+                               status="failed", error_type=type(error).__name__, phase="train")
             raise
         state.step += 1
         state.microsteps += accumulation_steps
+        timing_metrics = {}
+        if timings is not None:
+            timing_metrics["s0_train_step_seconds"] = timings.finish(
+                step_started, "s0_training_step", step=state.step, phase="train",
+                accumulation_steps=accumulation_steps, is_warmup=state.step == invocation_first_step,
+            )
         if on_step is not None:
             on_step(
                 state,
-                {"loss": total / accumulation_steps, "lr": float(lr), "grad_norm": float(norm)},
+                {"loss": total / accumulation_steps, "lr": float(lr), "grad_norm": float(norm), **timing_metrics},
             )
     return state
 

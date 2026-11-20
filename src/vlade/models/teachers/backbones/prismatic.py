@@ -26,7 +26,7 @@ def _ls_new_forward(self, x: torch.Tensor) -> torch.Tensor:
 
 def ls_apply_patch(ls_module: LayerScale):
     ls_module.scale_factor = nn.Parameter(ls_module.gamma.clone())
-    ls_module.forward = _ls_new_forward.__get__(ls_module, LayerScale)
+    ls_module.forward = _ls_new_forward.__get__(ls_module, type(ls_module))
     del ls_module.gamma
 
 
