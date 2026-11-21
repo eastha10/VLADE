@@ -1,5 +1,11 @@
 # Directory Structure
 
+- `src/vlade/quantization/vision/`: 가역적 Vision PTQ, 민감도, W4/W8 예산 배정과 실행.
+- `configs/quantization/`: A0~A6 설정과 기존 Lock과 분리한 고정 HF 입력 registry.
+- `scripts/quantization/run_vision_ptq.py`: dry-run·pilot·선택 방법·전체 ablation CLI.
+- `runs/quantization/`: 사용자가 실행한 PTQ 결과 JSON (Git 제외).
+- `.harness/v1/2026-11-21-vision-ptq/checks/`: CPU 합성 검증 코드.
+
 현재 실행 기준은 [Git 소스·HF 입력 안내](docs/environment/hf_inputs_and_git_source.md)입니다. `src/vlade/utils/source.py`는 불변 Git checkout을, `src/vlade/storage/assets.py`는 외부 입력의 HF 출처와 캐시 검증을 담당합니다. Drive 배포는 별도 사용자 명령이 필요합니다.
 
 `src/vlade/data/sequences.py`는 Episode 내부 연속 query 구간을 선택하고,
