@@ -22,3 +22,4 @@
 
 - Drive VLADE 폴더에 통합 노트북 1개를 생성하고 코드·문서 19개를 업데이트했습니다. ID·부모·원격 크기를 읽어 20개 모두 로컬 크기 일치를 확인했습니다. 통합 노트북은 원격 원본을 다시 읽어 바이트 일치를 별도로 확인합니다. 기존 Drive 노트북의 출력·사용자 변형과 데이터·가중치·실험 결과는 보존했습니다. reports/drive-deployment.json에 파일 ID를 기록했습니다.
 - Git은 미완료입니다. 현재 main/HEAD afb670a2c9bb3befe03a01c6ac2eaf3c99aca769에서 로컬 git add가 .git/index.lock Permission denied로 실패했습니다. 자동 검토가 저장소 신뢰·공개 업로드 범위 미확인으로 최초 GitHub tree 요청을 거부했습니다. origin 일치와 저장소 관리·push 권한을 확인한 뒤 작업 기록을 제외한 정식 변경 30개 경로만 재시도했으나 GitHub 연결이 Resource not accessible by integration(403)을 반환했습니다. 기존 Git 인증도 사용 가능한 자격증명이 없어 실패했습니다. 원격 tree/commit/ref를 생성·변경하지 않았으며 로컬 변경과 사용자 기록을 보존했습니다.
+- 최종 검증: Drive 통합 노트북 원본 16,591 bytes를 인증서 검증을 유지한 PowerShell HTTPS 읽기로 다시 받아 로컬과 바이트 일치를 확인했습니다. 원격 main은 afb670a2c9bb3befe03a01c6ac2eaf3c99aca769로 변경되지 않았습니다.

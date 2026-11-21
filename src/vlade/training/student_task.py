@@ -1,4 +1,4 @@
-"""Qwen task supervision and optional offline action KD on the same queries."""
+"""Qwen BC and action KD from frozen T1 inference or verified cached actions."""
 from __future__ import annotations
 import argparse
 import hashlib
@@ -8,7 +8,7 @@ import random
 import time
 import uuid
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Protocol
 
 import numpy as np
 import torch
@@ -18,12 +18,19 @@ from vlade.data.episode_data import EpisodeData, query_stream, query_count, writ
 from vlade.models.contracts import masked_action_l1
 from vlade.distillation.action import action_distillation_loss, validate_weights
 from vlade.training.cached_actions import CachedActions
-from vlade.models.students.qwen import HistoryFrame, QwenStudent, StudentConfig, load_processor, prepare_inputs, resolve_pretrained_directory
+from vlade.training.student_initialization import initial_checkpoint, saved_processor
+from vlade.models.students.qwen import HistoryFrame, QwenStudent, StudentConfig, load_processor, prepare_inputs
 from vlade.utils.source_identity import source_identity
 from vlade.training.loop import LoopState, make_scheduler, restore_training_state, run_loop, training_state
 from vlade.training.hub import HubCheckpoints
 from vlade.training.run_control import checkpoint_space, gradient_diagnostics, seal_checkpoint, verify_checkpoint
 from vlade.utils.filesystem import publish_directory
+
+
+class ActionTargets(Protocol):
+    signature: dict
+
+    def get(self, sample: dict) -> torch.Tensor: ...
 
 
 def samples(data: EpisodeData, split: str, *, repeat: bool = False,
@@ -35,7 +42,7 @@ def samples(data: EpisodeData, split: str, *, repeat: bool = False,
 
 def batches(data: EpisodeData, processor, config: StudentConfig, *, split: str,
             skip: int = 0, episode_limit: int = 0, seed: int = 42, limit: int = 0,
-            teacher: CachedActions | None = None):
+            teacher: ActionTargets | None = None):
     for sample, history in samples(data, split, repeat=split == "train", episode_limit=episode_limit,
                                    seed=seed, skip=skip, limit=limit):
         frames = [HistoryFrame(q["timestep"], data.image(q, "primary"), data.image(q, "wrist")) for q in history]
@@ -45,12 +52,12 @@ def batches(data: EpisodeData, processor, config: StudentConfig, *, split: str,
                  torch.from_numpy(sample["action_valid_mask"])[None])
         if teacher is not None:
             if split != "train":
-                raise ValueError("Teacher cache may only supervise the train split")
+                raise ValueError("Teacher actions may only supervise the train split")
             batch += (teacher.get(sample)[None],)
         yield batch
 
 
-def identity(settings: dict, data: EpisodeData, teacher: CachedActions | None = None) -> dict:
+def identity(settings: dict, data: EpisodeData, teacher: ActionTargets | None = None) -> dict:
     paths = [Path(__file__), Path(__file__).with_name("loop.py"),
              Path(__file__).with_name("run_control.py"),
              Path(__file__).parents[1] / "data/episode_data.py",
@@ -58,22 +65,28 @@ def identity(settings: dict, data: EpisodeData, teacher: CachedActions | None = 
              Path(__file__).parents[1] / "models/students/qwen.py"]
     cache_identity = {}
     if settings.get("method") == "action_kd":
-        teacher = teacher or CachedActions(Path(settings["teacher_cache"]), data,
-                                           episode_limit=settings.get("episode_limit", 0))
+        if settings.get("teacher_mode", "cache") == "inference":
+            from vlade.training.teacher_inference import teacher_identity
+            signature = teacher.signature if teacher else teacher_identity(settings["teacher_checkpoint"], data)[1]
+            cache_identity = {"teacher_inference": signature}
+        else:
+            teacher = teacher or CachedActions(Path(settings["teacher_cache"]), data,
+                                               episode_limit=settings.get("episode_limit", 0))
+            cache_identity = {"teacher_cache": teacher.signature}
         paths += [Path(__file__).with_name("cached_actions.py"),
                   Path(__file__).parents[1] / "data/teacher_records.py",
                   Path(__file__).parents[1] / "distillation/action.py"]
-        cache_identity = {"teacher_cache": teacher.signature}
+    _, initialization = initial_checkpoint(settings, data, StudentConfig(**settings["student"]))
     return {**cache_identity, "settings": settings, "data_manifest_sha256": sha256(data.root / "manifest.json"),
             "code_sha256": source_identity(Path(__file__).resolve().parents[3]),
             "torch": torch.__version__, "transformers": importlib.metadata.version("transformers"),
-            "initial_download_manifest_sha256": sha256(Path(settings["initial_checkpoint"]) / "download_manifest.json")}
+            **initialization}
 
 
 def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) -> None:
     from vlade.storage.assets import resolve_path, resolve_input
     settings = dict(settings)
-    for key in ("data", "initial_checkpoint", "teacher_cache"):
+    for key in ("data", "initial_checkpoint", "teacher_cache", "teacher_checkpoint"):
         if key in settings:
             settings[key] = str(resolve_input(settings[key]))
     if resume is not None:
@@ -83,6 +96,8 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
     kd_enabled = settings["method"] == "action_kd"
     if kd_enabled:
         validate_weights(settings["task_weight"], settings["action_kd_weight"])
+        if settings.get("teacher_mode", "cache") not in {"cache", "inference"}:
+            raise ValueError("teacher_mode must be cache or inference")
     if min(settings["max_steps"], settings["save_steps"], settings["accumulation_steps"]) < 1:
         raise ValueError("Training budgets must be positive")
     if settings.get("eval_steps", 100) < 1 or settings.get("validation_queries", 32) < 1:
@@ -92,11 +107,10 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
     config.validate()
     if config.history_queries != 2 or config.query_interval_steps != 8:
         raise ValueError("This shared sampler requires two queries at interval eight")
-    checkpoint = resolve_pretrained_directory(config, Path(settings["initial_checkpoint"]))
-    if not (checkpoint / "model.safetensors").is_file() and not (checkpoint / "model.safetensors.index.json").is_file():
-        raise FileNotFoundError("Download the pinned Qwen model before Student training")
+    checkpoint, _ = initial_checkpoint(settings, data, config)
+    online = kd_enabled and settings.get("teacher_mode", "cache") == "inference"
     teacher = (CachedActions(Path(settings["teacher_cache"]), data,
-                             episode_limit=settings.get("episode_limit", 0)) if kd_enabled else None)
+                             episode_limit=settings.get("episode_limit", 0)) if kd_enabled and not online else None)
     experiment = identity(settings, data, teacher)
     if resume:
         if not (resume / "COMPLETE").is_file():
@@ -107,7 +121,9 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
     if preflight:
         print(json.dumps({"status": "preflight_ok", "counts": data.manifest["counts"],
                           "model": config.model_id, "gpu_forward_tested": False,
-                          "teacher_cache": teacher.signature if teacher else None}))
+                          "teacher_cache": teacher.signature if teacher else None,
+                          "teacher_inference": experiment.get("teacher_inference"),
+                          "initialization": settings.get("initialization", "pretrained_backbone")}))
         return
     hub = HubCheckpoints(Path(settings["output"]), resume=resume, metric="validation_l1")
     if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
@@ -122,9 +138,12 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
     if not resume and any(output.glob("step-*")):
         raise FileExistsError("Choose a fresh run name or explicitly resume a completed checkpoint")
     model = (QwenStudent.load(resume / "model") if resume else
-             QwenStudent.from_pretrained(config, directory=checkpoint, dtype=torch.float32)).to("cuda:0")
+             QwenStudent.load(checkpoint / "model") if settings.get("initialization") == "student_checkpoint" else
+             QwenStudent.from_pretrained(config, directory=checkpoint, dtype=torch.float32)).float().to("cuda:0")
     model.backbone.gradient_checkpointing_enable()
-    processor = load_processor(config, directory=checkpoint)
+    processor = (saved_processor(config, (resume or checkpoint) / "processor")
+                 if resume or settings.get("initialization") == "student_checkpoint" else
+                 load_processor(config, directory=checkpoint))
     if not all(parameter.requires_grad for parameter in model.parameters()):
         raise ValueError("Student BC expects the full backbone and head to be trainable")
     optimizer = torch.optim.AdamW(model.parameters(), lr=settings["learning_rate"], weight_decay=settings["weight_decay"])
@@ -137,7 +156,9 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
             raise ValueError("Student model/optimizer/query cursor step mismatch")
     run_id = uuid.uuid4().hex[:12]
     manifest = {"status": "running", "identity": experiment, "seed": seed,
-                "initialization": "pinned_pretrained_backbone_and_seeded_continuous_head",
+                "initialization": ("pinned_s0_backbone_and_trained_action_head_fresh_optimizer"
+                    if settings.get("initialization") == "student_checkpoint" else
+                    "pinned_pretrained_backbone_and_seeded_continuous_head"),
                 "mode": "single_episode_overfit_pilot" if settings.get("episode_limit", 0) else settings["method"],
                 "gpu": torch.cuda.get_device_name(0), "vram_bytes": torch.cuda.get_device_properties(0).total_memory,
                 "dtype": "float32_parameters_bfloat16_autocast", "rollout_success_rate": None,
@@ -179,6 +200,9 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
                 "proprio": model.head.proprio, "action": model.head.action})
 
     try:
+        if online:
+            from vlade.training.teacher_inference import InferenceActions
+            teacher = InferenceActions(settings, data)
         with (output / f"metrics-{run_id}.jsonl").open("x", encoding="utf-8") as log:
             def on_step(current, metrics):
                 if loss_terms:
@@ -223,6 +247,8 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
                         error_type=type(exc).__name__, error=str(exc))
         raise
     finally:
+        if online and teacher is not None:
+            teacher.close()
         hub.flush()
         manifest.update(step=state.step, invocation_seconds=time.monotonic() - started)
         write_json(manifest_path, manifest)

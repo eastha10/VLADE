@@ -1,6 +1,8 @@
 # 설정으로 실행하는 연구 절차
 
-유지 관리되는 Colab 실행본은 [colab_vlade.ipynb](../../experiments/colab_vlade.ipynb) 하나입니다. 노트북은 Git commit을 확정하고 HF 인증·설정·계획 확인·설치·실행만 호출합니다.
+일반 연구 작업은 [colab_vlade.ipynb](../../experiments/colab_vlade.ipynb)를 사용합니다.
+HF T1→S0 증류만 실행하려면 [colab_action_distillation.ipynb](../../experiments/colab_action_distillation.ipynb)를 사용합니다.
+노트북은 Git commit을 확정하고 HF 인증·설정·계획 확인·설치·실행만 호출합니다.
 모델, 데이터 처리, 학습, cache, rollout 로직은 프로젝트 Python 모듈에 있습니다.
 `third_party/`는 원본 출처를 확인하는 보관본이며 이 실행 경로에는 필요하지 않습니다.
 PyTorch·timm·Transformers·시뮬레이터 등 설치된 실행 의존성은 필요합니다.
@@ -25,6 +27,10 @@ Suite pilot4/main·논문 pilot/main은 같은 `EXPERIMENT_ID`를 유지합니�
 단일 Episode 진단은 `prepare_one_episode` 이후 같은 WORKSPACE의 `ava_one_step`을 실행합니다.
 `fullframes`는 별도 공개 게시 작업입니다. 이미 완료된 데이터 이용에는 재실행이 필요 없습니다.
 Teacher 선택·cache는 `select_teacher`·`cache_teacher`를 선택합니다. 실제 검증 보고서와 고정 T1이 필요합니다.
+
+`qwen_kd`는 [HF T1 추론 → S0 증류](action_level_distillation.md)를 실행합니다.
+`checkpoint`로 S0, `distillation.teacher_checkpoint`로 T1, `distillation.action_kd_weight`로 λ를 선택합니다.
+Teacher cache는 필수가 아니며 setup은 AVA 추론 환경과 Student 학습 환경을 각각 준비합니다.
 
 
 노트북의 소스·인증 셀을 실행한 뒤 다음처럼 사용합니다. `WORKSPACE`는 현재 런타임 SSD입니다.

@@ -82,6 +82,8 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["VLADE_ASSET_REGISTRY"] = str(registry)
     if args.action == "setup":
         python = prepare(ROOT, work, config["runtime"])
+        if config.get("teacher_runtime"):
+            prepare(ROOT, work, config["teacher_runtime"])
         print(json.dumps({"runtime": str(python), "source": identity, "status": "ready"}))
         return 0
     if args.worker:
@@ -92,11 +94,19 @@ def main(argv: list[str] | None = None) -> int:
         phase = (
             ("pilot" if config.get("pilot") else "main")
             if config["task"] == "paper"
+            else ("pilot" if config.get("pilot", {}).get("only") else "main")
+            if config["task"] == "student"
             else config.get("settings", {}).get("phase", "run")
         )
         settings_path = output.parent / (output.name + "-" + phase + "-settings.json")
-        if settings_path.is_file() and json.loads(settings_path.read_text()) != config:
-            raise ValueError("Existing run config differs; choose a new run_group")
+        if settings_path.is_file():
+            previous = json.loads(settings_path.read_text())
+            current = dict(config)
+            # Resume changes the checkpoint location, not the original experiment.
+            previous.pop("resume", None)
+            current.pop("resume", None)
+            if previous != current:
+                raise ValueError("Existing run config differs; choose a new run_group")
         write_json(settings_path, config)
         dispatch(config, ROOT, work, output)
         return 0

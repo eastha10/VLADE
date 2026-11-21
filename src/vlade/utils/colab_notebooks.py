@@ -20,7 +20,7 @@ PROFILES = {
     "select_teacher": "검증 보고서 기반 T1 선택",
     "cache_teacher": "고정 T1 순차 cache 생성·게시",
     "qwen_task": "Qwen Task-only·파일럿",
-    "qwen_kd": "Qwen Action KD·파일럿",
+    "qwen_kd": "HF T1 추론 → S0 Action KD·파일럿",
     "evaluate_ava": "AVA LIBERO+ paired rollout",
     "evaluate_oft": "OFT LIBERO+ paired rollout",
     "evaluate_qwen": "Qwen LIBERO+ paired rollout",

@@ -109,7 +109,12 @@ def dispatch(config: dict, code: Path, work: Path, output: Path) -> None:
             "seed": config["seed"],
             **config["train"],
         }
+        if "initialization" in config:
+            settings["initialization"] = config["initialization"]
         settings.update(config.get("distillation", {}))
+        if settings.get("teacher_mode") == "inference":
+            from vlade.runtime.environment import locate
+            settings["teacher_python"] = str(locate(code, work, config["teacher_runtime"]))
         from .student import run_with_pilot
 
         run_with_pilot(settings, config, code)
