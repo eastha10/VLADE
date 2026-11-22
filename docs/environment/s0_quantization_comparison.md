@@ -82,6 +82,11 @@ manifest·split·normalization hash, software/GPU, seed·query ID·비트 배정
 asset은 기존 storage Lock의 `libero_plus_assets` revision
 `dd2bd61b7d9a6fef1abc52d606e983b41886a149`를 그대로 사용합니다.
 
+기존 S0와 prepared 데이터가 이미 있다면 [읽기 전용 입력 등록](local_hf_inputs.md)으로
+전수 검증한 뒤 원본 경로를 그대로 연결할 수 있습니다. `VLADE_LOCAL_INPUTS`를 지정하면
+worker도 같은 등록을 상속하고 그 hash를 비교 identity에 기록합니다. 등록 정보가 바뀌면
+이전 source/config가 같아도 새 실행으로 분리해야 합니다.
+
 ## 저장과 재개
 
 기본 결과는 Git 제외 경로 `runs/quantization/s0-comparison/<고유 group>/`입니다.

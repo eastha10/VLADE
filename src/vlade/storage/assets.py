@@ -239,6 +239,10 @@ def fetch_asset(key: str, *, registry: Path | None = None, cache: Path | None = 
 def resolve_path(value: str | Path, *, registry: Path | None = None) -> Path:
     text = str(value)
     if text.startswith("hfasset:"):
+        from .local_inputs import resolve_registered_input
+        bound = resolve_registered_input(value, registry=registry)
+        if bound is not None:
+            return bound
         key = text[len("hfasset:"):].strip("/\\")
         return fetch_asset(key, registry=registry)
     return Path(value)
@@ -247,10 +251,14 @@ def resolve_path(value: str | Path, *, registry: Path | None = None) -> Path:
 def resolve_input(value: str | Path, *, registry: Path | None = None) -> Path:
     """Require HF provenance for external inputs, including already cached paths.
 
-    Local paths are accepted only when they point to the exact verified cache
-    directory of a pinned registry entry. New outputs/resume paths use
+    Local paths must be exact verified HF cache roots or explicitly registered
+    read-only roots with the same pinned HF byte identities. New outputs use
     resolve_path instead; they are never mistaken for downloaded initial inputs.
     """
+    from .local_inputs import resolve_registered_input
+    bound = resolve_registered_input(value, registry=registry)
+    if bound is not None:
+        return bound
     if str(value).startswith("hfasset:"):
         key = str(value)[len("hfasset:"):].strip("/\\")
         record = asset_record(key, registry)

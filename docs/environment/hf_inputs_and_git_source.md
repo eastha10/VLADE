@@ -18,7 +18,7 @@ SOURCE_REF = '이전_실행에서_기록한_40자리_Git_commit'
 
 ## 가중치와 데이터
 
-외부 입력은 `hfasset://키`로 지정합니다. `configs/storage/hf_assets.lock.json`의 불변 HF revision과 SHA256을 사용합니다. 학습 진입점은 임의의 Drive/로컬 입력을 거부하며, 동일 레지스트리에서 받은 검증된 HF 캐시 경로는 허용합니다.
+외부 입력은 `hfasset://키`로 지정합니다. `configs/storage/hf_assets.lock.json`의 불변 HF revision과 SHA256을 사용합니다. 학습 진입점은 임의의 Drive/로컬 입력을 거부하며, 동일 레지스트리에서 받은 검증된 HF 캐시 경로는 허용합니다. 이미 존재하는 정본은 [원격 지문·전체 파일 검증 후 읽기 전용 등록](local_hf_inputs.md)을 통해 원본 경로를 보존하여 사용할 수 있습니다.
 
 ```bash
 python scripts/data/hf_assets.py fetch ava_t0
@@ -32,7 +32,7 @@ python scripts/data/prepare_episode_data.py \
 ```
 
 전처리와 정규화 통계 생성도 같은 입력 검증을 사용합니다. 로컬 경로는 정확한 검증된
-HF 캐시 루트일 때만 허용하며, 임의의 TFDS 폴더나 캐시 내부 하위 폴더를 지정해 검증을
+HF 캐시 루트 또는 명시적으로 등록·검증한 기존 root일 때만 허용하며, 임의의 TFDS 폴더나 캐시 내부 하위 폴더를 지정해 검증을
 생략할 수 없습니다. 출력은 새로운 로컬 경로를 사용합니다.
 
 - `ava_t0`, `ava_fft_step_1975`, `openvla_oft_t0`: 등록된 모델/체크포인트.

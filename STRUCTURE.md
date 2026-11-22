@@ -1,5 +1,8 @@
 # Directory Structure
 
+- `src/vlade/storage/local_inputs.py`: 원격 지문·전수 SHA256 검증 및 기존 HF 정본의 읽기 전용 등록.
+- `scripts/data/bind_local_input.py`: 기존 파일을 보존하는 runtime 입력 등록 CLI.
+
 - `configs/quantization/s0_comparison.json`: S0 독립 조건표와 공통 calibration/evaluation budget.
 - `src/vlade/evaluation/quantization_comparison.py`: 비교 계획, 프로세스 격리, pairing 검증, 결과 보존·재개.
 - `src/vlade/evaluation/s0_quantization.py`: 기존 S0 평가 로직과 단일 조건 worker.

@@ -124,6 +124,9 @@ def run(args: argparse.Namespace) -> None:
     from vlade.training.run_control import CHECKPOINT_MANIFEST, verify_checkpoint
     from vlade.evaluation.s0_libero_rollout import prepare_rollouts, run_rollouts
 
+    if os.environ.get("VLADE_LOCAL_INPUTS"):
+        hf_inputs["local_bindings_sha256"] = sha256(Path(os.environ["VLADE_LOCAL_INPUTS"]))
+
     device = evaluation_device()
     torch.manual_seed(args.seed)
     seal = verify_checkpoint(args.checkpoint)

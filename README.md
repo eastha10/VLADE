@@ -1,5 +1,8 @@
 # VLADE
 
+이미 내려받은 HF 정본은 [읽기 전용 입력 등록](docs/environment/local_hf_inputs.md)으로
+전체 파일을 검증한 뒤 이동·복사·재다운로드 없이 연결할 수 있습니다.
+
 S0의 ActQuant·QVLA·QuantVLA 독립 비교는 [조건표·실행 안내](docs/environment/s0_quantization_comparison.md)를
 따릅니다. `scripts/quantization/run_s0_comparison.py`는 명시적인 `--run` 없이는 계획만 확인합니다.
 

@@ -120,7 +120,9 @@ def input_records(cfg: dict) -> dict:
 def protect_output(output: Path, cfg: dict) -> None:
     """Never place runtime writes inside existing weight/data/cache inputs."""
     from vlade.storage.assets import cache_path
+    from vlade.storage.local_inputs import registered_roots
     protected = [ROOT / "data", ROOT / "checkpoints"]
+    protected.extend(registered_roots())
     for kind, record in input_records(cfg).items():
         key = "libero_plus_assets" if kind == "benchmark_assets" else cfg[kind][len("hfasset://"):]
         protected.append(cache_path(key, record).parent.parent.parent)
@@ -225,7 +227,9 @@ def run_comparison(cfg: dict, output: Path, *, resume: bool = False,
     source = source_identity()
     if source["source_dirty"]:
         raise ValueError("Commit the reviewed research source before GPU execution; dry-run remains available")
-    identity = {"config": cfg, "source": source, "inputs": proposal["inputs"]}
+    binding = os.environ.get("VLADE_LOCAL_INPUTS")
+    binding_hash = hashlib.sha256(Path(binding).read_bytes()).hexdigest() if binding else None
+    identity = {"config": cfg, "source": source, "inputs": proposal["inputs"], "local_bindings_sha256": binding_hash}
     if resume:
         manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
         if manifest["identity"] != identity:
