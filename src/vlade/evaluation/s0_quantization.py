@@ -55,6 +55,17 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+def benchmark_workspace(output: Path, *, inputs: tuple[Path, ...]) -> Path:
+    """Keep shared runtime writes outside all verified inputs and HF caches."""
+    from vlade.storage.local_inputs import registered_roots
+    work = Path(os.environ.get("VLADE_BENCHMARK_WORK", str(output.parent / "benchmark-runtime"))).resolve()
+    protected = [*inputs, *registered_roots()]
+    protected.extend(Path(os.environ[name]) for name in ("HF_HOME", "HF_HUB_CACHE", "VLADE_ASSET_CACHE") if os.environ.get(name))
+    if any(work.is_relative_to(path.resolve()) for path in protected):
+        raise ValueError("Benchmark workspace must stay outside model/data/source/cache inputs")
+    return work
+
+
 def select_layers(model: Any, scope: str) -> dict[str, Any]:
     """Share exactly the same declared target modules across independent methods."""
     from torch import nn
@@ -148,7 +159,10 @@ def run(args: argparse.Namespace) -> None:
             spec = json.loads((root / "configs/runtime/student_eval.json").read_text(encoding="utf-8"))
             verify(spec, Path(sys.executable))
             runtime_record = json.loads((Path(sys.executable).parent.parent / "benchmark-source.json").read_text())
-            prepare(args.output.parent / "benchmark-runtime")
+            from vlade.storage.assets import cache_path
+            asset_root = cache_path("libero_plus_assets", asset_record("libero_plus_assets", args.registry))
+            prepare(benchmark_workspace(args.output, inputs=(args.checkpoint, args.data,
+                Path(runtime_record["source"]), Path(sys.executable).parent.parent, asset_root)))
             from libero.libero import benchmark
             if not Path(benchmark.__file__).resolve().is_relative_to(Path(runtime_record["source"]).resolve()):
                 raise ValueError("Imported benchmark is outside the verified pinned source")

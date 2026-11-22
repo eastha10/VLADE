@@ -15,3 +15,6 @@ vlade-research = "vlade.research.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 namespaces = true
+
+[tool.setuptools.package-data]
+"vlade.quantization.packed" = ["kernel.cu"]

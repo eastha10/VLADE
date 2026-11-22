@@ -26,9 +26,13 @@ def _remote_identity(record: dict) -> dict:
     if info.sha != record["revision"]:
         raise ValueError("Remote HF revision differs from the pinned record")
     remote = {item.rfilename: item for item in info.siblings}
-    expected = ({record["prefix"] + "/files/" + name: value for name, value in record["files"].items()}
-                if record["format"] == "directory" else
-                {record["archive_path"]: {"bytes": record["archive_bytes"], "sha256": record["archive_sha256"]}})
+    if record["format"] in {"directory", "hub_checkpoint"}:
+        separator = "/files/" if record["format"] == "directory" else "/"
+        expected = {record["prefix"] + separator + name: value for name, value in record["files"].items()}
+    elif record["format"] == "upstream_files":
+        expected = record["files"]
+    else:
+        expected = {record["archive_path"]: {"bytes": record["archive_bytes"], "sha256": record["archive_sha256"]}}
     for name, fingerprint in expected.items():
         item = remote.get(name)
         if item is None or item.size != fingerprint["bytes"]:
@@ -52,7 +56,7 @@ def _metadata(root: Path, record: dict) -> None:
     from .assets import _verify_files
     if not root.is_dir():
         raise ValueError("Registered local input directory is missing")
-    if record.get("format") == "directory":
+    if record.get("format") in {"directory", "hub_checkpoint", "upstream_files"}:
         if not record.get("files"):
             raise ValueError("Directory binding requires explicit pinned file fingerprints")
         _verify_files(root, record["files"])
@@ -64,7 +68,7 @@ def _metadata(root: Path, record: dict) -> None:
         if not complete.is_file() or complete.is_symlink():
             raise ValueError("Registered prepared dataset is incomplete")
     else:
-        raise ValueError("Local bindings support sealed directory assets and prepared dataset archives only")
+        raise ValueError("Local bindings require explicit HF files or a prepared dataset archive")
 
 
 def _prepared_payload(root: Path, progress: Callable[[int], None] | None = None) -> int:
@@ -142,7 +146,7 @@ def register_local_input(key: str, root: Path, bindings: Path, *, registry: Path
     if bindings.is_relative_to(root):
         raise ValueError("Binding metadata must stay outside the existing input directory")
     record = asset_record(key, registry)
-    if record.get("format") not in {"directory", "archive"}:
+    if record.get("format") not in {"directory", "hub_checkpoint", "upstream_files", "archive"}:
         raise ValueError("Unsupported local HF binding format")
     remote = _remote_identity(record)
     _metadata(root, record)

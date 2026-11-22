@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "checkpoint": "hfasset://S0",
+  "data": "hfasset://prepared_d_seed42",
+  "registry": "configs/quantization/s0_assets.json",
+  "seed": 42,
+  "calibration_queries": 8,
+  "eval_queries": 16,
+  "group_size": 32,
+  "backend": "cuda",
+  "methods": {
+    "actquant": {"target_bpw": 8.0, "scope": "language"},
+    "qvla": {"target_bpw": 8.0, "scope": "language"},
+    "quantvla": {"target_bpw": 8.0, "scope": "language"}
+  },
+  "qvla": {"jacobian_probes": 2, "refine_channels": 32, "budget_metric": "parameters", "max_prune_fraction": 0.1, "prune_threshold": 0.00001},
+  "actquant": {"lambda_redundancy": 1.0, "lambda_action": 1.0},
+  "quantvla": {"rotation_block_size": 64}
+}

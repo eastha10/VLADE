@@ -1,5 +1,9 @@
 # VLADE
 
+QVLA·ActQuant·QuantVLA의 실제 bit-packed 저장·CUDA 추론은
+[packed Student PTQ 안내](docs/environment/packed_vla_ptq.md)를 따릅니다.
+`scripts/quantization/run_packed_ptq.py`는 세 방법의 독립 보정·export·재로딩을 지원합니다.
+
 이미 내려받은 HF 정본은 [읽기 전용 입력 등록](docs/environment/local_hf_inputs.md)으로
 전체 파일을 검증한 뒤 이동·복사·재다운로드 없이 연결할 수 있습니다.
 

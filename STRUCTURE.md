@@ -1,5 +1,9 @@
 # Directory Structure
 
+- `src/vlade/quantization/packed/`: ActQuant/QVLA/QuantVLA 보정, bit-packed Linear, NVRTC CUDA kernel, safe-tensor 배포.
+- `configs/quantization/packed_student.json`: 세 방법의 독립 예산·범위·보정 설정.
+- `scripts/quantization/run_packed_ptq.py`: 고정 HF 입력의 packed export·재로딩·행동 오차 평가.
+
 - `src/vlade/storage/local_inputs.py`: 원격 지문·전수 SHA256 검증 및 기존 HF 정본의 읽기 전용 등록.
 - `scripts/data/bind_local_input.py`: 기존 파일을 보존하는 runtime 입력 등록 CLI.
 
