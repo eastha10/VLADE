@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "phase": "pilot",
+  "checkpoint": "hfasset://S0",
+  "data": "hfasset://prepared_d_seed42",
+  "registry": "configs/quantization/s0_assets.json",
+  "run_group": "s0-independent-ptq",
+  "output_root": "runs/quantization/s0-comparison",
+  "seeds": [42],
+  "calibration_queries": 8,
+  "eval_queries": 16,
+  "warmup": 2,
+  "rollouts": 0,
+  "conditions": [
+    {"id": "BF16", "method": "bf16", "scope": "language", "target_bpw": 16},
+    {"id": "L8-Uniform", "method": "uniform_w8", "scope": "language", "target_bpw": 8},
+    {"id": "L8-ActQuant", "method": "actquant", "scope": "language", "target_bpw": 8},
+    {"id": "L8-QVLA", "method": "qvla", "scope": "language", "target_bpw": 8},
+    {"id": "L8-QuantVLA", "method": "quant", "scope": "language", "target_bpw": 8},
+    {"id": "LV4-Uniform", "method": "uniform_w4", "scope": "language_vision", "target_bpw": 4},
+    {"id": "LV4-ActQuant", "method": "actquant", "scope": "language_vision", "target_bpw": 4},
+    {"id": "LV4-QVLA", "method": "qvla", "scope": "language_vision", "target_bpw": 4}
+  ]
+}

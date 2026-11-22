@@ -1,5 +1,10 @@
 # S0 fake quantization 실험
 
+세 방법을 공정하게 **독립 비교**하려면 [조건표·독립 실행기](s0_quantization_comparison.md)를
+사용합니다. `scripts/quantization/run_s0_comparison.py`는 BF16·Uniform W4/W8과
+공통 범위/예산별 파일럿을 분리하며 기본 동작은 다운로드 없는 dry-run입니다.
+아래 기존 UI·스위치는 순차 조합 비교용으로 유지됩니다.
+
 로컬 화면에서는 ActQuant, QVLA, QuantVLA 체크박스를 선택하고 평가를 실행합니다. 켠 기법을 QuantVLA → ActQuant → QVLA 순서로 같은 모델에 적용하고, 최종 모델로 MAE와 롤아웃 성공률을 측정합니다. 모두 끄면 BF16만 평가합니다. 양수인 BF16 대비 MAE 차이는 오차가 늘어났음을 뜻합니다. 저장된 평가 메뉴에서 이전 보고서를 다시 볼 수 있습니다.
 
 CUDA BF16을 지원하는 PyTorch와 팀의 비공개 Hugging Face 저장소에 접근할 수 있는 인증이 필요합니다. 저장소 루트에서 다음 명령을 실행합니다. 경로를 직접 넘길 때는 같은 레지스트리로 검증한 Hugging Face 캐시 경로를 사용합니다.

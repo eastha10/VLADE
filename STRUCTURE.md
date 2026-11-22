@@ -1,5 +1,10 @@
 # Directory Structure
 
+- `configs/quantization/s0_comparison.json`: S0 독립 조건표와 공통 calibration/evaluation budget.
+- `src/vlade/evaluation/quantization_comparison.py`: 비교 계획, 프로세스 격리, pairing 검증, 결과 보존·재개.
+- `src/vlade/evaluation/s0_quantization.py`: 기존 S0 평가 로직과 단일 조건 worker.
+- `scripts/quantization/run_s0_comparison.py`: 다운로드 없는 계획 및 명시적인 독립 GPU 비교 실행.
+
 - `src/vlade/quantization/vision/`: 가역적 Vision PTQ, 민감도, W4/W8 예산 배정과 실행.
 - `configs/quantization/`: A0~A6 설정과 기존 Lock과 분리한 고정 HF 입력 registry.
 - `scripts/quantization/run_vision_ptq.py`: dry-run·pilot·선택 방법·전체 ablation CLI.

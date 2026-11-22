@@ -1,5 +1,8 @@
 # VLADE
 
+S0의 ActQuant·QVLA·QuantVLA 독립 비교는 [조건표·실행 안내](docs/environment/s0_quantization_comparison.md)를
+따릅니다. `scripts/quantization/run_s0_comparison.py`는 명시적인 `--run` 없이는 계획만 확인합니다.
+
 Vision Encoder 전용 가중치 Fake Quantization과 AVA-aware W4/W8 ablation은
 [PTQ 실행 안내](docs/environment/vision_ptq.md)를 참고하십시오.
 실행 진입점은 `scripts/quantization/run_vision_ptq.py`, 설정은
