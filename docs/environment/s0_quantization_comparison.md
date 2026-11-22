@@ -1,6 +1,13 @@
 # S0 독립 양자화 조건표와 실행기
 
 같은 비양자화 QwenVLA S0에서 각 조건을 새로 시작하는 파일럿 실행기입니다.
+GT-only/GT+KD로 추가 학습한 Student도 별도 checkpoint 키와 run으로 평가합니다.
+HF에 게시하고 불변 revision·전체 파일 SHA256을 고정한 `hub_checkpoint` record를
+registry에 넣고 `checkpoint` 키를 선택합니다. 기존 S0 결과를 새 Student 결과로
+재사용하지 않으며, 각 Student마다 BF16과 양자화 조건을 같은 원본에서 다시 시작합니다.
+여러 조건의 simulator 자산 추출본을 공유하려면 `VLADE_BENCHMARK_WORK`에 입력
+모델·데이터 밖의 runtime 경로를 지정합니다. 기존 archive 지문·추출 파일 검증은
+유지하며, 조건별 보고서와 모델 상태는 공유하지 않습니다.
 기존 세 스위치를 모두 켜는 순차 조합 평가와 구분합니다. 새로운 공식 연구
 결론이나 논문 전체 재현을 주장하지 않으며, validation으로 선정한 최종 S*의
 양자화 비교를 S0 결과로 대체하지 않습니다. T1 Vision-only A0~A6 실험도 별도입니다.

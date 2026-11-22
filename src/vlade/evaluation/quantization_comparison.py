@@ -106,7 +106,7 @@ def input_records(cfg: dict) -> dict:
         records["benchmark_assets"] = asset_record("libero_plus_assets", registry_path(cfg))
     model = records["checkpoint"]
     if (model["repo_id"] != "VLADE-konkuk/VLADE-checkpoints" or model["repo_type"] != "model"
-            or model.get("format") != "directory" or "identity.json" not in model.get("files", {})
+            or model.get("format") not in {"directory", "hub_checkpoint"} or "identity.json" not in model.get("files", {})
             or not any(p.startswith("model/") for p in model["files"])):
         raise ValueError("Require a complete registered QwenVLA checkpoint")
     data = records["data"]

@@ -4,7 +4,7 @@
 않고 사용하는 절차입니다. 임의의 로컬 입력을 허용하는 옵션이 아닙니다. 등록 전에
 현재 registry의 고정 HF revision·원격 지문과 실제 기존 파일을 검증합니다.
 
-등록은 sealed directory asset과 schema2 prepared dataset archive의 기존 해제본을
+등록은 sealed directory asset, 게시된 `hub_checkpoint`, 고정 `upstream_files`와 schema2 prepared dataset archive의 기존 해제본을
 지원합니다. 원본 root 밖의 별도 JSON receipt에 asset key, 전체 고정 record,
 검증한 원격 저장소/revision과 기존 절대 경로를 보관합니다. 이 receipt는 실행 캐시
 메타데이터이며 Git·Drive 배포 대상이 아닙니다. 개인 경로를 정식 설정에 넣지 않습니다.
