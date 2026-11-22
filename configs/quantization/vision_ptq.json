@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "method": "combined",
+  "alpha": 1.0,
+  "beta": 1.0,
+  "target_avg_bits": 6.0,
+  "quantize_siglip": true,
+  "quantize_dinov2": true,
+  "quantize_patch_embed": false,
+  "seed": 42,
+  "calibration_episodes": 8,
+  "max_queries_per_episode": 8,
+  "batch_size": 1,
+  "checkpoint": "hfasset://T1",
+  "calibration_data": "hfasset://prepared_d_seed42",
+  "registry": "configs/quantization/hf_assets.json",
+  "device": "cuda:0",
+  "run_group": "vision-ptq-seed42",
+  "output_root": "runs/quantization",
+  "upload": false,
+  "ablations": {
+    "A0": {"method": "fp"},
+    "A1": {"method": "w8"},
+    "A2": {"method": "w4"},
+    "A3": {"method": "random"},
+    "A4": {"method": "visual"},
+    "A5": {"method": "ava"},
+    "A6": {"method": "combined"}
+  }
+}

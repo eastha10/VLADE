@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "organization": "VLADE-konkuk",
+  "registry_revision": "195d32e54c7f48960411c32963d91746183de488",
+  "assets": {
+    "S0": {
+      "repo_id": "VLADE-konkuk/VLADE-checkpoints",
+      "repo_type": "model",
+      "revision": "380f8fb1bd828d42e7f396d6979d699b0b7d0cff",
+      "format": "directory",
+      "prefix": "assets/S0",
+      "local_name": "S0",
+      "files": {
+        "COMPLETE": {
+          "bytes": 3,
+          "sha256": "dc51b8c96c2d745df3bd5590d990230a482fd247123599548e0632fdbf97fc22"
+        },
+        "checkpoint_manifest.json": {
+          "bytes": 1679,
+          "sha256": "0a02b003c801ccb52678203fb2e884f10d139e14a93b952e44fc52de744ad25a"
+        },
+        "identity.json": {
+          "bytes": 645,
+          "sha256": "aa3a62a9603e9bd738b04f070f40767e1ee9f6392358fa3e13ebe3606da45e81"
+        },
+        "metrics.json": {
+          "bytes": 245,
+          "sha256": "b45dbf8ad06dede6e22bea23dd39598012d21c3f6ad804fac4e005eebeae2d33"
+        },
+        "model/backbone/config.json": {
+          "bytes": 2601,
+          "sha256": "9e2ad7dd52d004e4acae7f59646543025509772614bdae0250e6221a5877ac02"
+        },
+        "model/backbone/model.safetensors": {
+          "bytes": 3411999376,
+          "sha256": "fe3d87b5e15f28b150b51dd2a1906297a1163ec65742c644c3dabe48a0c1de6e"
+        },
+        "model/components.pt": {
+          "bytes": 376193589,
+          "sha256": "f42a05d529f4febdc2e6a014ca2beb6b9551d35cce2f53418ab1c135968f3b30"
+        },
+        "model/student.json": {
+          "bytes": 336,
+          "sha256": "24636d5b01cca7bef4c004fbc9ac880d1998e91bbb607d0467267b4a7c353acd"
+        },
+        "processor/chat_template.jinja": {
+          "bytes": 7755,
+          "sha256": "273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80"
+        },
+        "processor/processor_config.json": {
+          "bytes": 1186,
+          "sha256": "76b9554b9cb8d05a59007ffc997d526ab1672d9dd128e254c69221d589d6094c"
+        },
+        "processor/tokenizer.json": {
+          "bytes": 19989325,
+          "sha256": "06b9509352d2af50381ab2247e083b80d32d5c0aba91c272ca9ff729b6a0e523"
+        },
+        "processor/tokenizer_config.json": {
+          "bytes": 1235,
+          "sha256": "85425b4c80c38c8d19c08c85e02e4b349b3fa9cc3ba76e79c0568d80d8b6f70e"
+        },
+        "trainer_state.pt": {
+          "bytes": 7572904516,
+          "sha256": "599f24d83239a47bb436c7780849266ed2bd63041e57b47765f3c7d660e15cbc"
+        }
+      }
+    },
+    "prepared_d_seed42": {
+      "repo_id": "VLADE-konkuk/libero-plus-prepared",
+      "repo_type": "dataset",
+      "format": "archive",
+      "archive_path": "assets/prepared_d_seed42/libero_plus_episode80_d_seed42.tar",
+      "archive_bytes": 11371123200,
+      "archive_sha256": "213cad54a461998c58be542085b7d621c2f152006f84a999d3dbd6279b4d45ff",
+      "archive_root": "libero_plus_episode80_d_seed42",
+      "identity_files": {
+        "manifest.json": {
+          "bytes": 65159344,
+          "sha256": "9a09c51dac170cb7452e0f3cd33f563e73429d6fe8f7a880daa8568ec2cf981b"
+        },
+        "normalization.json": {
+          "bytes": 3333,
+          "sha256": "e1dbf29ea83cc2e0fbcb90e68a7ad15660eb210baa5a333d20bd16c80d275af3"
+        },
+        "splits.json": {
+          "bytes": 5167708,
+          "sha256": "379376e5cfb19d0b9d0a5bdd548e01e4c658f09de3fdd1bff178b3aad7ed9900"
+        }
+      },
+      "local_name": "libero_plus_episode80_d_seed42",
+      "revision": "6d2542577647a9e291554524af4e1dd0928e9df6"
+    },
+    "libero_plus_assets": {
+      "repo_id": "Sylvest/LIBERO-plus",
+      "repo_type": "dataset",
+      "revision": "dd2bd61b7d9a6fef1abc52d606e983b41886a149",
+      "format": "upstream_files",
+      "local_name": "libero-plus-assets",
+      "files": {
+        "assets.zip": {
+          "bytes": 6395849578,
+          "sha256": "96764a4bfbdaea98d4411598caeab235458318fe0f549611b93d1a323027b3cf"
+        }
+      }
+    }
+  },
+  "benchmark_asset_source": "configs/storage/hf_assets.lock.json"
+}

@@ -11,7 +11,9 @@ import queue
 import subprocess
 import sys
 import threading
+import traceback
 from typing import TYPE_CHECKING, Protocol
+from vlade.utils.timing import RunTimings
 
 if TYPE_CHECKING:
     import torch
@@ -54,8 +56,11 @@ def teacher_identity(checkpoint: str | Path, data: EpisodeData) -> tuple[Path, d
 class EpisodeTeacher:
     """Replay causal prefixes on resume/reordering; never carry state across episodes."""
 
-    def __init__(self, teacher: TeacherPolicy, data: EpisodeData) -> None:
+    def __init__(self, teacher: TeacherPolicy, data: EpisodeData,
+                 timings: RunTimings | None = None) -> None:
         self.teacher, self.data = teacher, data
+        self.timings = timings
+        self.predictions = 0
         self.episode = None
         self.samples = []
         self.cursor = -1
@@ -76,14 +81,21 @@ class EpisodeTeacher:
         action = None
         while self.cursor < index:
             self.cursor += 1
-            action, _ = self.teacher.predict(self.samples[self.cursor], self.data)
+            with (self.timings.measure("t1_inference", episode_id=episode,
+                                      timestep=self.samples[self.cursor]["timestep"],
+                                      replay=self.cursor < index, is_warmup=self.predictions < 2)
+                  if self.timings is not None else contextlib.nullcontext()):
+                action, _ = self.teacher.predict(self.samples[self.cursor], self.data)
+            self.predictions += 1
         return action
 
 
 class InferenceActions:
     """JSON pipes isolate incompatible AVA and Qwen Transformers environments."""
 
-    def __init__(self, settings: dict, data: EpisodeData) -> None:
+    def __init__(self, settings: dict, data: EpisodeData,
+                 timings: RunTimings | None = None) -> None:
+        self.timings = timings
         root, self.signature = teacher_identity(settings["teacher_checkpoint"], data)
         python = Path(settings["teacher_python"])
         if not python.is_file():
@@ -94,9 +106,11 @@ class InferenceActions:
         code = Path(__file__).resolve().parents[3]
         env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1",
                "PYTHONPATH": os.pathsep.join((str(code / "src"), str(code)))}
+        timing_args = (["--timing-dir", str(timings.path.parent), "--timing-session", timings.session_id]
+                       if timings is not None else [])
         self.process = subprocess.Popen([str(python), "-B", "-m", "vlade.training.teacher_inference",
             "--checkpoint", str(root), "--data", str(data.root),
-            "--device", settings.get("teacher_device", "cuda:0")], cwd=code, env=env,
+            "--device", settings.get("teacher_device", "cuda:0"), *timing_args], cwd=code, env=env,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1)
         self.replies = queue.Queue()
 
@@ -123,16 +137,19 @@ class InferenceActions:
             raise RuntimeError("T1 inference worker exited; see its stderr")
         result = json.loads(line)
         if "error" in result:
-            raise RuntimeError("T1 inference failed: " + result["error"])
+            missing = result.get("missing_module")
+            detail = f" ({missing})" if missing else ""
+            raise RuntimeError("T1 inference failed: " + result["error"] + detail)
         return result
 
     def get(self, sample: dict) -> torch.Tensor:
         import torch
 
         request = {"episode_id": sample["episode_id"], "timestep": sample["timestep"]}
-        self.process.stdin.write(json.dumps(request) + "\n")
-        self.process.stdin.flush()
-        result = self._receive()
+        with (self.timings.measure("t1_request", **request) if self.timings is not None else contextlib.nullcontext()):
+            self.process.stdin.write(json.dumps(request) + "\n")
+            self.process.stdin.flush()
+            result = self._receive()
         if any(result.get(key) != value for key, value in request.items()):
             raise ValueError("T1 action does not match the requested observation")
         action = torch.tensor(result["action"], dtype=torch.float32)
@@ -158,6 +175,8 @@ def main() -> None:
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--data", required=True)
     parser.add_argument("--device", default="cuda:0")
+    parser.add_argument("--timing-dir", type=Path)
+    parser.add_argument("--timing-session")
     args = parser.parse_args()
     wire = sys.stdout
 
@@ -166,24 +185,39 @@ def main() -> None:
         wire.flush()
 
     # Model/data libraries sometimes print to stdout; reserve it for the protocol.
-    with contextlib.redirect_stdout(sys.stderr):
+    with contextlib.redirect_stdout(sys.stderr), contextlib.ExitStack() as stack:
         try:
             from vlade.storage.assets import resolve_input
             from vlade.data.episode_data import EpisodeData
             from vlade.training.fixed_cache import SequentialTeacher
+            import torch
 
             data = EpisodeData(resolve_input(args.data))
             root, signature = teacher_identity(args.checkpoint, data)
-            teacher = EpisodeTeacher(SequentialTeacher(root, device=args.device,
-                temporal_feature_layer=signature["temporal_feature_layer"]), data)
+            timings = (stack.enter_context(RunTimings(args.timing_dir, role="t1", device=args.device,
+                session_id=args.timing_session, metadata={
+                    "gpu": torch.cuda.get_device_name(args.device) if args.device.startswith("cuda") else "cpu",
+                    "dtype": "bfloat16", "batch_size": 1, "action_chunk_size": 8,
+                    "torch": str(torch.__version__), "cuda": torch.version.cuda,
+                    "checkpoint_manifest_sha256": signature["checkpoint_manifest_sha256"],
+                })) if args.timing_dir is not None else None)
+            with (timings.measure("t1_model_load") if timings is not None else contextlib.nullcontext()):
+                policy = SequentialTeacher(root, device=args.device,
+                    temporal_feature_layer=signature["temporal_feature_layer"], timings=timings)
+            teacher = EpisodeTeacher(policy, data, timings=timings)
             reply({"ready": signature})
             for line in sys.stdin:
                 request = json.loads(line)
                 action = teacher.get(request["episode_id"], request["timestep"])
                 reply({**request, "action": action.detach().float().cpu().tolist()})
         except Exception as error:
-            reply({"error": type(error).__name__})
-            raise
+            traceback.print_exc(file=sys.stderr)
+            sys.stderr.flush()
+            reply({
+                "error": type(error).__name__,
+                "missing_module": error.name if isinstance(error, ModuleNotFoundError) else None,
+            })
+            raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

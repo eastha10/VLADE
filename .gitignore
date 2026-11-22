@@ -43,6 +43,9 @@ third_party/**
 wandb/
 mlruns/
 
+# Vision PTQ runtime metadata and optional weights are not source artifacts.
+/runs/quantization/
+
 # v1 agent scratch is disposable; retain only compact task records.
 .harness/v1/**/scratch/
 

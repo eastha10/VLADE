@@ -13,8 +13,9 @@ REVISION = "a03eee5da1794c45f5a911b60a9a4545e6e0ed1f"
 PATCH = "configs/models/teacher/transformers-avavla-a03eee5-checkpoint-extra-attn.patch"
 PATCH_SHA = "9f0e46c9e93d62a92af950aeee712191cfcf314c1e636a9608fddcb57ff6087d"
 BASE_SHA = "62f22856fe7b8459d6d61d4676b0075b65724979f84859ac475dbe36c10a3d80"
-INSTALLED_SHA = "0a9c25300f3358f87af1719199608af3c27567dba0425690327fccd44cfb516b"
-VERIFY_PROGRAM = "import ast, hashlib, importlib, json, sys\nfrom pathlib import Path\nexpected_sha, expected_prefix = sys.argv[1:3]\nprefix = Path(sys.prefix).resolve()\nif sys.prefix == sys.base_prefix or prefix != Path(expected_prefix).resolve():\n    raise RuntimeError('AVA verification requires the dedicated virtual environment')\nmodule = importlib.import_module('transformers.models.llama.modeling_llama')\nsource = Path(module.__file__).resolve()\nif not source.is_relative_to(prefix) or source.name != 'modeling_llama.py':\n    raise RuntimeError('Transformers was imported outside the AVA environment')\npayload = source.read_bytes()\nif hashlib.sha256(payload).hexdigest() != expected_sha:\n    raise RuntimeError('Installed AVA Transformers source SHA mismatch')\ntree = ast.parse(payload)\nmodel = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'LlamaModel')\nforward = next(node for node in model.body if isinstance(node, ast.FunctionDef) and node.name == 'forward')\ncalls = [node for node in ast.walk(forward) if isinstance(node, ast.Call)\n         and isinstance(node.func, ast.Attribute) and node.func.attr == '_gradient_checkpointing_func']\nexpected = 'extra_attn_weights if extra_layer_ids and layer_idx in extra_layer_ids else None'\nif len(calls) != 1 or len(calls[0].args) != 9 or ast.unparse(calls[0].args[-1]) != expected:\n    raise RuntimeError('Installed checkpoint attention argument was not preserved')\nprint(json.dumps({'source': str(source), 'sha256': expected_sha, 'venv': str(prefix)}))"
+INSTALLED_SHA = "aeca129d863bec439623f54d93810792d82c86921c25fbe69d9169ffdb373788"
+LEGACY_CRLF_SHA = "0a9c25300f3358f87af1719199608af3c27567dba0425690327fccd44cfb516b"
+VERIFY_PROGRAM = "import ast, hashlib, importlib, json, sys\nfrom pathlib import Path\nexpected_sha, legacy_sha, expected_prefix = sys.argv[1:4]\nprefix = Path(sys.prefix).resolve()\nif sys.prefix == sys.base_prefix or prefix != Path(expected_prefix).resolve():\n    raise RuntimeError('AVA verification requires the dedicated virtual environment')\nmodule = importlib.import_module('transformers.models.llama.modeling_llama')\nsource = Path(module.__file__).resolve()\nif not source.is_relative_to(prefix) or source.name != 'modeling_llama.py':\n    raise RuntimeError('Transformers was imported outside the AVA environment')\npayload = source.read_bytes()\nif hashlib.sha256(payload).hexdigest() not in (expected_sha, legacy_sha):\n    raise RuntimeError('Installed AVA Transformers source SHA mismatch')\ntree = ast.parse(payload)\nmodel = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'LlamaModel')\nforward = next(node for node in model.body if isinstance(node, ast.FunctionDef) and node.name == 'forward')\ncalls = [node for node in ast.walk(forward) if isinstance(node, ast.Call)\n         and isinstance(node.func, ast.Attribute) and node.func.attr == '_gradient_checkpointing_func']\nexpected = 'extra_attn_weights if extra_layer_ids and layer_idx in extra_layer_ids else None'\nif len(calls) != 1 or len(calls[0].args) != 9 or ast.unparse(calls[0].args[-1]) != expected:\n    raise RuntimeError('Installed checkpoint attention argument was not preserved')\nprint(json.dumps({'source': str(source), 'sha256': hashlib.sha256(payload).hexdigest(), 'venv': str(prefix)}))"
 
 
 def digest(path: Path) -> str:
@@ -22,7 +23,7 @@ def digest(path: Path) -> str:
 
 
 def verify(python: Path, environment: Path) -> None:
-    subprocess.run([str(python), "-c", VERIFY_PROGRAM, INSTALLED_SHA, str(environment)], check=True)
+    subprocess.run([str(python), "-c", VERIFY_PROGRAM, INSTALLED_SHA, LEGACY_CRLF_SHA, str(environment)], check=True)
 
 
 def build(code: Path, work: Path, uv: str, env: dict) -> Path:
@@ -51,8 +52,10 @@ def build(code: Path, work: Path, uv: str, env: dict) -> Path:
         llama = source / "src/transformers/models/llama/modeling_llama.py"
         if digest(llama) != BASE_SHA:
             raise ValueError("AVA Transformers base source differs")
-        run(["git", "-C", source, "apply", "--check", patch])
-        run(["git", "-C", source, "apply", patch])
+        # Match the LF checkout when applying the patch, including on Windows.
+        apply = ["git", "-c", "core.autocrlf=false", "-C", source, "apply"]
+        run([*apply, "--check", patch])
+        run([*apply, patch])
         if digest(llama) != INSTALLED_SHA:
             raise ValueError("Managed AVA patch result differs")
         wheel_dir.mkdir(exist_ok=True)
@@ -62,6 +65,6 @@ def build(code: Path, work: Path, uv: str, env: dict) -> Path:
         raise ValueError("Expected one managed AVA wheel")
     with zipfile.ZipFile(existing[0]) as archive:
         content = archive.read("transformers/models/llama/modeling_llama.py")
-    if hashlib.sha256(content).hexdigest() != INSTALLED_SHA:
+    if hashlib.sha256(content).hexdigest() not in {INSTALLED_SHA, LEGACY_CRLF_SHA}:
         raise ValueError("AVA wheel does not contain the approved patch")
     return existing[0]

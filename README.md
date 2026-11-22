@@ -1,5 +1,16 @@
 # VLADE
 
+이미 내려받은 HF 정본은 [읽기 전용 입력 등록](docs/environment/local_hf_inputs.md)으로
+전체 파일을 검증한 뒤 이동·복사·재다운로드 없이 연결할 수 있습니다.
+
+S0의 ActQuant·QVLA·QuantVLA 독립 비교는 [조건표·실행 안내](docs/environment/s0_quantization_comparison.md)를
+따릅니다. `scripts/quantization/run_s0_comparison.py`는 명시적인 `--run` 없이는 계획만 확인합니다.
+
+Vision Encoder 전용 가중치 Fake Quantization과 AVA-aware W4/W8 ablation은
+[PTQ 실행 안내](docs/environment/vision_ptq.md)를 참고하십시오.
+실행 진입점은 `scripts/quantization/run_vision_ptq.py`, 설정은
+`configs/quantization/vision_ptq.json`입니다. GPU 성능 평가는 포함하지 않습니다.
+
 일반 Colab 실행은 [colab_vlade.ipynb](experiments/colab_vlade.ipynb)에서 작업을 선택하며, [설정 기반 연구 명령](docs/environment/research_runs.md)을 사용합니다. 훈련 step·평가 rollout 수는 `configs/research/`에서 제어합니다.
 
 `qwen_kd`는 [HF T1 추론 → S0 Action-level Distillation](docs/environment/action_level_distillation.md)을 사용합니다. T1·S0 asset과 λ를 설정으로 선택하며 Teacher cache는 필수가 아닙니다.
