@@ -155,6 +155,7 @@ vlade/
 - `src/vlade/training/student_initialization.py`: HF S0 전체 가중치·학습된 헤드·processor 검증 및 초기화.
 - `src/vlade/storage/checkpoint_inputs.py`: 기존 HF runs checkpoint의 불변 SHA·seal·LFS 검증과 런타임 입력 pin.
 - `src/vlade/utils/action_kd_notebook.py`, `scripts/prepare/generate_action_kd_notebook.py`: 증류 전용 노트북 정본 생성.
+- `experiments/colab_teacher_plan_kd.ipynb`, `scripts/prepare/generate_teacher_plan_kd_notebook.py`: 타임스텝별 Teacher 플랜, Action KD, 플랜 로그 확인용 Colab 실행본과 생성 진입점.
 - `docs/environment/action_level_distillation.md`: T1/S0 HF 선택, 노션 손실 수식, 파일럿·재개 계약.
 
 - `src/vlade/training/loop.py`: 모델과 독립적인 optimizer step 루프·검증·학습 상태

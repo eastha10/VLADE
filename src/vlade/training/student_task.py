@@ -17,8 +17,10 @@ from vlade.data.colab_assets import sha256
 from vlade.data.episode_data import EpisodeData, query_stream, query_count, write_json
 from vlade.models.contracts import masked_action_l1
 from vlade.distillation.action import action_distillation_loss, validate_weights
+from vlade.distillation.teacher_plan import plan_token_budget
 from vlade.training.cached_actions import CachedActions
 from vlade.training.student_initialization import initial_checkpoint, saved_processor
+from vlade.training.teacher_inference import InferenceActions, teacher_identity
 from vlade.models.students.qwen import HistoryFrame, QwenStudent, StudentConfig, load_processor, prepare_inputs
 from vlade.utils.source_identity import source_identity
 from vlade.training.loop import LoopState, make_scheduler, restore_training_state, run_loop, training_state
@@ -42,18 +44,29 @@ def samples(data: EpisodeData, split: str, *, repeat: bool = False,
 
 def batches(data: EpisodeData, processor, config: StudentConfig, *, split: str,
             skip: int = 0, episode_limit: int = 0, seed: int = 42, limit: int = 0,
-            teacher: ActionTargets | None = None):
+            teacher: ActionTargets | None = None, plan_teacher: InferenceActions | None = None):
+    if teacher is not None and split != "train":
+        raise ValueError("Teacher actions may only supervise the train split")
+    if teacher is not None and plan_teacher is not None:
+        raise ValueError("Choose a single source of Teacher actions")
     for sample, history in samples(data, split, repeat=split == "train", episode_limit=episode_limit,
                                    seed=seed, skip=skip, limit=limit):
+        plan, action = None, None
+        if plan_teacher is not None:
+            if split == "train":
+                signal = plan_teacher.get_signal(sample)
+                plan, action = signal.plan, signal.action
+            else:
+                plan = plan_teacher.get_plan(sample, split=split)
+        elif teacher is not None:
+            action = teacher.get(sample)
         frames = [HistoryFrame(q["timestep"], data.image(q, "primary"), data.image(q, "wrist")) for q in history]
         inputs = prepare_inputs(processor, config, instruction=sample["instruction"], frames=frames,
-                                current_timestep=sample["timestep"])
+                                current_timestep=sample["timestep"], teacher_plan=plan)
         batch = (inputs, torch.from_numpy(sample["proprio"])[None], torch.from_numpy(sample["gt_action"])[None],
                  torch.from_numpy(sample["action_valid_mask"])[None])
-        if teacher is not None:
-            if split != "train":
-                raise ValueError("Teacher actions may only supervise the train split")
-            batch += (teacher.get(sample)[None],)
+        if action is not None:
+            batch += (action[None],)
         yield batch
 
 
@@ -66,7 +79,6 @@ def identity(settings: dict, data: EpisodeData, teacher: ActionTargets | None = 
     cache_identity = {}
     if settings.get("method") == "action_kd":
         if settings.get("teacher_mode", "cache") == "inference":
-            from vlade.training.teacher_inference import teacher_identity
             signature = teacher.signature if teacher else teacher_identity(settings["teacher_checkpoint"], data)[1]
             cache_identity = {"teacher_inference": signature}
         else:
@@ -94,6 +106,9 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
     if settings.get("batch_size") != 1 or settings.get("method") not in {"task_only", "action_kd"}:
         raise ValueError("Student supports task_only/action_kd with batch_size=1 and gradient accumulation")
     kd_enabled = settings["method"] == "action_kd"
+    plan_tokens = plan_token_budget(settings)
+    if plan_tokens and not kd_enabled:
+        raise ValueError("Teacher plans require action KD")
     if kd_enabled:
         validate_weights(settings["task_weight"], settings["action_kd_weight"])
         if settings.get("teacher_mode", "cache") not in {"cache", "inference"}:
@@ -165,7 +180,8 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
                 "kd_enabled": kd_enabled, "resume_sample_order": "deterministic_query_cursor",
                 "sampler": "seeded_episode_shuffle_causal_queries_v1",
                 "train_queries_per_epoch": query_count(data, episode_limit=settings.get("episode_limit", 0)),
-                "validation_policy": "uniform_query_positions_across_validation_split",
+                "validation_policy": ("uniform_queries_with_teacher_plans" if plan_tokens
+                                      else "uniform_query_positions_across_validation_split"),
                 "normalization_sha256": data.manifest["normalization_sha256"]}
     manifest_path = output / f"run-{run_id}.json"
     write_json(manifest_path, manifest)
@@ -190,7 +206,8 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
     def validation_loss(step):
         from vlade.training.loop import evaluate
         budget = settings.get("validation_queries", 32)
-        return evaluate([model], batches(data, processor, config, split="validation", seed=seed, limit=budget),
+        return evaluate([model], batches(data, processor, config, split="validation", seed=seed, limit=budget,
+                                        plan_teacher=teacher if plan_tokens else None),
                         loss_fn, step, budget)
 
     def before_step(current):
@@ -201,8 +218,9 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
 
     try:
         if online:
-            from vlade.training.teacher_inference import InferenceActions
             teacher = InferenceActions(settings, data)
+            if teacher.signature != experiment["teacher_inference"]:
+                raise ValueError("T1 identity changed before training")
         with (output / f"metrics-{run_id}.jsonl").open("x", encoding="utf-8") as log:
             def on_step(current, metrics):
                 if loss_terms:
@@ -225,6 +243,8 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
                     processor.save_pretrained(stage / "processor")
                     torch.save(training_state(current, optimizer, scheduler), stage / "trainer_state.pt")
                     write_json(stage / "identity.json", experiment)
+                    if plan_tokens:
+                        write_json(stage / "metrics.json", metrics)
                     hub.prepare(stage, current.step, metrics)
                     seal_checkpoint(stage, current.step, current.microsteps)
                     (stage / "COMPLETE").write_text("ok\n", encoding="utf-8")
@@ -235,7 +255,9 @@ def run(settings: dict, *, resume: Path | None = None, preflight: bool = False) 
 
             run_loop(modules=[model], optimizer=optimizer, scheduler=scheduler,
                      batches=batches(data, processor, config, split="train", skip=state.microsteps,
-                                     episode_limit=settings.get("episode_limit", 0), seed=seed, teacher=teacher),
+                                     episode_limit=settings.get("episode_limit", 0), seed=seed,
+                                     teacher=None if plan_tokens else teacher,
+                                     plan_teacher=teacher if plan_tokens else None),
                      loss_fn=loss_fn, max_steps=settings["max_steps"], accumulation_steps=settings["accumulation_steps"],
                      max_grad_norm=1.0, state=state, on_before_step=before_step, on_step=on_step)
         # A bounded held-out loss is recorded separately from rollout success.

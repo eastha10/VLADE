@@ -7,6 +7,8 @@ import math
 from pathlib import Path
 from typing import Any
 
+from vlade.distillation.teacher_plan import plan_token_budget
+
 TASKS = {"prepare", "fft", "student", "paper", "suite", "cache", "evaluate", "inference", "script"}
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -92,6 +94,8 @@ def validate(value: dict) -> None:
         if initialization not in {"pretrained_backbone", "student_checkpoint"}:
             raise ValueError("Unknown Student initialization")
         kd = value.get("distillation", {})
+        if plan_token_budget(kd) and kd.get("method") != "action_kd":
+            raise ValueError("Teacher plans require action KD")
         if kd.get("method") == "action_kd":
             mode = kd.get("teacher_mode", "cache")
             if mode not in {"cache", "inference"}:

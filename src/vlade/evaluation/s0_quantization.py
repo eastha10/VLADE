@@ -118,6 +118,7 @@ def run(args: argparse.Namespace) -> None:
 
     from vlade.data.colab_assets import sha256
     from vlade.data.episode_data import EpisodeData
+    from vlade.distillation.teacher_plan import plan_token_budget
     from vlade.evaluation.qwen_quantization import calibrate
     from vlade.models.students.backbones.qwen import prepare_observation
     from vlade.models.students.qwen_vla import QwenVLA
@@ -127,10 +128,12 @@ def run(args: argparse.Namespace) -> None:
     if os.environ.get("VLADE_LOCAL_INPUTS"):
         hf_inputs["local_bindings_sha256"] = sha256(Path(os.environ["VLADE_LOCAL_INPUTS"]))
 
-    device = evaluation_device()
-    torch.manual_seed(args.seed)
     seal = verify_checkpoint(args.checkpoint)
     identity = json.loads((args.checkpoint / "identity.json").read_text(encoding="utf-8"))
+    if plan_token_budget(identity.get("settings", {}).get("distillation", {})):
+        raise ValueError("This checkpoint requires a Teacher plan at each evaluation query")
+    device = evaluation_device()
+    torch.manual_seed(args.seed)
     data = EpisodeData(args.data)
     data_digest = sha256(data.root / "manifest.json")
     if data_digest != identity["data_sha256"]:

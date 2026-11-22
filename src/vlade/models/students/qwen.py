@@ -10,6 +10,7 @@ from typing import Any
 import torch
 from torch import nn
 
+from vlade.distillation.teacher_plan import prompt_text
 from vlade.models.contracts import PolicyOutput
 
 
@@ -150,7 +151,8 @@ class HistoryFrame:
 
 
 def prepare_inputs(processor: Any, config: StudentConfig, *, instruction: str,
-                   frames: list[HistoryFrame], current_timestep: int) -> dict[str, torch.Tensor]:
+                   frames: list[HistoryFrame], current_timestep: int,
+                   teacher_plan: str | None = None) -> dict[str, torch.Tensor]:
     """Frames belong to one episode; causal query history, oldest first.
 
     Episode start repeats its earliest frame until the window is full. Camera/time
@@ -173,6 +175,8 @@ def prepare_inputs(processor: Any, config: StudentConfig, *, instruction: str,
         for camera in ("primary", "wrist"):
             content.extend([{"type": "text", "text": f"History {index}; t={frame.timestep}; camera={camera}."},
                             {"type": "image", "image": getattr(frame, camera)}])
+    if teacher_plan is not None:
+        content.append({"type": "text", "text": prompt_text(teacher_plan, current_timestep)})
     content.append({"type": "text", "text": "Predict the next eight normalized robot actions."})
     inputs = processor.apply_chat_template([{"role": "user", "content": content}], tokenize=True,
                                           add_generation_prompt=False, return_dict=True,

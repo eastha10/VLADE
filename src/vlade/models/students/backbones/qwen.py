@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 import torch
 from torch import nn
+from vlade.distillation.teacher_plan import prompt_text
 from vlade.models.students.configuration_qwen_vla import QwenVLAConfig
 
 def verified_initial(config: QwenVLAConfig, directory: str | Path) -> Path:
@@ -98,7 +99,8 @@ def load_saved_processor(config: QwenVLAConfig, directory: Path):
 
 
 def prepare_observation(processor: Any, config: QwenVLAConfig, *, instruction: str,
-                        primary: Any, wrist: Any) -> dict[str, torch.Tensor]:
+                        primary: Any, wrist: Any, timestep: int | None = None,
+                        teacher_plan: str | None = None) -> dict[str, torch.Tensor]:
     """Two current camera images, native Qwen processor; history is the AVA state."""
     config.validate()
     if not instruction.strip():
@@ -106,8 +108,10 @@ def prepare_observation(processor: Any, config: QwenVLAConfig, *, instruction: s
     content = [{"type": "text", "text": f"Instruction: {instruction.strip()}. Primary camera:"},
                {"type": "image", "image": primary.convert("RGB")},
                {"type": "text", "text": "Wrist camera:"},
-               {"type": "image", "image": wrist.convert("RGB")},
-               {"type": "text", "text": "Predict the next eight normalized robot actions."}]
+               {"type": "image", "image": wrist.convert("RGB")}]
+    if teacher_plan is not None:
+        content.append({"type": "text", "text": prompt_text(teacher_plan, timestep)})
+    content.append({"type": "text", "text": "Predict the next eight normalized robot actions."})
     inputs = processor.apply_chat_template([{"role": "user", "content": content}], tokenize=True,
         add_generation_prompt=False, return_dict=True, return_tensors="pt", enable_thinking=False)
     if inputs["input_ids"].shape[1] + 57 > config.max_sequence_length:

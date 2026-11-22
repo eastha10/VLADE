@@ -10,6 +10,7 @@ import uuid
 from contextlib import nullcontext
 from dataclasses import asdict
 from pathlib import Path
+from typing import TextIO
 
 import numpy as np
 import torch
@@ -17,6 +18,7 @@ import torch
 from vlade.data.colab_assets import sha256
 from vlade.data.episode_data import EpisodeData, query_stream, write_json
 from vlade.distillation.action import action_distillation_loss, validate_weights
+from vlade.distillation.teacher_plan import plan_token_budget
 from vlade.models.contracts import masked_action_l1
 from vlade.models.students.backbones.qwen import load_processor, load_saved_processor, prepare_observation
 from vlade.models.students.configuration_qwen_vla import QwenVLAConfig
@@ -35,18 +37,27 @@ from vlade.utils.timing import RunTimings
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def batches(data: EpisodeData, processor, config: QwenVLAConfig, split: str, seed: int, **kwargs):
+def observation_inputs(data: EpisodeData, processor, config: QwenVLAConfig, sample: dict,
+                       plan: str | None = None) -> dict[str, torch.Tensor]:
+    return prepare_observation(
+        processor, config, instruction=sample["instruction"],
+        primary=data.image(sample, "primary"), wrist=data.image(sample, "wrist"),
+        timestep=sample["timestep"], teacher_plan=plan,
+    )
+
+
+def batches(data: EpisodeData, processor, config: QwenVLAConfig, split: str, seed: int, *,
+            with_plan: bool = False, **kwargs):
     for sample, history in query_stream(data, split, seed=seed, **kwargs):
-        current = prepare_observation(
-            processor, config, instruction=sample["instruction"],
-            primary=data.image(sample, "primary"), wrist=data.image(sample, "wrist"),
-        )
+        current = None if with_plan else observation_inputs(data, processor, config, sample)
         previous = history[0] if len(history) == 2 else None
         yield sample, current, previous
 
 
 def action_loss(model: QwenVLA, data: EpisodeData, processor, config: QwenVLAConfig, device, *,
                 teacher: CachedActions | InferenceActions | None = None,
+                plan_teacher: InferenceActions | None = None,
+                plan_log: TextIO | None = None,
                 task_weight: float = 1.0, action_weight: float = 1.0,
                 step_offset: int = 0, loss_terms: list[dict[str, float]] | None = None,
                 timings: RunTimings | None = None, phase: str = "train"):
@@ -70,14 +81,32 @@ def action_loss(model: QwenVLA, data: EpisodeData, processor, config: QwenVLACon
     def loss(batch, step):
         nonlocal last, state
         sample, current, previous = batch
+        teacher_target = None
+        plan_row = None
+        if plan_teacher is not None:
+            if plan_log is not None:
+                plan_row = {key: sample[key] for key in ("episode_id", "timestep", "instruction")}
+                plan_row.update(split=phase, optimizer_step=step + (phase == "train"))
+            try:
+                if phase == "train":
+                    signal = plan_teacher.get_signal(sample)
+                    plan, teacher_target = signal.plan, signal.action
+                else:
+                    plan = plan_teacher.get_plan(sample, split=phase)
+            except (RuntimeError, ValueError, TimeoutError) as error:
+                if plan_row is not None:
+                    plan_row.update(status="plan_error", error_type=type(error).__name__, error=str(error))
+                    print(json.dumps(plan_row, ensure_ascii=False), file=plan_log, flush=True)
+                raise
+            current = observation_inputs(data, processor, config, sample, plan)
+            if plan_row is not None:
+                plan_row.update(status="ok", plan=plan)
         with torch.autocast("cuda", dtype=torch.bfloat16):
             if previous is None:
                 state = None
             elif last != (previous["episode_id"], previous["timestep"]):
-                inputs = prepare_observation(
-                    processor, config, instruction=previous["instruction"],
-                    primary=data.image(previous, "primary"), wrist=data.image(previous, "wrist"),
-                )
+                plan = plan_teacher.get_plan(previous, split=phase) if plan_teacher is not None else None
+                inputs = observation_inputs(data, processor, config, previous, plan)
                 with torch.no_grad():
                     state = forward(previous, inputs, None, step).recurrent_state
             prediction = forward(sample, current, state, step)
@@ -86,14 +115,21 @@ def action_loss(model: QwenVLA, data: EpisodeData, processor, config: QwenVLACon
         target = torch.from_numpy(sample["gt_action"])[None].to(device)
         valid = torch.from_numpy(sample["action_valid_mask"])[None].to(device)
         if teacher is not None:
-            teacher_target = teacher.get(sample)[None].to(device)
+            teacher_target = teacher.get(sample)
+        if teacher_target is not None:
             total, terms = action_distillation_loss(
-                prediction, target, teacher_target, valid, task_weight=task_weight, action_weight=action_weight,
+                prediction, target, teacher_target[None].to(device), valid,
+                task_weight=task_weight, action_weight=action_weight,
             )
             if loss_terms is not None:
                 loss_terms.append(terms)
-            return total
-        return masked_action_l1(prediction, target, valid)
+        else:
+            total = masked_action_l1(prediction, target, valid)
+            terms = None
+        if plan_row is not None:
+            plan_row.update(terms or {"task_l1": float(total.detach()), "action_kd_l1": None})
+            print(json.dumps(plan_row, ensure_ascii=False), file=plan_log, flush=True)
+        return total
 
     def save_state():
         return last, state
@@ -141,6 +177,7 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
     if not 1 <= limit <= target or min(accumulation, settings["save_steps"], settings["validation_queries"]) < 1:
         raise ValueError("Invalid step, accumulation, save or validation budget")
     kd = settings.get("distillation")
+    plan_tokens = plan_token_budget(kd or {})
     initialization = settings.get("initialization", "student_checkpoint" if kd is not None else "pretrained_backbone")
     if initialization not in {"pretrained_backbone", "student_checkpoint"}:
         raise ValueError("Unknown QwenVLA initialization")
@@ -237,21 +274,26 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
     output.mkdir(parents=True, exist_ok=True)
     hub = HubCheckpoints(output, resume=resume, metric="validation_l1")
     started = time.monotonic()
-    write_json(output / f"invocation-{uuid.uuid4().hex[:12]}.json", {
+    invocation_id = uuid.uuid4().hex[:12]
+    plan_log_path = output / f"teacher-plans-{invocation_id}.jsonl"
+    write_json(output / f"invocation-{invocation_id}.json", {
         "identity": identity, "stop_after": limit, "resume_step": state.step,
         "gpu": torch.cuda.get_device_name(), "cuda": torch.version.cuda,
         "dtype": "fp32_parameters_bf16_autocast", "batch_size": 1,
         **scope_summary,
         "normalization_sha256": data.manifest["normalization_sha256"],
+        **({"teacher_plan_log": plan_log_path.name} if plan_tokens else {}),
     })
     torch.cuda.reset_peak_memory_stats()
-    with RunTimings(output, role="s0", device=str(device), metadata={
+    with (RunTimings(output, role="s0", device=str(device), metadata={
         "gpu": torch.cuda.get_device_name(), "dtype": "fp32_parameters_bf16_autocast",
         "batch_size": 1, "action_chunk_size": 8, "seed": seed,
         "torch": str(torch.__version__), "cuda": torch.version.cuda,
         "initial_sha256": identity["initial_sha256"], "data_sha256": data_sha256,
         **scope_summary,
-    }) as timings, (output / f"metrics-{uuid.uuid4().hex[:12]}.jsonl").open("x", encoding="utf-8") as log:
+          }) as timings,
+          (output / f"metrics-{invocation_id}.jsonl").open("x", encoding="utf-8") as log,
+          (plan_log_path.open("x", encoding="utf-8") if plan_tokens else nullcontext()) as plan_log):
         def on_step(current, metrics):
             if loss_terms:
                 metrics.update({key: sum(row[key] for row in loss_terms) / len(loss_terms)
@@ -265,10 +307,12 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
             if current.step % settings["save_steps"] == 0 or current.step == limit:
                 held_out = settings["validation_queries"]
                 validation, _, _ = action_loss(model, data, processor, config, device,
-                                               timings=timings, phase="validation")
+                                               plan_teacher=online_teacher if plan_tokens else None,
+                                               plan_log=plan_log, timings=timings, phase="validation")
                 with timings.measure("s0_validation", step=current.step, phase="validation"):
                     metrics["validation_l1"] = evaluate(
-                        [model], batches(data, processor, config, "validation", seed, limit=held_out),
+                        [model], batches(data, processor, config, "validation", seed,
+                                         limit=held_out, with_plan=bool(plan_tokens)),
                         validation, current.step, held_out,
                     )
                 save_started = timings.start()
@@ -303,14 +347,15 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
                     raise ValueError("T1 identity changed before training")
                 teacher = online_teacher
             loss, get_history, set_history = action_loss(
-                model, data, processor, config, device, teacher=teacher, step_offset=s0_step,
-                loss_terms=loss_terms, timings=timings, **weights,
+                model, data, processor, config, device, teacher=None if plan_tokens else teacher,
+                plan_teacher=online_teacher if plan_tokens else None, step_offset=s0_step,
+                plan_log=plan_log, loss_terms=loss_terms, timings=timings, **weights,
             )
             if resume is not None:
                 set_history(history)
             run_loop(modules=[model], optimizer=optimizer, scheduler=scheduler,
                      batches=batches(data, processor, config, "train", seed, repeat=True,
-                                     skip=state.microsteps, episode_limit=episode_limit),
+                                     skip=state.microsteps, episode_limit=episode_limit, with_plan=bool(plan_tokens)),
                      loss_fn=loss, max_steps=limit, accumulation_steps=accumulation, state=state,
                      on_step=on_step, timings=timings)
         finally:
@@ -330,8 +375,13 @@ def main() -> None:
     parser.add_argument("--local-s0", type=Path, help="Verified HF-cached QwenVLA checkpoint for Student initialization")
     parser.add_argument("--local-s0-manifest-sha256", help="Expected SHA256 of the local checkpoint manifest")
     parser.add_argument("--teacher-python", type=Path, help="Python executable from the prepared AVA runtime")
+    parser.add_argument("--action-kd-weight", type=float, help="Override lambda for a new KD run")
     args = parser.parse_args()
     settings = json.loads(args.config.read_text(encoding="utf-8"))
+    if args.action_kd_weight is not None:
+        if settings.get("distillation") is None:
+            parser.error("--action-kd-weight requires a distillation configuration")
+        settings["distillation"]["action_kd_weight"] = args.action_kd_weight
     if args.teacher_python is not None:
         if settings.get("distillation", {}).get("teacher_mode") != "inference":
             parser.error("--teacher-python requires distillation.teacher_mode=inference")

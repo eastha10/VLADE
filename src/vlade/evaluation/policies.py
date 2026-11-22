@@ -103,11 +103,17 @@ class StudentPolicy:
     """The maintained Qwen task/KD policy with the same causal query history."""
 
     def __init__(self, checkpoint: str, settings: dict):
+        from vlade.distillation.teacher_plan import plan_token_budget
         from vlade.storage.assets import resolve_input
         from vlade.models.students.qwen import QwenStudent, load_processor
 
         path = resolve_input(checkpoint)
         folder = path / "model" if (path / "model/student.json").is_file() else path
+        identity_path = folder.parent / "identity.json"
+        if identity_path.is_file():
+            training = json.loads(identity_path.read_text(encoding="utf-8")).get("settings", {})
+            if plan_token_budget(training.get("distillation", training)):
+                raise ValueError("This checkpoint requires a Teacher plan at each rollout query")
         self.model = (
             QwenStudent.load(folder)
             .to(settings.get("device", "cuda:0"))

@@ -39,6 +39,7 @@
     "teacher_checkpoint": "hfasset://teacher_t1",
     "teacher_timeout_seconds": 600,
     "teacher_device": "cuda:0",
+    "teacher_plan_max_new_tokens": 0,
     "task_weight": 1.0,
     "action_kd_weight": 1.0,
     "description": "Notion 11-06 Tasks: L_BC(S, GT) + lambda * L_KD(S, T1). Load the full S0, infer frozen T1 actions in the AVA runtime; task_weight=1, action_kd_weight=lambda. No Teacher cache is required."

@@ -92,14 +92,49 @@ class SequentialTeacher:
     def reset(self) -> None:
         self.context = None
 
-    @torch.inference_mode()
-    def predict(self, sample: dict, data: EpisodeData) -> tuple[torch.Tensor, torch.Tensor]:
-        prompt = f"In: What action should the robot take to {sample['instruction'].lower()}?\nOut:"
+    def _observation_inputs(self, sample: dict, data: EpisodeData, prompt: str) -> dict:
         inputs = self.processor(prompt, data.image(sample, "primary"), return_tensors="pt")
         wrist = self.processor(prompt, data.image(sample, "wrist"), return_tensors="pt")
         inputs["pixel_values"] = torch.cat((inputs["pixel_values"], wrist["pixel_values"]), dim=1)
-        inputs = {key: value.to(self.device, dtype=torch.bfloat16 if value.is_floating_point() else value.dtype)
-                  for key, value in inputs.items()}
+        return {key: value.to(self.device, dtype=torch.bfloat16 if value.is_floating_point() else value.dtype)
+                for key, value in inputs.items()}
+
+    @torch.inference_mode()
+    def plan(self, sample: dict, data: EpisodeData, *, max_new_tokens: int) -> str:
+        """Use T1's own visual prefix and language decoder for the current observation."""
+        from vlade.distillation.teacher_plan import normalize_plan
+        from vlade.models.teachers.constants import ACTION_TOKEN_BEGIN_IDX
+
+        prompt = (
+            f"In: Robot task: {sample['instruction'].strip()}\n"
+            f"At timestep {sample['timestep']}, use the two current camera views to plan the "
+            "next eight control steps. Give a short English approach plan naming the target, "
+            "movement and gripper intent as applicable. Output only the plan.\nOut:"
+        )
+        inputs = self._observation_inputs(sample, data, prompt)
+        model = self.model
+        tokens = model.get_input_embeddings()(inputs["input_ids"])
+        vision = model._process_vision_features(inputs["pixel_values"])
+        proprio = torch.as_tensor(sample["proprio"], device=vision.device, dtype=vision.dtype)
+        vision = model._process_proprio_features(vision, proprio, self.proprio)
+        prefix, mask = model._build_multimodal_attention(tokens, vision, inputs["attention_mask"])
+        tokenizer = self.processor.tokenizer
+        # The AVA action codec reuses the top of the vocabulary for discretized actions.
+        with (self.timings.measure("t1_plan_generation", phase="inference",
+                                  episode_id=sample["episode_id"], timestep=sample["timestep"])
+              if self.timings is not None else nullcontext()):
+            generated = model.language_model.generate(
+                inputs_embeds=prefix, attention_mask=mask, max_new_tokens=max_new_tokens,
+                do_sample=False, use_cache=True, return_dict_in_generate=False,
+                eos_token_id=tokenizer.eos_token_id, pad_token_id=tokenizer.eos_token_id,
+                suppress_tokens=list(range(ACTION_TOKEN_BEGIN_IDX + 1, model.get_output_embeddings().weight.shape[0])),
+            )
+        return normalize_plan(tokenizer.decode(generated[0].tolist(), skip_special_tokens=True))
+
+    @torch.inference_mode()
+    def predict(self, sample: dict, data: EpisodeData) -> tuple[torch.Tensor, torch.Tensor]:
+        prompt = f"In: What action should the robot take to {sample['instruction'].lower()}?\nOut:"
+        inputs = self._observation_inputs(sample, data, prompt)
         with (self.timings.measure("t1_model_forward", phase="inference",
                                   episode_id=sample["episode_id"], timestep=sample["timestep"],
                                   is_warmup=self._timing_predictions < 2)

@@ -12,6 +12,10 @@
 
 ## 실행
 
+Teacher의 타임스텝별 접근 플랜까지 Student에 입력하려면 `VARIANTS='gt_kd'`와
+`TEACHER_PLAN_MAX_NEW_TOKENS=48`을 지정합니다. λ 선택 방법과 평가 조건은
+[CoT+Action KD 안내](action_level_distillation.md#타임스텝별-teacher-플랜과-action-kd)를 따릅니다.
+
 1. 새 범위 선택과 시간 계측 소스가 포함된 Git ref를 `SOURCE_REF`에 지정합니다. branch는 처음 한 번 commit으로 확정하며 출력된 `SOURCE_COMMIT`을 보관합니다. 미배포 소스에서는 입력 다운로드 전에 기능 검사가 실패합니다. 미커밋 코드를 노트북에 내장하지 않습니다.
 2. Colab A100에서 Secrets `HF_TOKEN`을 연결합니다. 팀 비공개 모델 저장소의 읽기/쓰기 권한이 필요합니다. 기본 registry는 S0 게시 완료 revision `65799b213837eeb9b931a08d8fe6625a5fce43e4`, asset은 `S0`, `T1`, `prepared_d_seed42`입니다. 모든 외부 입력은 기존 `resolve_input` 검증을 통과합니다.
 3. Student 환경 및 선택 시 AVA 환경을 준비하고 실행 계약/입력 검사를 수행합니다. 기존 HF checkpoint 업로드와 검증을 사용하며 Drive 데이터·가중치를 대신 연결하지 않습니다.

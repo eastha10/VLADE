@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from string import Template
 import textwrap
 
 
@@ -14,7 +15,7 @@ def _cell(kind: str, identifier: str, source: str) -> dict:
     return value
 
 
-def write_notebook(path: Path) -> Path:
+def write_notebook(path: Path, *, teacher_plan: bool = False) -> Path:
     """Write an output-free notebook; model/trainer implementations stay in Git."""
     cells = [
         _cell("markdown", "overview", """
@@ -32,17 +33,17 @@ def write_notebook(path: Path) -> Path:
         이 노트북은 코드를 내장 패치하거나 schema를 변환하지 않습니다. 재개할 때 최초 SOURCE_COMMIT과 RUN_GROUP을 그대로 사용합니다.
         기존 동결 GT·KD 실행의 optimizer checkpoint를 여기서 이어 쓰지 않습니다.
         """),
-        _cell("code", "settings", """
+        _cell("code", "settings", Template("""
         from pathlib import Path
         import copy, csv, datetime, json, os, re, signal, statistics, subprocess, sys, time, uuid
         sys.dont_write_bytecode = True
         os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
 
-        SOURCE_REF = "dev/fish13031e"  #@param {type:"string"}
+        SOURCE_REF = "$source_ref"  #@param {type:"string"}
         REPOSITORY = 'https://github.com/eastha10/VLADE.git'
-        WORK = Path('/content/vlade_qwen_unfrozen')
-        RUN_GROUP = globals().get('RUN_GROUP') or ('qwen-scope-' + datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8])
-        VARIANTS = "gt_only"  #@param ["gt_only", "gt_kd", "both"]
+        WORK = Path('/content/$workspace')
+        RUN_GROUP = globals().get('RUN_GROUP') or ('$run_prefix-' + datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8])
+        VARIANTS = "$variant"  #@param ["gt_only", "gt_kd", "both"]
         TRAINABLE_SCOPE = "full"  #@param ["full", "top_layers", "policy"]
         TOP_LAYER_COUNT = 4  #@param {type:"integer"}
         MAX_STEPS = 100  #@param {type:"integer"}
@@ -51,8 +52,9 @@ def write_notebook(path: Path) -> Path:
         VALIDATION_QUERIES = 32  #@param {type:"integer"}
         LEARNING_RATE = 2e-5  #@param {type:"number"}
         KD_WEIGHT = 1.0  #@param {type:"number"}
+        TEACHER_PLAN_MAX_NEW_TOKENS = $plan_tokens  #@param {type:"integer"}
         SEED = 42
-        REGISTRY_REVISION = '65799b213837eeb9b931a08d8fe6625a5fce43e4'
+        REGISTRY_REVISION = '$registry_revision'
         S0_ASSET, T1_ASSET, DATA_ASSET = 'S0', 'T1', 'prepared_d_seed42'
         HF_REPO = 'VLADE-konkuk/VLADE-checkpoints'
         # 새 Colab 세션에서 재개할 때는 이전 RUN_GROUP과 SOURCE_COMMIT을 사용합니다.
@@ -63,11 +65,21 @@ def write_notebook(path: Path) -> Path:
         assert re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', RUN_GROUP)
         assert type(MAX_STEPS) is int and MAX_STEPS >= 1 and 1 <= SAVE_STEPS <= MAX_STEPS
         assert type(ACCUMULATION_STEPS) is int and ACCUMULATION_STEPS >= 1
-        assert VALIDATION_QUERIES >= 1 and LEARNING_RATE > 0 and KD_WEIGHT >= 0
+        assert VALIDATION_QUERIES >= 1 and LEARNING_RATE > 0 and ('gt_kd' not in SELECTED or KD_WEIGHT > 0)
+        assert type(TEACHER_PLAN_MAX_NEW_TOKENS) is int and 0 <= TEACHER_PLAN_MAX_NEW_TOKENS <= 128
+        assert not TEACHER_PLAN_MAX_NEW_TOKENS or 'gt_kd' in SELECTED
         assert TRAINABLE_SCOPE != 'top_layers' or (type(TOP_LAYER_COUNT) is int and TOP_LAYER_COUNT >= 1)
         WORK.mkdir(parents=True, exist_ok=True)
         print('RUN_GROUP:', RUN_GROUP, '| scope:', TRAINABLE_SCOPE, '| variants:', SELECTED)
-        """),
+        """).substitute(
+            source_ref="refs/heads/feature/teacher-plan-kd" if teacher_plan else "dev/fish13031e",
+            workspace="vlade_qwen_plan_kd" if teacher_plan else "vlade_qwen_unfrozen",
+            run_prefix="qwen-plan-kd" if teacher_plan else "qwen-scope",
+            variant="gt_kd" if teacher_plan else "gt_only",
+            plan_tokens=48 if teacher_plan else 0,
+            registry_revision=("195d32e54c7f48960411c32963d91746183de488" if teacher_plan
+                               else "65799b213837eeb9b931a08d8fe6625a5fce43e4"),
+        )),
         _cell("code", "source", """
         if re.fullmatch(r'[0-9a-f]{40}', SOURCE_REF):
             SOURCE_COMMIT = SOURCE_REF
@@ -95,6 +107,8 @@ def write_notebook(path: Path) -> Path:
         trainer_source = (CODE / 'src/vlade/training/qwen_vla_task.py').read_text()
         if 'configure_trainable_scope' not in trainer_source or 'RunTimings' not in trainer_source:
             raise RuntimeError('새 학습 범위·시간 계측이 연결된 Git commit이 필요합니다.')
+        if TEACHER_PLAN_MAX_NEW_TOKENS and not (CODE / 'src/vlade/distillation/teacher_plan.py').is_file():
+            raise RuntimeError('Teacher 플랜 기능이 포함된 Git commit을 지정하십시오.')
         model_settings = json.loads((CODE / 'configs/models/student/qwen_vla_0_8b.json').read_text())
         assert model_settings['student']['schema_version'] == 2
         print('SOURCE_COMMIT:', SOURCE_COMMIT)
@@ -148,6 +162,8 @@ def write_notebook(path: Path) -> Path:
         SETTINGS['gt_kd']['distillation'] = {'teacher_mode': 'inference',
             'teacher_checkpoint': 'hfasset://' + T1_ASSET, 'teacher_device': 'cuda:0',
             'teacher_timeout_seconds': 600, 'task_weight': 1.0, 'action_kd_weight': KD_WEIGHT}
+        if TEACHER_PLAN_MAX_NEW_TOKENS:
+            SETTINGS['gt_kd']['distillation']['teacher_plan_max_new_tokens'] = TEACHER_PLAN_MAX_NEW_TOKENS
         assert {k: v for k, v in SETTINGS['gt_kd'].items() if k != 'distillation'} == SETTINGS['gt_only']
         contract = {'source_commit': SOURCE_COMMIT, 'registry_revision': REGISTRY_REVISION,
                     'run_group': RUN_GROUP, 'variants': SELECTED,
@@ -293,6 +309,68 @@ def write_notebook(path: Path) -> Path:
             files.download(str(export))
         """),
     ]
+    if teacher_plan:
+        cells[0] = _cell("markdown", "overview", """
+        # VLADE · Teacher CoT + Action-level Distillation
+
+        Hugging Face의 T1과 S0, LIBERO+ prepared 데이터를 사용합니다. T1은 각 정책
+        쿼리의 접근 플랜을 생성합니다. Student는 해당 플랜을 입력으로 받아 GT L1과
+        가중치를 적용한 Teacher Action L1로 학습합니다.
+
+        Colab A100과 Secrets의 `HF_TOKEN`이 필요합니다. 설정 → Git 소스 → 인증 → 환경
+        → 입력 확인 → 1-step 파일럿 순서로 실행하세요. 파일럿 직후 **Teacher 플랜 로그**
+        셀에서 플랜과 오차를 확인할 수 있습니다. 본 학습은 별도 셀에서 시작합니다.
+        체크포인트는 팀의 비공개 HF 저장소에 기록됩니다.
+        """)
+        cells.insert(-3, _cell("code", "teacher-plans", """
+        #@title Teacher 플랜 로그
+        PLAN_SPLIT = "validation"  #@param ["validation", "train", "all"]
+        PLAN_EXAMPLES = 8  #@param {type:"integer"}
+        assert PLAN_EXAMPLES >= 1
+        PLAN_LOGS = sorted(path for name in SELECTED for path in OUTPUTS[name].glob('teacher-plans-*.jsonl'))
+        for path in PLAN_LOGS:
+            rows = [json.loads(line) for line in path.read_text(encoding='utf-8').splitlines()]
+            print(path.name)
+            for split in ('train', 'validation'):
+                selected = [row for row in rows if row['split'] == split]
+                scored = [row for row in selected if row['status'] == 'ok']
+                kd = [row['action_kd_l1'] for row in scored if row['action_kd_l1'] is not None]
+                print(split, 'queries:', len(selected), '| plan errors:', len(selected) - len(scored),
+                      '| mean GT L1:', statistics.mean(row['task_l1'] for row in scored) if scored else None,
+                      '| mean Teacher L1:', statistics.mean(kd) if kd else None)
+            examples = [row for row in rows if PLAN_SPLIT in ('all', row['split'])]
+            for row in examples[-PLAN_EXAMPLES:]:
+                print(json.dumps(row, ensure_ascii=False))
+        if not PLAN_LOGS:
+            print('플랜 로그가 아직 없습니다. 파일럿을 실행한 뒤 이 셀을 실행하세요.')
+        """))
+        cells[-1] = _cell("code", "download-logs", """
+        #@title 플랜 및 학습 로그 다운로드
+        DOWNLOAD_LOGS = False  #@param {type:"boolean"}
+        if DOWNLOAD_LOGS:
+            import zipfile
+            paths = sorted({path for name in SELECTED for pattern in
+                            ('teacher-plans-*.jsonl', 'metrics-*.jsonl', 'timings-*.csv', 'invocation-*.json')
+                            for path in OUTPUTS[name].glob(pattern)})
+            if not paths:
+                raise RuntimeError('다운로드할 실행 로그가 없습니다.')
+            export = RUN_ROOT / 'plan-kd-logs.zip'
+            with zipfile.ZipFile(export, 'w', zipfile.ZIP_DEFLATED) as archive:
+                for path in paths:
+                    archive.write(path, path.relative_to(RUN_ROOT).as_posix())
+            from google.colab import files
+            files.download(str(export))
+        """)
+        cells.append(_cell("code", "select-lambda", """
+        #@title 완료한 λ 후보 비교
+        LAMBDA_RUN_GROUPS = []  # 같은 조건에서 KD_WEIGHT만 조정한 완료 실행의 RUN_GROUP
+        if LAMBDA_RUN_GROUPS:
+            assert all(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', group) for group in LAMBDA_RUN_GROUPS)
+            final_steps = [WORK / 'runs' / group / 'gt_kd' / f'step-{MAX_STEPS:07d}'
+                           for group in LAMBDA_RUN_GROUPS]
+            subprocess.run([str(STUDENT_PYTHON), '-B', str(CODE / 'scripts/train/select_plan_kd_weight.py'),
+                            *map(str, final_steps)], cwd=CODE, env=ENV, check=True)
+        """))
     notebook = {"cells": cells, "metadata": {
         "accelerator": "GPU", "colab": {"gpuType": "A100", "provenance": []},
         "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},

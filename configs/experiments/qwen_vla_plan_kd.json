@@ -1,0 +1,23 @@
+{
+  "model_config": "configs/models/student/qwen_vla_0_8b.json",
+  "initialization": "student_checkpoint",
+  "initial_checkpoint": "hfasset://S0",
+  "data": "hfasset://prepared_d_seed42",
+  "seed": 42,
+  "max_steps": 100,
+  "accumulation_steps": 8,
+  "learning_rate": 0.00002,
+  "weight_decay": 0.01,
+  "save_steps": 25,
+  "validation_queries": 32,
+  "trainable_scope": "full",
+  "distillation": {
+    "teacher_mode": "inference",
+    "teacher_checkpoint": "hfasset://T1",
+    "teacher_device": "cuda:0",
+    "teacher_timeout_seconds": 600,
+    "teacher_plan_max_new_tokens": 48,
+    "task_weight": 1.0,
+    "action_kd_weight": 1.0
+  }
+}
