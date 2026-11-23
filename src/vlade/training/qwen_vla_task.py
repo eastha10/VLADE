@@ -66,17 +66,29 @@ def action_loss(model: QwenVLA, data: EpisodeData, processor, config: QwenVLACon
     state = None
     forward_calls = 0
 
-    def forward(sample, inputs, state, step):
+    def forward(sample, inputs, state, step, *, replay=False):
         nonlocal forward_calls
         inputs = {key: value.to(device) for key, value in inputs.items()}
         proprio = torch.from_numpy(sample["proprio"])[None].to(device)
         with (timings.measure("s0_forward", step=step + 1, phase=phase,
                               episode_id=sample["episode_id"], timestep=sample["timestep"],
-                              is_warmup=forward_calls < 2)
+                              is_warmup=forward_calls < 2, replay=replay)
               if timings is not None else nullcontext()):
             result = model(inputs, proprio, state, batch_idx=step + step_offset)
         forward_calls += 1
         return result
+
+    def replay_validation(sample, previous, step):
+        episode = sample["episode_id"]
+        _, queries = next(data.episodes("validation", order=[episode]))
+        start = last[1] + 8 if last is not None and last[0] == episode else 0
+        replay = state if start else None
+        with torch.no_grad():
+            for query in queries[start // 8:previous["timestep"] // 8 + 1]:
+                plan = plan_teacher.get_plan(query, split="validation") if plan_teacher is not None else None
+                inputs = observation_inputs(data, processor, config, query, plan)
+                replay = forward(query, inputs, replay, step, replay=True).recurrent_state
+        return replay
 
     def loss(batch, step):
         nonlocal last, state
@@ -105,10 +117,13 @@ def action_loss(model: QwenVLA, data: EpisodeData, processor, config: QwenVLACon
             if previous is None:
                 state = None
             elif last != (previous["episode_id"], previous["timestep"]):
-                plan = plan_teacher.get_plan(previous, split=phase) if plan_teacher is not None else None
-                inputs = observation_inputs(data, processor, config, previous, plan)
-                with torch.no_grad():
-                    state = forward(previous, inputs, None, step).recurrent_state
+                if phase != "validation":
+                    plan = plan_teacher.get_plan(previous, split=phase) if plan_teacher is not None else None
+                    inputs = observation_inputs(data, processor, config, previous, plan)
+                    with torch.no_grad():
+                        state = forward(previous, inputs, None, step, replay=True).recurrent_state
+                else:
+                    state = replay_validation(sample, previous, step)
             prediction = forward(sample, current, state, step)
         last = sample["episode_id"], sample["timestep"]
         state = prediction.recurrent_state.detach()
@@ -169,7 +184,8 @@ def verified_s0(initial: Path, config: QwenVLAConfig, data_sha256: str) -> int:
 
 
 def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after: int | None = None,
-        local_s0: Path | None = None, local_s0_manifest_sha256: str | None = None) -> None:
+        local_s0: Path | None = None, local_s0_manifest_sha256: str | None = None,
+        preflight: bool = False) -> None:
     """Train QwenVLA. A bounded pilot keeps the configured run schedule."""
     target = settings["max_steps"]
     limit = stop_after if stop_after is not None else target
@@ -200,7 +216,7 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
             raise ValueError("Teacher episode_limit must be a nonnegative integer")
     source = source_identity(ROOT, require_clean=True)
     device = torch.device("cuda:0")
-    if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
+    if not preflight and (not torch.cuda.is_available() or not torch.cuda.is_bf16_supported()):
         raise RuntimeError("A BF16 CUDA GPU is required")
     if local_s0 is not None:
         initial = resolve_input(local_s0)
@@ -210,11 +226,6 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
         initial = resolve_input(settings["initial_checkpoint"])
     config_path = ROOT / settings["model_config"]
     config = QwenVLAConfig.from_json(config_path)
-    seed = settings["seed"]
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
     data = EpisodeData(resolve_input(settings["data"]))
     data_sha256 = sha256(data.root / "manifest.json")
     s0_step = verified_s0(initial, config, data_sha256) if from_s0 else 0
@@ -237,12 +248,24 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
         seal = verify_checkpoint(resume, accumulation=accumulation)
         if json.loads((resume / "identity.json").read_text(encoding="utf-8")) != identity:
             raise ValueError("Checkpoint training identity differs from this run")
-        if seal["step"] >= limit:
+        if seal["step"] > target or (not preflight and seal["step"] >= limit):
             raise ValueError("The requested stop must follow the resumed checkpoint")
+    if preflight:
+        print(json.dumps({"status": "preflight_ok", "counts": data.manifest["counts"],
+                          "initial_student_step": s0_step, "teacher_mode": teacher_mode,
+                          "teacher_plan_max_new_tokens": plan_tokens,
+                          "teacher_inference": identity.get("teacher_inference"),
+                          "teacher_cache": identity.get("teacher_cache")}), flush=True)
+        return
     checkpoints = sorted(output.glob("step-*"))
     if checkpoints and (resume is None or checkpoints[-1].resolve() != resume.resolve()):
         raise FileExistsError("Resume the latest checkpoint in this output or choose a fresh output")
 
+    seed = settings["seed"]
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     if from_s0:
         checkpoint = resume or initial
         model = QwenVLA.load(checkpoint / "model").float()
@@ -372,12 +395,14 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--stop-after", type=int)
+    parser.add_argument("--preflight", action="store_true", help="Verify input identity without loading models")
     parser.add_argument("--local-s0", type=Path, help="Verified HF-cached QwenVLA checkpoint for Student initialization")
     parser.add_argument("--local-s0-manifest-sha256", help="Expected SHA256 of the local checkpoint manifest")
     parser.add_argument("--teacher-python", type=Path, help="Python executable from the prepared AVA runtime")
     parser.add_argument("--action-kd-weight", type=float, help="Override lambda for a new KD run")
     args = parser.parse_args()
     settings = json.loads(args.config.read_text(encoding="utf-8"))
+    settings.pop("workflow", None)
     if args.action_kd_weight is not None:
         if settings.get("distillation") is None:
             parser.error("--action-kd-weight requires a distillation configuration")
@@ -389,7 +414,8 @@ def main() -> None:
         settings["distillation"]["teacher_python"] = str(args.teacher_python.absolute())
     run(settings, args.output,
         resume=args.resume, stop_after=args.stop_after,
-        local_s0=args.local_s0, local_s0_manifest_sha256=args.local_s0_manifest_sha256)
+        local_s0=args.local_s0, local_s0_manifest_sha256=args.local_s0_manifest_sha256,
+        preflight=args.preflight)
 
 
 if __name__ == "__main__":

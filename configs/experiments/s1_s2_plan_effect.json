@@ -1,0 +1,17 @@
+{
+  "mode": "student",
+  "teacher": "hfasset://T1",
+  "cot_checkpoint": "hfasset://S2",
+  "action_checkpoint": "hfasset://S1",
+  "data": "hfasset://prepared_d_seed42",
+  "benchmark_assets": "hfasset://libero_plus_assets",
+  "registry_revision": "195d32e54c7f48960411c32963d91746183de488",
+  "checkpoint_pins": {},
+  "seed": 42,
+  "trials": 10,
+  "max_steps": 600,
+  "teacher_device": "cuda:0",
+  "student_device": "cuda:0",
+  "teacher_timeout_seconds": 600,
+  "lag_queries": 2
+}

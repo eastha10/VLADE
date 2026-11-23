@@ -158,8 +158,9 @@ vlade/
 - `src/vlade/training/teacher_inference.py`: 별도 AVA 환경의 고정 T1 추론·Episode 상태 복원·액션 전달.
 - `src/vlade/training/student_initialization.py`: HF S0 전체 가중치·학습된 헤드·processor 검증 및 초기화.
 - `src/vlade/storage/checkpoint_inputs.py`: 기존 HF runs checkpoint의 불변 SHA·seal·LFS 검증과 런타임 입력 pin.
-- `src/vlade/utils/action_kd_notebook.py`, `scripts/prepare/generate_action_kd_notebook.py`: 증류 전용 노트북 정본 생성.
-- `experiments/colab_teacher_plan_kd.ipynb`, `scripts/prepare/generate_teacher_plan_kd_notebook.py`: 타임스텝별 Teacher 플랜, Action KD, 플랜 로그 확인용 Colab 실행본과 생성 진입점.
+- `scripts/train/run_distillation.py`, `src/vlade/research/distillation.py`: QwenVLA Action KD와 CoT+Action KD 공통 실행 진입점과 실행 관리.
+- `src/vlade/utils/action_kd_notebook.py`, `scripts/prepare/generate_action_kd_notebook.py`: JSON 설정을 공통 진입점에 전달하는 Colab 노트북 생성 정본.
+- `experiments/colab_teacher_plan_kd.ipynb`, `scripts/prepare/generate_teacher_plan_kd_notebook.py`: CoT+Action KD Colab 실행본과 생성 진입점.
 - `docs/environment/action_level_distillation.md`: T1/S0 HF 선택, 노션 손실 수식, 파일럿·재개 계약.
 
 - `src/vlade/training/loop.py`: 모델과 독립적인 optimizer step 루프·검증·학습 상태
