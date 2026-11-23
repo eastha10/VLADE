@@ -1,0 +1,17 @@
+{
+  "mode": "alignment",
+  "teacher": "hfasset://T1",
+  "data": "hfasset://prepared_d_seed42",
+  "benchmark_assets": "hfasset://libero_plus_assets",
+  "registry_revision": "195d32e54c7f48960411c32963d91746183de488",
+  "checkpoint_pins": {},
+  "seed": 42,
+  "trials": 5,
+  "max_steps": 600,
+  "teacher_device": "cuda:0",
+  "student_device": "cuda:0",
+  "teacher_timeout_seconds": 600,
+  "plan_tokens": 48,
+  "capture_every_queries": 4,
+  "captures_per_task": 8
+}

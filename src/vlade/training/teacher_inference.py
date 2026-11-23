@@ -128,7 +128,7 @@ class InferenceActions:
     """JSON pipes isolate incompatible AVA and Qwen Transformers environments."""
 
     def __init__(self, settings: dict, data: EpisodeData,
-                 timings: RunTimings | None = None) -> None:
+                 timings: RunTimings | None = None, *, live: bool = False) -> None:
         self.timings = timings
         self.plan_tokens = plan_token_budget(settings)
         root, self.signature = teacher_identity(settings["teacher_checkpoint"], data)
@@ -144,9 +144,10 @@ class InferenceActions:
         timing_args = (["--timing-dir", str(timings.path.parent), "--timing-session", timings.session_id]
                        if timings is not None else [])
         plan_args = ["--plan-max-new-tokens", str(self.plan_tokens)] if self.plan_tokens else []
+        live_args = ["--live-observations"] if live else []
         self.process = subprocess.Popen([str(python), "-B", "-m", "vlade.training.teacher_inference",
             "--checkpoint", str(root), "--data", str(data.root),
-            "--device", settings.get("teacher_device", "cuda:0"), *timing_args, *plan_args], cwd=code, env=env,
+            "--device", settings.get("teacher_device", "cuda:0"), *timing_args, *plan_args, *live_args], cwd=code, env=env,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1)
         self.replies = queue.Queue()
 
@@ -182,12 +183,29 @@ class InferenceActions:
         request = {"episode_id": sample["episode_id"], "timestep": sample["timestep"]}
         with (self.timings.measure("t1_request", **request) if self.timings is not None else contextlib.nullcontext()):
             request.update(options)
-            self.process.stdin.write(json.dumps(request) + "\n")
-            self.process.stdin.flush()
-            result = self._receive()
+            result = self._send(request)
         if any(result.get(key) != value for key, value in request.items()):
             raise ValueError("T1 response does not match the requested observation")
         return result
+
+    def _send(self, request: dict) -> dict:
+        self.process.stdin.write(json.dumps(request) + "\n")
+        self.process.stdin.flush()
+        return self._receive()
+
+    def reset_live(self) -> None:
+        if self._send({"live": "reset"}) != {"live": "reset"}:
+            raise ValueError("T1 live reset was not acknowledged")
+
+    def observe_live(self, query, *, action: bool, plan: bool) -> tuple[torch.Tensor | None, str | None]:
+        from vlade.evaluation.plan_observations import encode_query
+
+        request = {"live": "query", "action": action, "plan": plan, **encode_query(query)}
+        result = self._send(request)
+        if (result.get("task_id"), result.get("timestep")) != (query.task_id, query.timestep):
+            raise ValueError("T1 response does not match the live observation")
+        text = normalize_plan(result["plan"]) if plan and result["plan"] is not None else None
+        return self._action(result) if action else None, text
 
     @staticmethod
     def _action(result: dict) -> torch.Tensor:
@@ -234,6 +252,7 @@ def main() -> None:
     parser.add_argument("--timing-dir", type=Path)
     parser.add_argument("--timing-session")
     parser.add_argument("--plan-max-new-tokens", type=int, default=0)
+    parser.add_argument("--live-observations", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     plan_tokens = plan_token_budget({"teacher_mode": "inference", "teacher_plan_max_new_tokens": args.plan_max_new_tokens})
     wire = sys.stdout
@@ -266,6 +285,11 @@ def main() -> None:
             reply({"ready": signature})
             for line in sys.stdin:
                 request = json.loads(line)
+                if args.live_observations:
+                    from vlade.evaluation.plan_observations import live_response
+
+                    reply(live_response(policy, request, plan_tokens))
+                    continue
                 episode, timestep = request["episode_id"], request["timestep"]
                 signal = request.get("signal", "action")
                 if signal not in {"action", "action_and_plan", "plan"} or (signal != "action" and not plan_tokens):

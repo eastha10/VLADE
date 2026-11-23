@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 import numpy as np
+from numpy.core.multiarray import _reconstruct
 import torch
 from PIL import Image
 
@@ -25,6 +26,16 @@ class RolloutPlan:
     quat_to_axisangle: Callable
     task_ids: tuple[int, ...]
     seed: int
+
+
+@dataclass(frozen=True)
+class RolloutQuery:
+    task_id: int
+    timestep: int
+    instruction: str
+    primary: Image.Image
+    wrist: Image.Image
+    proprio: np.ndarray
 
 
 def prepare_rollouts(count: int, seed: int) -> RolloutPlan:
@@ -52,8 +63,23 @@ def _action_chunk(normalized: np.ndarray, stats: dict) -> np.ndarray:
     return np.clip(physical, -1, 1)
 
 
-def run_rollouts(plan: RolloutPlan, predict: Callable, stats: dict) -> dict:
-    """Run one trial per variant and count environment-reported task success."""
+def _camera_images(observation: dict) -> tuple[Image.Image, Image.Image]:
+    return tuple(Image.fromarray(np.ascontiguousarray(observation[key][::-1, ::-1]))
+                 for key in ("agentview_image", "robot0_eye_in_hand_image"))
+
+
+def _trace_frame(observation: dict) -> dict:
+    return {
+        "eef_xyz": np.asarray(observation["robot0_eef_pos"]).tolist(),
+        "gripper_qpos": np.asarray(observation["robot0_gripper_qpos"]).tolist(),
+        "object_xyz": {name: np.asarray(value).tolist() for name, value in observation.items()
+                       if name.endswith("_pos") and not name.startswith("robot") and np.shape(value) == (3,)},
+    }
+
+
+def run_query_rollouts(plan: RolloutPlan, predict: Callable, stats: dict, *,
+                       max_steps: int = MAX_STEPS, capture: Callable | None = None) -> dict:
+    """Run paired trials with an optional observer for the executed chunk."""
     trials = []
     for index, task_id in enumerate(plan.task_ids, 1):
         print(f"Rollout {index}/{len(plan.task_ids)} (task {task_id})", flush=True)
@@ -63,12 +89,12 @@ def run_rollouts(plan: RolloutPlan, predict: Callable, stats: dict) -> dict:
         try:
             # Official LIBERO+ initial states include NumPy arrays serialized by older PyTorch.
             numpy_types = [np.ndarray, np.dtype, np.dtypes.Float64DType, np.dtypes.Float32DType,
-                           (np._core.multiarray._reconstruct, "numpy.core.multiarray._reconstruct")]
+                           (_reconstruct, "numpy.core.multiarray._reconstruct")]
             with torch.serialization.safe_globals(numpy_types):
                 initial = plan.suite.get_task_init_states(task_id)[0]
             initial_digest = hashlib.sha256(np.asarray(initial).tobytes()).hexdigest()
             env = plan.env_factory(bddl_file_name=plan.suite.get_task_bddl_file_path(task_id),
-                                   camera_heights=256, camera_widths=256, horizon=MAX_STEPS + SETTLE_STEPS)
+                                   camera_heights=256, camera_widths=256, horizon=max_steps + SETTLE_STEPS)
             try:
                 env.seed(task_seed)
                 env.reset()
@@ -76,22 +102,33 @@ def run_rollouts(plan: RolloutPlan, predict: Callable, stats: dict) -> dict:
                 for _ in range(SETTLE_STEPS):
                     observation, _, _, _ = env.step([0.] * 6 + [-1.])
                 success, terminal, steps, state = False, False, 0, None
-                while steps < MAX_STEPS and not (success or terminal):
-                    primary = Image.fromarray(np.ascontiguousarray(observation["agentview_image"][::-1, ::-1]))
-                    wrist = Image.fromarray(np.ascontiguousarray(observation["robot0_eye_in_hand_image"][::-1, ::-1]))
+                while steps < max_steps and not (success or terminal):
+                    primary, wrist = _camera_images(observation)
                     proprio = np.concatenate((
                         observation["robot0_eef_pos"],
                         plan.quat_to_axisangle(observation["robot0_eef_quat"].copy()),
                         observation["robot0_gripper_qpos"],
                     ))
-                    actions, state = predict(plan.suite.get_task(task_id).language, primary, wrist,
-                                             normalize(proprio, stats["proprio"]), state)
-                    for action in _action_chunk(actions, stats["action"])[:MAX_STEPS - steps]:
+                    query = RolloutQuery(task_id, steps, plan.suite.get_task(task_id).language, primary, wrist,
+                                         normalize(proprio, stats["proprio"]))
+                    actions, state = predict(query, state)
+                    observer = capture(query, actions) if capture is not None else None
+                    if observer is not None:
+                        trace = [_trace_frame(observation)]
+                        frames = [(primary, wrist)]
+                        executed = []
+                    for action in _action_chunk(actions, stats["action"])[:max_steps - steps]:
                         observation, _, terminal, _ = env.step(action.tolist())
                         steps += 1
                         success = bool(env.check_success())
+                        if observer is not None:
+                            executed.append(action.tolist())
+                            trace.append(_trace_frame(observation))
+                            frames.append(_camera_images(observation))
                         if success or terminal:
                             break
+                    if observer is not None:
+                        observer(trace, frames, executed)
             finally:
                 env.close()
         except Exception as exc:
@@ -100,6 +137,14 @@ def run_rollouts(plan: RolloutPlan, predict: Callable, stats: dict) -> dict:
         trials.append({"task_id": task_id, "init_index": 0, "init_sha256": initial_digest,
                        "seed": task_seed, "steps": steps, "success": success})
     successes = sum(trial["success"] for trial in trials)
-    return {"status": "complete", "suite": SUITE, "max_steps": MAX_STEPS, "settle_steps": SETTLE_STEPS,
+    return {"status": "complete", "suite": SUITE, "max_steps": max_steps, "settle_steps": SETTLE_STEPS,
             "successes": successes, "episodes": len(trials), "success_rate": successes / len(trials),
             "trials": trials}
+
+
+def run_rollouts(plan: RolloutPlan, predict: Callable, stats: dict) -> dict:
+    """Keep the action-only callback for existing rollout callers."""
+    def predict_query(query: RolloutQuery, state):
+        return predict(query.instruction, query.primary, query.wrist, query.proprio, state)
+
+    return run_query_rollouts(plan, predict_query, stats)

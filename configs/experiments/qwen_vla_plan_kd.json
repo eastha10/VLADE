@@ -11,6 +11,12 @@
   "save_steps": 25,
   "validation_queries": 32,
   "trainable_scope": "full",
+  "top_layer_count": 0,
+  "workflow": {
+    "variant": "gt_kd",
+    "registry_revision": "195d32e54c7f48960411c32963d91746183de488",
+    "checkpoint_pins": {}
+  },
   "distillation": {
     "teacher_mode": "inference",
     "teacher_checkpoint": "hfasset://T1",

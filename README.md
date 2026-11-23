@@ -17,9 +17,8 @@ Vision Encoder 전용 가중치 Fake Quantization과 AVA-aware W4/W8 ablation은
 
 일반 Colab 실행은 [colab_vlade.ipynb](experiments/colab_vlade.ipynb)에서 작업을 선택하며, [설정 기반 연구 명령](docs/environment/research_runs.md)을 사용합니다. 훈련 step·평가 rollout 수는 `configs/research/`에서 제어합니다.
 
-`qwen_kd`는 [HF T1 추론 → S0 Action-level Distillation](docs/environment/action_level_distillation.md)을 사용합니다. T1·S0 asset과 λ를 설정으로 선택하며 Teacher cache는 필수가 아닙니다.
-타임스텝별 T1 접근 플랜을 입력으로 사용하는 실험은 [CoT+Action KD Colab](experiments/colab_teacher_plan_kd.ipynb)에서 실행합니다.
-증류 전용 [colab_action_distillation.ipynb](experiments/colab_action_distillation.ipynb)에 HF 인증·가중치 경로/commit 연결·환경 준비·파일럿·본 학습·재개 절차를 담았습니다.
+QwenVLA S0의 [Action KD](experiments/colab_action_distillation.ipynb)와 [CoT+Action KD](experiments/colab_teacher_plan_kd.ipynb)는
+`scripts/train/run_distillation.py`를 사용합니다. T1·S0, λ, 학습 단계는 [실행 설정](docs/environment/action_level_distillation.md)에서 지정합니다.
 
 새 AVA FFT·Suite-balanced는 [연속 K4 시퀀스 학습](docs/environment/ava_sequence_training.md)을 사용합니다.
 훈련은 시퀀스 시작에, 추론은 Episode 시작에 상태를 초기화합니다. 기존 전처리본과 Episode 분할은 보존합니다.

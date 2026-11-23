@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 
+class InvalidTeacherPlan(ValueError):
+    """The Teacher produced no usable text."""
+
+
 def plan_token_budget(settings: dict) -> int:
     """Zero selects action-only KD; a positive budget requires the online Teacher."""
     budget = settings.get("teacher_plan_max_new_tokens", 0)
@@ -15,11 +19,11 @@ def plan_token_budget(settings: dict) -> int:
 def normalize_plan(text: str) -> str:
     """Accept bounded plain text suitable for a Student prompt."""
     if not isinstance(text, str):
-        raise ValueError("T1 plan must be text")
+        raise InvalidTeacherPlan("T1 plan must be text")
     text = " ".join(text.split())
     if (len(text) > 2048 or not text.isprintable() or "<" in text or ">" in text
             or not any(char.isalpha() for char in text)):
-        raise ValueError("T1 emitted an invalid or empty approach plan")
+        raise InvalidTeacherPlan("T1 emitted an invalid or empty approach plan")
     return text
 
 

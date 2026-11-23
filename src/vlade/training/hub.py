@@ -151,8 +151,12 @@ class HubCheckpoints:
             operations.append(CommitOperationAdd(path_in_repo=f"{self.prefix}/{alias}.json",
                 path_or_fileobj=io.BytesIO(json.dumps(pointer, allow_nan=False).encode())))
         self._private()
-        self.api.create_commit(repo_id=self.repo, repo_type="model", operations=operations,
-                               commit_message=f"VLADE {self.run} step {seal['step']}")
+        commit = self.api.create_commit(repo_id=self.repo, repo_type="model", operations=operations,
+                                        commit_message=f"VLADE {self.run} step {seal['step']}")
+        revision = getattr(commit, "oid", None)
+        if item["final"] and self.output.name in {"S1", "S2"} and revision:
+            pin = {"repo_id": self.repo, "revision": revision, "prefix": remote}
+            print("CHECKPOINT_PINS " + json.dumps({self.output.name: pin}), flush=True)
 
     def flush(self) -> bool:
         """Retry network failures; preserve FIFO aliases and sanitized diagnostics."""
