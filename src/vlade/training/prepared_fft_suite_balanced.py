@@ -30,6 +30,8 @@ def make_loader(cfg: Any, processor: Any, *, train: bool = True) -> tuple[Any, A
             "The shared prepared-data path requires image_aug=false for explicit common inputs"
         )
     data = EpisodeData(cfg.prepared_data_root)
+    from .teacher_plan_supervision import annotation_loader, attach_plan_batch
+    annotations = annotation_loader(cfg, data, train=train)
     suite_map_path = None
     if train:
         # The extracted TAR may not contain suite_map.json: allow a separate path.
@@ -100,6 +102,7 @@ def make_loader(cfg: Any, processor: Any, *, train: bool = True) -> tuple[Any, A
         result = base(items)
         result["action_valid_mask"] = torch.stack([item["action_valid_mask"] for item in items])
         result["sample_metadata"] = [item["sample_metadata"] for item in items]
+        attach_plan_batch(result, annotations, getattr(cfg, "plan_loss_weight", 0.0), processor.tokenizer)
         return result
 
     dataset = Queries()

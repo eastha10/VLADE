@@ -80,6 +80,10 @@ def identity(settings: dict, data: EpisodeData, teacher: ActionTargets | None = 
     if settings.get("method") == "action_kd":
         if settings.get("teacher_mode", "cache") == "inference":
             signature = teacher.signature if teacher else teacher_identity(settings["teacher_checkpoint"], data)[1]
+            if plan_token_budget(settings):
+                from vlade.distillation.teacher_plan import require_plan_supervision
+                require_plan_supervision({"step": signature["step"],
+                                          "plan_supervision": signature.get("plan_supervision")})
             cache_identity = {"teacher_inference": signature}
         else:
             teacher = teacher or CachedActions(Path(settings["teacher_cache"]), data,

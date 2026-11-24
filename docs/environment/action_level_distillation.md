@@ -47,10 +47,15 @@ CLI에서는 같은 JSON을 `--resume-revisions`에 전달합니다. `last`에�
 
 ## CoT 조건과 검증
 
+현재 액션 L1로 학습한 T1은 Plan 지도학습이 확인된 체크포인트가 아닙니다. CoT 실행은
+호환되는 봉인 `plan_supervision`이 없으면 중단합니다. 원인 범위, 선택적 Plan CE·주석 입력과
+새 학습/재개 절차는 [Teacher Plan 안내](teacher_plan_generation.md)를 따릅니다.
+
 T1은 같은 시점의 관측에서 Action Chunk와 짧은 접근 플랜을 제공합니다. Student는 플랜 문자열을 입력으로 받고
 액션 L1 손실로 학습합니다. `teacher_plan_max_new_tokens`의 기본값은 Action-only에서 0, CoT+Action에서 48입니다.
 T1의 응답 전체가 `<plan>…</plan>`으로 감싸져 있으면 본문을 추출해 기존 평문 규칙으로 검증합니다.
-생성 시 첫 EOS를 제한하고 BOS·UNK·PAD 등 EOS 외 특수 토큰과 액션 토큰·추가 vocabulary 행을 억제합니다.
+생성 시 첫 EOS를 허용하고 BOS·UNK·PAD 등 EOS 외 특수 토큰과 액션 토큰·추가 vocabulary 행을 억제합니다.
+EOS-only와 EOS 없이 예산에 도달한 응답은 거절합니다. EOS를 막아 텍스트를 강제로 만들지 않습니다.
 빈 응답·미완성 또는 중첩 태그는 거절합니다. 거절 시 디코딩 원문 앞 256자와 이유를 오류에 포함합니다.
 생성된 token ID와 Episode·timestep도 오류에 포함해 조기 종료와 잘못된 텍스트를 구분합니다.
 학습에서는 오류를 `teacher-plans-*.jsonl`에 기록하고 중단합니다. 플랜 평가에서는 `plan=None`으로
@@ -66,7 +71,8 @@ CoT는 `preflight → probe → pilot → train` 순서로 실행합니다. `pre
 `probe`는 같은 설정의 고정 HF 입력과 AVA 런타임을 사용하며 `teacher-plan-probe-*.jsonl`을
 `<workspace>/runs/<run-group>/`에 저장합니다. 형식이 틀리면 오류와 관측 위치를 기록하고 중단합니다.
 이 단계는 optimizer·Student 로드·Hub checkpoint 게시를 실행하지 않습니다.
-현재 T1 FFT의 최적화 목표는 액션 L1이며 자연어 플랜 생성 손실은 없습니다.
+기존 T1 FFT의 최적화 목표는 액션 L1이며 자연어 플랜 생성 손실은 없습니다. 새 선택적 Plan CE는
+검증된 별도 주석과 새 run이 필요하며 기존 T1에 소급 적용되지 않습니다.
 형식 검사 통과만으로 플랜의 의미·액션과의 일치가 보장되지 않으므로 probe 원문과 아래 rollout 평가를 확인합니다.
 생성 실패 시 지시문이나 고정 문장으로 플랜을 대체하지 않습니다.
 

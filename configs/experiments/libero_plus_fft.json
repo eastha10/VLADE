@@ -48,6 +48,8 @@
     "trainer_validation_status": "cpu_unit_and_synthetic_smoke_passed; real_gpu_not_run"
   },
   "fft_defaults": {
+    "plan_annotations": null,
+    "plan_loss_weight": 0.0,
     "data_root": "hfasset://raw_rlds",
     "prepared_data_root": "hfasset://prepared_d_seed42",
     "canonical_split_manifest": "experiments/manifests/libero_plus_rlds/canonical_d_seed42.jsonl.gz",

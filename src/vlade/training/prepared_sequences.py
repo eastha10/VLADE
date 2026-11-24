@@ -21,6 +21,8 @@ def make_loader(cfg: Any, processor: Any, *, train: bool, suite_map: Any = None)
     if cfg.image_aug:
         raise ValueError("Sequence training requires the shared unaugmented prepared inputs")
     data = EpisodeData(cfg.prepared_data_root)
+    from .teacher_plan_supervision import annotation_loader, attach_plan_batch
+    annotations = annotation_loader(cfg, data, train=train)
     transform = RLDSBatchTransform(
         ActionTokenizer(processor.tokenizer),
         processor.tokenizer,
@@ -92,6 +94,7 @@ def make_loader(cfg: Any, processor: Any, *, train: bool, suite_map: Any = None)
                         }
                     ]
                     frames.append(frame)
+                    attach_plan_batch(frame, annotations, getattr(cfg, "plan_loss_weight", 0.0), processor.tokenizer)
                 yield frames
 
     dataset = Sequences()

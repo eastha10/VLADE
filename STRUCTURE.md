@@ -1,5 +1,9 @@
 # Directory Structure
 
+- `src/vlade/training/teacher_plan_supervision.py`: 고정 HF 주석의 Train 전용 Plan CE와 checkpoint 감독 이력.
+- `src/vlade/distillation/teacher_plan.py`: 학습·생성 공통 prompt, 감독 계약, EOS·평문 검증.
+- `docs/environment/teacher_plan_generation.md`: Plan 오류 원인 범위·주석 계약·학습/재개 절차.
+
 - `src/vlade/quantization/packed/`: ActQuant/QVLA/QuantVLA 보정, bit-packed Linear, NVRTC CUDA kernel, safe-tensor 배포.
 - `configs/quantization/packed_student.json`: 세 방법의 독립 예산·범위·보정 설정.
 - `scripts/quantization/run_packed_ptq.py`: 고정 HF 입력의 packed export·재로딩·행동 오차 평가.

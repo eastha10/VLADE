@@ -60,6 +60,10 @@ def validate_selection(selection: dict, data: EpisodeData) -> Path:
         raise ValueError("Selection/checkpoint step mismatch")
     expected = {**{key: data.manifest[key] for key in ("normalization_sha256", "split_sha256")},
                 "manifest_sha256": sha256(data.root / "manifest.json")}
+    recorded = saved.get("prepared_data_identity")
+    for key in ("canonical_manifest_sha256", "canonical_normalization_sha256"):
+        if saved.get("plan_supervision") is not None or isinstance(recorded, dict) and key in recorded:
+            expected[key] = data.manifest[key]
     if saved.get("prepared_data_identity") != expected:
         raise ValueError("Teacher was trained with a different data contract")
     return checkpoint
@@ -70,6 +74,8 @@ class SequentialTeacher:
                  timings=None):
         from vlade.storage.assets import resolve_path
         checkpoint = resolve_path(checkpoint)
+        metadata_path = checkpoint / "vlade_fft.json"
+        self.checkpoint_metadata = json.loads(metadata_path.read_text(encoding="utf-8")) if metadata_path.is_file() else {}
         from vlade.training.fft import FFTConfig, _activate_upstream, _make_model_and_components
         configure_tensorflow_cpu()
         _activate_upstream("ava_vla")
@@ -102,14 +108,12 @@ class SequentialTeacher:
     @torch.inference_mode()
     def plan(self, sample: dict, data: EpisodeData, *, max_new_tokens: int) -> str:
         """Use T1's own visual prefix and language decoder for the current observation."""
-        from vlade.distillation.teacher_plan import InvalidTeacherPlan, normalize_generated_plan, plan_generation_kwargs
-
-        prompt = (
-            f"In: Robot task: {sample['instruction'].strip()}\n"
-            f"At timestep {sample['timestep']}, use the two current camera views to plan the "
-            "next eight control steps. Give a short English approach plan naming the target, "
-            "movement and gripper intent as applicable. Output only the plan.\nOut:"
+        from vlade.distillation.teacher_plan import (
+            InvalidTeacherPlan, decode_plan_tokens, plan_generation_kwargs, plan_prompt, require_plan_supervision,
         )
+
+        require_plan_supervision(self.checkpoint_metadata)
+        prompt = plan_prompt(sample["instruction"], sample["timestep"])
         inputs = self._observation_inputs(sample, data, prompt)
         model = self.model
         tokens = model.get_input_embeddings()(inputs["input_ids"])
@@ -127,7 +131,7 @@ class SequentialTeacher:
             )
         token_ids = generated[0].tolist()
         try:
-            return normalize_generated_plan(tokenizer.decode(token_ids, skip_special_tokens=True))
+            return decode_plan_tokens(token_ids, tokenizer)
         except InvalidTeacherPlan as error:
             raise InvalidTeacherPlan(
                 f"{error}; token_ids={token_ids[:128]}; episode_id={sample['episode_id']!r}; "

@@ -20,6 +20,9 @@ Vision Encoder 전용 가중치 Fake Quantization과 AVA-aware W4/W8 ablation은
 QwenVLA S0의 [Action KD](experiments/colab_action_distillation.ipynb)와 [CoT+Action KD](experiments/colab_teacher_plan_kd.ipynb)는
 `scripts/train/run_distillation.py`를 사용합니다. T1·S0, λ, 학습 단계는 [실행 설정](docs/environment/action_level_distillation.md)에서 지정합니다.
 
+액션 전용 T1의 잘못된 Plan을 지도 신호로 사용하지 않도록 학습 이력을 검사합니다.
+원인과 선택적 Plan CE·새 학습/재개 절차는 [Teacher Plan 안내](docs/environment/teacher_plan_generation.md)를 따릅니다.
+
 새 AVA FFT·Suite-balanced는 [연속 K4 시퀀스 학습](docs/environment/ava_sequence_training.md)을 사용합니다.
 훈련은 시퀀스 시작에, 추론은 Episode 시작에 상태를 초기화합니다. 기존 전처리본과 Episode 분할은 보존합니다.
 

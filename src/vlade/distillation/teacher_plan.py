@@ -2,13 +2,47 @@
 from __future__ import annotations
 from typing import Any
 
+PLAN_PROMPT_VERSION = "ava-approach-v1"
+
+
+def plan_prompt(instruction: str, timestep: int) -> str:
+    """One tokenizer-native PurePrompt prefix shared by supervision and inference."""
+    if not isinstance(instruction, str) or not instruction.strip() or type(timestep) is not int or timestep < 0:
+        raise ValueError("Plan requires an instruction and nonnegative observation timestep")
+    return (f"In: Robot task: {instruction.strip()}\n"
+            f"At timestep {timestep}, use the two current camera views to plan the "
+            "next eight control steps. Give a short English approach plan naming the target, "
+            "movement and gripper intent as applicable. Output only the plan.\nOut:")
+
 
 class InvalidTeacherPlan(ValueError):
     """The Teacher produced no usable text."""
 
 
+def require_plan_supervision(metadata: dict) -> dict:
+    """Reject action-only FFT as a source of supervised language plans, before GPU use."""
+    contract = metadata.get("plan_supervision")
+    if not isinstance(contract, dict):
+        raise InvalidTeacherPlan(
+            "T1 has no Plan supervision: action L1 does not train the language output head. "
+            "Use Action-only KD, or initialize a NEW supervised FFT run with verified Plan annotations; "
+            "resuming action-only FFT cannot add CoT. See docs/environment/teacher_plan_generation.md"
+        )
+    if (contract.get("prompt_version") != PLAN_PROMPT_VERSION or contract.get("objective") != "plan_ce"
+            or type(contract.get("trained_steps")) is not int or contract["trained_steps"] < 1
+            or contract["trained_steps"] != metadata.get("step")
+            or type(contract.get("weight")) not in (int, float) or not 0 < contract["weight"] < float("inf")
+            or any(not isinstance(contract.get(key), str) or len(contract[key]) != length
+                   or any(c not in "0123456789abcdef" for c in contract[key])
+                   for key, length in (("annotations_manifest_sha256", 64), ("annotations_sha256", 64),
+                                       ("annotations_revision", 40)))
+            or not isinstance(contract.get("annotations_repo_id"), str) or not contract["annotations_repo_id"]):
+        raise InvalidTeacherPlan("T1 Plan supervision contract is incomplete or incompatible")
+    return contract
+
+
 def plan_generation_kwargs(tokenizer: Any, vocab_size: int, max_new_tokens: int) -> dict[str, Any]:
-    """Require a content token before EOS and exclude non-text action/special IDs."""
+    """Exclude action/special IDs without forcing text from an EOS-preferring model."""
     from vlade.models.teachers.constants import ACTION_TOKEN_BEGIN_IDX
 
     if type(max_new_tokens) is not int or not 1 <= max_new_tokens <= 128:
@@ -20,11 +54,18 @@ def plan_generation_kwargs(tokenizer: Any, vocab_size: int, max_new_tokens: int)
     special = list(getattr(tokenizer, "all_special_ids", ()))
     special.extend(getattr(tokenizer, name, None) for name in ("bos_token_id", "unk_token_id", "pad_token_id"))
     suppressed.update(token for token in special if type(token) is int and 0 <= token < vocab_size and token != eos)
-    return {"max_new_tokens": max_new_tokens, "min_new_tokens": 1,
+    return {"max_new_tokens": max_new_tokens, "min_new_tokens": 0,
             "do_sample": False, "use_cache": True, "return_dict_in_generate": False,
             "eos_token_id": eos, "pad_token_id": eos,
             "forced_bos_token_id": None, "forced_eos_token_id": None,
             "suppress_tokens": sorted(suppressed)}
+
+
+def decode_plan_tokens(token_ids: list[int], tokenizer: Any) -> str:
+    """Decode generated-only IDs; require EOS rather than accepting budget truncation."""
+    if not token_ids or token_ids[-1] != tokenizer.eos_token_id:
+        raise InvalidTeacherPlan(f"T1 plan reached its token budget without EOS; token_ids={token_ids[:128]}")
+    return normalize_generated_plan(tokenizer.decode(token_ids[:-1], skip_special_tokens=False))
 
 
 def plan_token_budget(settings: dict) -> int:

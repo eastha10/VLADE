@@ -248,6 +248,24 @@ def resolve_path(value: str | Path, *, registry: Path | None = None) -> Path:
     return Path(value)
 
 
+def resolve_input_record(value: str | Path, *, registry: Path | None = None) -> tuple[Path, dict]:
+    """Resolve and verify an input, then expose its pinned file identities to readers."""
+    root = resolve_input(value, registry=registry)
+    if str(value).startswith("hfasset:"):
+        key = str(value)[len("hfasset:"):].strip("/\\")
+    else:
+        key = root.parent.parent.name
+        location = os.environ.get("VLADE_LOCAL_INPUTS")
+        if location:
+            bindings = json.loads(Path(location).read_text(encoding="utf-8"))["bindings"]
+            matches = [name for name, entry in bindings.items() if Path(entry["root"]) == root]
+            if matches:
+                if len(matches) != 1:
+                    raise ValueError("Ambiguous local HF binding")
+                key = matches[0]
+    return root, asset_record(key, registry)
+
+
 def resolve_input(value: str | Path, *, registry: Path | None = None) -> Path:
     """Require HF provenance for external inputs, including already cached paths.
 

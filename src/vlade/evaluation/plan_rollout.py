@@ -244,6 +244,8 @@ def run(settings: dict, workspace: Path, teacher_python: Path, output: Path, sou
     data = EpisodeData(resolve_input(settings["data"]))
     stats = json.loads((data.root / "normalization.json").read_text(encoding="utf-8"))
     _, identity = teacher_identity(settings["teacher"], data)
+    from vlade.distillation.teacher_plan import require_plan_supervision
+    require_plan_supervision({"step": identity["step"], "plan_supervision": identity.get("plan_supervision")})
     mode = settings["mode"]
     checkpoints = {}
     if mode == "student":

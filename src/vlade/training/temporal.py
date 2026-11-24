@@ -76,6 +76,7 @@ def fft_objective(
                 temporal_context=context,
                 return_temporal_state=True,
                 temporal_feature_layer=cfg.temporal_feature_layer,
+                plan_loss_weight=getattr(cfg, "plan_loss_weight", 0.0),
             )
 
         losses.append(

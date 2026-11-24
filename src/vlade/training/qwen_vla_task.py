@@ -244,6 +244,11 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
         identity["teacher_cache"] = teacher.signature
     elif teacher_mode == "inference":
         _, identity["teacher_inference"] = teacher_identity(kd["teacher_checkpoint"], data)
+        if plan_tokens:
+            from vlade.distillation.teacher_plan import require_plan_supervision
+            signature = identity["teacher_inference"]
+            require_plan_supervision({"step": signature["step"],
+                                      "plan_supervision": signature.get("plan_supervision")})
     if resume is not None:
         seal = verify_checkpoint(resume, accumulation=accumulation)
         if json.loads((resume / "identity.json").read_text(encoding="utf-8")) != identity:

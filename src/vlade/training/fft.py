@@ -75,6 +75,8 @@ class FFTConfig:
     sequence_sampling: str = "episode_uniform"
     detach_every: int = 2
     temporal_feature_layer: int = -2
+    plan_annotations: Path | None = None
+    plan_loss_weight: float = 0.0
 
     @classmethod
     def from_json(cls, path: Path, model: str) -> "FFTConfig":
@@ -90,7 +92,7 @@ class FFTConfig:
                 continue
             value = Path(merged[key]).expanduser()
             merged[key] = value if value.is_absolute() else REPO_ROOT / value
-        for key in ("prepared_data_root", "canonical_split_manifest", "canonical_normalization"):
+        for key in ("prepared_data_root", "canonical_split_manifest", "canonical_normalization", "plan_annotations"):
             if merged.get(key) is not None:
                 value = Path(merged[key]).expanduser()
                 merged[key] = (
@@ -103,6 +105,11 @@ class FFTConfig:
         return cfg
 
     def validate(self) -> None:
+        if (type(self.plan_loss_weight) not in (int, float) or not math.isfinite(self.plan_loss_weight)
+                or self.plan_loss_weight < 0 or (self.plan_annotations is None) != (self.plan_loss_weight == 0)):
+            raise ValueError("Plan CE requires both plan_annotations and a finite positive plan_loss_weight")
+        if self.plan_annotations is not None and (self.model != "ava_vla" or self.prepared_data_root is None):
+            raise ValueError("Plan CE requires AVA FFT with verified prepared episodes")
         if self.model not in SOURCES:
             raise ValueError(f"Unknown model: {self.model}")
         if min(self.max_steps, self.batch_size, self.grad_accumulation_steps, self.save_steps) < 1:
@@ -208,7 +215,7 @@ def resolve_config_assets(cfg: FFTConfig, *, download: bool) -> FFTConfig:
     from vlade.storage.assets import resolve_path, resolve_input, asset_record, cache_path
 
     updates = {}
-    for name in ("checkpoint", "data_root", "prepared_data_root", "resume"):
+    for name in ("checkpoint", "data_root", "prepared_data_root", "plan_annotations", "resume"):
         if name == "data_root" and cfg.prepared_data_root is not None:
             continue
         value = getattr(cfg, name)
@@ -259,6 +266,9 @@ def resolve_config_assets(cfg: FFTConfig, *, download: bool) -> FFTConfig:
 def preflight(cfg: FFTConfig) -> None:
     cfg = resolve_config_assets(cfg, download=False)
     cfg.validate()
+    if cfg.plan_annotations is not None:
+        from vlade.training.teacher_plan_supervision import checkpoint_plan_contract
+        checkpoint_plan_contract(cfg, 0)
     source = REPO_ROOT / SOURCES[cfg.model]
     if not source.is_file():
         raise FileNotFoundError(f"Missing local model implementation: {source}")
@@ -461,6 +471,7 @@ def compute_loss(
     temporal_context: Any = None,
     return_temporal_state: bool = False,
     temporal_feature_layer: int = -2,
+    plan_loss_weight: float = 0.0,
 ) -> Any:
     """Continuous-action L1 objective, with AVA's attention module in the graph."""
     import torch
@@ -534,6 +545,11 @@ def compute_loss(
             loss = (prediction.float()[valid] - target[valid]).abs().mean()
         else:
             loss = torch.nn.functional.l1_loss(prediction.float(), target)
+        if model.training and plan_loss_weight:
+            from vlade.training.teacher_plan_supervision import plan_ce_loss
+            if "plan_supervision" not in batch or batch["plan_supervision"]["weight"] != plan_loss_weight:
+                raise ValueError("Configured Plan CE is missing from this training batch")
+            loss = loss + plan_ce_loss(model, proprio, batch, device)
         if return_temporal_state:
             features = output.hidden_states[temporal_feature_layer][:, num_patches:-1]
             context = features[action_mask].reshape(batch_size, expected_tokens, -1)
@@ -658,6 +674,7 @@ def save_checkpoint(
     save_dataset_statistics(dataset.dataset_statistics, path)
     experiment_path = cfg.config_path or REPO_ROOT / "configs/experiments/libero_plus_fft.json"
     experiment = json.loads(experiment_path.read_text(encoding="utf-8"))
+    from vlade.training.teacher_plan_supervision import checkpoint_plan_contract
     (path / "vlade_fft.json").write_text(
         json.dumps(
             {
@@ -678,6 +695,7 @@ def save_checkpoint(
                 "software": {**_software_versions(), "cuda": torch.version.cuda},
                 "training_code_sha256": _code_fingerprint(),
                 "prepared_data_identity": _prepared_data_identity(cfg),
+                "plan_supervision": checkpoint_plan_contract(cfg, step),
                 "hardware": {
                     "gpu": torch.cuda.get_device_name(torch.device(cfg.device)),
                     "vram_bytes": torch.cuda.get_device_properties(
@@ -731,6 +749,12 @@ def validate_resume(cfg: FFTConfig) -> dict[str, Any]:
     if sealed["step"] != saved["step"]:
         raise ValueError("Checkpoint seal/metadata step mismatch")
     current = asdict(cfg)
+    from vlade.training.teacher_plan_supervision import checkpoint_plan_contract
+    if (saved["configuration"].get("plan_annotations") != (
+            str(cfg.plan_annotations) if cfg.plan_annotations is not None else None)
+            or saved["configuration"].get("plan_loss_weight", 0.0) != cfg.plan_loss_weight
+            or saved.get("plan_supervision") != checkpoint_plan_contract(cfg, saved["step"])):
+        raise ValueError("Resume Plan supervision mismatch; a changed objective requires a new run")
     compatible = (
         "model",
         "checkpoint",
@@ -790,6 +814,10 @@ def train(cfg: FFTConfig) -> None:
     from vlade.training.hub import HubCheckpoints
 
     cfg = resolve_config_assets(cfg, download=True)
+    cfg.validate()
+    if cfg.plan_annotations is not None:
+        from vlade.training.teacher_plan_supervision import checkpoint_plan_contract
+        checkpoint_plan_contract(cfg, 0)
     from vlade.training.loop import (
         LoopState,
         evaluate,
@@ -938,7 +966,8 @@ def train(cfg: FFTConfig) -> None:
                 return fft_objective(
                     cfg, (model, head, proprio, generator), batch, device, num_patches, step
                 )
-            return compute_loss(model, head, proprio, generator, batch, device, num_patches, step)
+            return compute_loss(model, head, proprio, generator, batch, device, num_patches, step,
+                                plan_loss_weight=cfg.plan_loss_weight)
 
         def backward_fn(batch: Any, step: int, scale: float) -> Any:
             nonlocal last_training_batch

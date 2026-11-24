@@ -15,7 +15,7 @@ import threading
 import traceback
 import uuid
 from typing import TYPE_CHECKING, Protocol
-from vlade.distillation.teacher_plan import InvalidTeacherPlan, normalize_plan, plan_token_budget
+from vlade.distillation.teacher_plan import InvalidTeacherPlan, normalize_plan, plan_token_budget, require_plan_supervision
 from vlade.utils.timing import RunTimings
 
 if TYPE_CHECKING:
@@ -47,6 +47,10 @@ def teacher_identity(checkpoint: str | Path, data: EpisodeData) -> tuple[Path, d
     metadata = json.loads((root / "vlade_fft.json").read_text(encoding="utf-8"))
     expected = {"manifest_sha256": sha256(data.root / "manifest.json"),
                 **{k: data.manifest[k] for k in ("normalization_sha256", "split_sha256")}}
+    recorded = metadata.get("prepared_data_identity")
+    for key in ("canonical_manifest_sha256", "canonical_normalization_sha256"):
+        if metadata.get("plan_supervision") is not None or isinstance(recorded, dict) and key in recorded:
+            expected[key] = data.manifest[key]
     if (metadata.get("model") != "ava_vla" or metadata.get("step") != seal["step"]
             or metadata.get("prepared_data_identity") != expected
             or metadata.get("quantized", False) is not False):
@@ -62,6 +66,7 @@ def teacher_identity(checkpoint: str | Path, data: EpisodeData) -> tuple[Path, d
         find_component(root, name)
     return root, {"checkpoint_manifest_sha256": sha256(root / "checkpoint_manifest.json"),
                   "step": seal["step"], "temporal_mode": "episode_context", "frozen": True,
+                  "plan_supervision": metadata.get("plan_supervision"),
                   "temporal_feature_layer": layer}
 
 
@@ -133,6 +138,9 @@ class InferenceActions:
         self.timings = timings
         self.plan_tokens = plan_token_budget(settings)
         root, self.signature = teacher_identity(settings["teacher_checkpoint"], data)
+        if self.plan_tokens:
+            require_plan_supervision({"step": self.signature["step"],
+                                      "plan_supervision": self.signature.get("plan_supervision")})
         python = Path(settings["teacher_python"])
         if not python.is_file():
             raise FileNotFoundError("Set up the AVA inference runtime before Action KD")
@@ -282,8 +290,10 @@ def probe_teacher_plans(settings: dict, data_reference: str, output: Path) -> Pa
                                 signal = teacher.get_signal(sample)
                                 plan = signal.plan
                                 row["action_shape"] = list(signal.action.shape)
+                                row["action_status"] = "predicted"
                             else:
                                 plan = teacher.get_plan(sample, split=split)
+                                row.update(action_shape=None, action_status="not_requested_plan_only")
                         except (RuntimeError, ValueError, TimeoutError) as error:
                             record({**row, "status": "plan_error", "error": str(error)})
                             raise
@@ -293,7 +303,7 @@ def probe_teacher_plans(settings: dict, data_reference: str, output: Path) -> Pa
             print(f"T1 plan probe failed; report: {report}", file=sys.stderr, flush=True)
             raise
         record({"status": "complete", "queries": sum(len(rows) for rows in selected.values())})
-    print(f"T1 plan probe passed; inspect plans in: {report}", flush=True)
+    print(f"T1 plan probe completed; semantic review required: {report}", flush=True)
     return report
 
 
