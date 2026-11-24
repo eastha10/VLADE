@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import base64
 from io import BytesIO
+import json
+import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -45,6 +47,9 @@ def live_response(policy, request: dict, plan_tokens: int) -> dict:
     if request["plan"]:
         try:
             result["plan"] = policy.plan(sample, data, max_new_tokens=plan_tokens)
-        except InvalidTeacherPlan:
+        except InvalidTeacherPlan as error:
             result["plan"] = None
+            print(json.dumps({"event": "invalid_teacher_plan", "task_id": request["task_id"],
+                              "timestep": request["timestep"], "error": str(error)}, ensure_ascii=False),
+                  file=sys.stderr, flush=True)
     return result

@@ -13,8 +13,9 @@ import subprocess
 import sys
 import threading
 import traceback
+import uuid
 from typing import TYPE_CHECKING, Protocol
-from vlade.distillation.teacher_plan import normalize_plan, plan_token_budget
+from vlade.distillation.teacher_plan import InvalidTeacherPlan, normalize_plan, plan_token_budget
 from vlade.utils.timing import RunTimings
 
 if TYPE_CHECKING:
@@ -176,6 +177,8 @@ class InferenceActions:
         if "error" in result:
             missing = result.get("missing_module")
             detail = f" ({missing})" if missing else ""
+            if result.get("error") == "InvalidTeacherPlan" and isinstance(result.get("error_message"), str):
+                detail += ": " + result["error_message"]
             raise RuntimeError("T1 inference failed: " + result["error"] + detail)
         return result
 
@@ -244,6 +247,56 @@ class InferenceActions:
             stream.close()
 
 
+def probe_teacher_plans(settings: dict, data_reference: str, output: Path) -> Path:
+    """Check at most two causal queries per split with T1 only, before loading S0."""
+    from vlade.data.episode_data import EpisodeData
+    from vlade.storage.assets import resolve_input, sha256
+
+    if not plan_token_budget(settings):
+        raise ValueError("The plan probe requires online CoT distillation")
+    data = EpisodeData(resolve_input(data_reference))
+    selected = {}
+    for split in ("train", "validation"):
+        first = next(data.episodes(split), None)
+        if first is None or not first[1]:
+            raise ValueError(f"The plan probe requires a nonempty {split} split")
+        selected[split] = first[1][:2]
+    output.mkdir(parents=True, exist_ok=True)
+    report = output / f"teacher-plan-probe-{uuid.uuid4().hex[:12]}.jsonl"
+    with report.open("x", encoding="utf-8") as stream:
+        def record(row: dict) -> None:
+            print(json.dumps(row, ensure_ascii=False), file=stream, flush=True)
+
+        try:
+            with contextlib.closing(InferenceActions(settings, data)) as teacher:
+                record({"status": "identity", "teacher": teacher.signature,
+                        "data_manifest_sha256": sha256(data.root / "manifest.json"),
+                        "teacher_plan_max_new_tokens": teacher.plan_tokens,
+                        "scope": "format_and_action_contract; semantic quality needs review"})
+                for split, samples in selected.items():
+                    for sample in samples:
+                        row = {key: sample[key] for key in ("episode_id", "timestep", "instruction")}
+                        row["split"] = split
+                        try:
+                            if split == "train":
+                                signal = teacher.get_signal(sample)
+                                plan = signal.plan
+                                row["action_shape"] = list(signal.action.shape)
+                            else:
+                                plan = teacher.get_plan(sample, split=split)
+                        except (RuntimeError, ValueError, TimeoutError) as error:
+                            record({**row, "status": "plan_error", "error": str(error)})
+                            raise
+                        record({**row, "status": "ok", "plan": plan})
+        except (RuntimeError, ValueError, TimeoutError) as error:
+            record({"status": "failed", "error": str(error)})
+            print(f"T1 plan probe failed; report: {report}", file=sys.stderr, flush=True)
+            raise
+        record({"status": "complete", "queries": sum(len(rows) for rows in selected.values())})
+    print(f"T1 plan probe passed; inspect plans in: {report}", flush=True)
+    return report
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", required=True)
@@ -305,10 +358,13 @@ def main() -> None:
         except Exception as error:
             traceback.print_exc(file=sys.stderr)
             sys.stderr.flush()
-            reply({
+            failure = {
                 "error": type(error).__name__,
                 "missing_module": error.name if isinstance(error, ModuleNotFoundError) else None,
-            })
+            }
+            if isinstance(error, InvalidTeacherPlan):
+                failure["error_message"] = str(error)
+            reply(failure)
             raise SystemExit(1) from None
 
 
