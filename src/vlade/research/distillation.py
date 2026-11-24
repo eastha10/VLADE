@@ -21,7 +21,7 @@ from vlade.utils.source_identity import source_identity
 ROOT = Path(__file__).resolve().parents[3]
 CLI = ROOT / "scripts/train/run_distillation.py"
 HUB = ROOT / "scripts/train/hub_checkpoints.py"
-ACTIONS = ("plan", "setup", "preflight", "pilot", "train", "retry")
+ACTIONS = ("plan", "setup", "preflight", "probe", "pilot", "train", "retry")
 
 
 def new_run_group(prefix: str) -> str:
@@ -157,6 +157,14 @@ def _checkpoint_location(name: str, settings: dict, run_group: str) -> tuple[str
 
 def _run_variant(name: str, settings: dict, run_root: Path, run_group: str, action: str,
                  teacher_python: Path | None, revision: str | None) -> None:
+    if action == "probe":
+        from vlade.training.teacher_inference import probe_teacher_plans
+
+        if teacher_python is None or not plan_token_budget(settings.get("distillation", {})):
+            raise ValueError("The plan probe requires an online CoT configuration")
+        probe_teacher_plans({**settings["distillation"], "teacher_python": str(teacher_python)},
+                            settings["data"], run_root)
+        return
     group, model_name = _checkpoint_location(name, settings, run_group)
     output = run_root / model_name
     env = {**os.environ, "VLADE_HUB_REPO": REGISTRY_REPO, "VLADE_HUB_RUN_ID": group}
@@ -213,6 +221,9 @@ def main(argv: list[str] | None = None) -> None:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}", args.run_group):
         parser.error("Run group must use letters, numbers, underscores or hyphens")
     workflow, variants = load_settings(args.config, args.overrides)
+    if args.action == "probe" and (list(variants) != ["gt_kd"] or
+                                   not plan_token_budget(variants["gt_kd"]["distillation"])):
+        parser.error("The plan probe requires a single online CoT configuration")
     locations = {name: _checkpoint_location(name, settings, args.run_group) for name, settings in variants.items()}
     aliases = {label: name for name, (_, label) in locations.items()}
     resumes = {}

@@ -102,8 +102,7 @@ class SequentialTeacher:
     @torch.inference_mode()
     def plan(self, sample: dict, data: EpisodeData, *, max_new_tokens: int) -> str:
         """Use T1's own visual prefix and language decoder for the current observation."""
-        from vlade.distillation.teacher_plan import normalize_plan
-        from vlade.models.teachers.constants import ACTION_TOKEN_BEGIN_IDX
+        from vlade.distillation.teacher_plan import InvalidTeacherPlan, normalize_generated_plan, plan_generation_kwargs
 
         prompt = (
             f"In: Robot task: {sample['instruction'].strip()}\n"
@@ -119,17 +118,21 @@ class SequentialTeacher:
         vision = model._process_proprio_features(vision, proprio, self.proprio)
         prefix, mask = model._build_multimodal_attention(tokens, vision, inputs["attention_mask"])
         tokenizer = self.processor.tokenizer
-        # The AVA action codec reuses the top of the vocabulary for discretized actions.
+        generation = plan_generation_kwargs(tokenizer, model.get_output_embeddings().weight.shape[0], max_new_tokens)
         with (self.timings.measure("t1_plan_generation", phase="inference",
                                   episode_id=sample["episode_id"], timestep=sample["timestep"])
               if self.timings is not None else nullcontext()):
             generated = model.language_model.generate(
-                inputs_embeds=prefix, attention_mask=mask, max_new_tokens=max_new_tokens,
-                do_sample=False, use_cache=True, return_dict_in_generate=False,
-                eos_token_id=tokenizer.eos_token_id, pad_token_id=tokenizer.eos_token_id,
-                suppress_tokens=list(range(ACTION_TOKEN_BEGIN_IDX + 1, model.get_output_embeddings().weight.shape[0])),
+                inputs_embeds=prefix, attention_mask=mask, **generation,
             )
-        return normalize_plan(tokenizer.decode(generated[0].tolist(), skip_special_tokens=True))
+        token_ids = generated[0].tolist()
+        try:
+            return normalize_generated_plan(tokenizer.decode(token_ids, skip_special_tokens=True))
+        except InvalidTeacherPlan as error:
+            raise InvalidTeacherPlan(
+                f"{error}; token_ids={token_ids[:128]}; episode_id={sample['episode_id']!r}; "
+                f"timestep={sample['timestep']}"
+            ) from error
 
     @torch.inference_mode()
     def predict(self, sample: dict, data: EpisodeData) -> tuple[torch.Tensor, torch.Tensor]:

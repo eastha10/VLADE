@@ -14,11 +14,13 @@ def write_notebook(path: Path, *, teacher_plan: bool = False, variant: str = "gt
     resume_key = "gt_only" if variant == "gt_only" else "S2" if teacher_plan else "S1"
     group = "qwen-vla-scope" if variant == "gt_only" else profile.replace("_", "-")
     overrides = {"workflow.variant": variant} if variant == "gt_only" else {}
+    workflow = "plan → setup → preflight → probe → pilot → train" if teacher_plan else "plan → setup → preflight → pilot → train"
+    actions = ["plan", "setup", "preflight"] + (["probe"] if teacher_plan else []) + ["pilot", "train", "retry"]
     cells = [
         cell("markdown", f"""
             # VLADE · {title}
 
-            Colab Secrets에 `HF_TOKEN`을 설정한 다음 `plan → setup → preflight → pilot → train` 순서로 실행합니다.
+            Colab Secrets에 `HF_TOKEN`을 설정한 다음 `{workflow}` 순서로 실행합니다.
             설정을 바꾸면 새 `RUN_GROUP`을 사용합니다. 재개할 때는 원래 `SOURCE_COMMIT`과 `RUN_GROUP`을 지정합니다.
             자세한 설정과 로그 위치는 [실행 안내](../docs/environment/action_level_distillation.md)를 참고하십시오.
         """, "purpose"),
@@ -29,7 +31,7 @@ def write_notebook(path: Path, *, teacher_plan: bool = False, variant: str = "gt
             CONFIG = 'configs/experiments/{profile}.json'
             WORKSPACE = '/content/vlade_distillation'
             RUN_GROUP = globals().get('RUN_GROUP') or new_run_group({group!r})
-            ACTION = "plan"  #@param ["plan", "setup", "preflight", "pilot", "train", "retry"]
+            ACTION = "plan"  #@param {json.dumps(actions)}
             OVERRIDES = {overrides!r}
             RESUME_REVISIONS = {{}}  # 예: {{'{resume_key}': '40자리 HF commit SHA'}}
         """, "config"),

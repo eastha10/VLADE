@@ -24,6 +24,7 @@ python -B scripts/train/run_distillation.py --config configs/experiments/qwen_vl
 | `plan` | 적용 설정과 출력 경로를 표시합니다. 기본 액션입니다. |
 | `setup` | Student 환경과 온라인 Teacher에 필요한 AVA 환경을 준비합니다. |
 | `preflight` | 고정 HF 입력의 무결성, 모델·데이터 계약, 비공개 Hub 연결을 확인합니다. |
+| `probe` | CoT 설정에서 Student를 로드하지 않고 T1의 train·validation 첫 Episode 쿼리를 각각 최대 2개 확인합니다. 플랜 원문과 train 액션 형태를 기록합니다. |
 | `pilot` | GPU에서 optimizer 1 step, 검증, 저장을 실행합니다. |
 | `train` | 같은 run의 마지막 봉인 체크포인트에서 이어서 목표 step까지 학습합니다. 최초 실행은 `pilot`을 먼저 실행합니다. |
 | `retry` | 원본 체크포인트를 사용해 실패한 Hub 전송을 재시도합니다. |
@@ -48,12 +49,26 @@ CLI에서는 같은 JSON을 `--resume-revisions`에 전달합니다. `last`에�
 
 T1은 같은 시점의 관측에서 Action Chunk와 짧은 접근 플랜을 제공합니다. Student는 플랜 문자열을 입력으로 받고
 액션 L1 손실로 학습합니다. `teacher_plan_max_new_tokens`의 기본값은 Action-only에서 0, CoT+Action에서 48입니다.
+T1의 응답 전체가 `<plan>…</plan>`으로 감싸져 있으면 본문을 추출해 기존 평문 규칙으로 검증합니다.
+생성 시 첫 EOS를 제한하고 BOS·UNK·PAD 등 EOS 외 특수 토큰과 액션 토큰·추가 vocabulary 행을 억제합니다.
+빈 응답·미완성 또는 중첩 태그는 거절합니다. 거절 시 디코딩 원문 앞 256자와 이유를 오류에 포함합니다.
+생성된 token ID와 Episode·timestep도 오류에 포함해 조기 종료와 잘못된 텍스트를 구분합니다.
+학습에서는 오류를 `teacher-plans-*.jsonl`에 기록하고 중단합니다. 플랜 평가에서는 `plan=None`으로
+계속 진행하면서 task ID·timestep·거절 이유를 stderr에 출력하므로, `None`을 유효한 플랜으로 해석하지 마십시오.
 CoT+Action은 온라인 T1을 사용합니다. 단독 rollout과 양자화 평가 경로에는 플랜 공급 기능이 필요합니다.
 
 Validation은 held-out GT L1을 계산하며 같은 에피소드에서 건너뛴 쿼리도 순서대로 재생해 recurrent state를 복원합니다.
 CoT 실행은 `teacher-plans-*.jsonl`에 시점, 지시, 플랜과 GT·Teacher L1을 기록합니다.
 Validation의 Teacher L1은 `null`입니다. 단계별 지표는 `metrics-*.jsonl`, 시간은 `timings-*.csv`에 저장됩니다.
 플랜 품질은 파일럿 로그의 원문을 확인하십시오.
+
+CoT는 `preflight → probe → pilot → train` 순서로 실행합니다. `preflight`는 모델 생성을 실행하지 않습니다.
+`probe`는 같은 설정의 고정 HF 입력과 AVA 런타임을 사용하며 `teacher-plan-probe-*.jsonl`을
+`<workspace>/runs/<run-group>/`에 저장합니다. 형식이 틀리면 오류와 관측 위치를 기록하고 중단합니다.
+이 단계는 optimizer·Student 로드·Hub checkpoint 게시를 실행하지 않습니다.
+현재 T1 FFT의 최적화 목표는 액션 L1이며 자연어 플랜 생성 손실은 없습니다.
+형식 검사 통과만으로 플랜의 의미·액션과의 일치가 보장되지 않으므로 probe 원문과 아래 rollout 평가를 확인합니다.
+생성 실패 시 지시문이나 고정 문장으로 플랜을 대체하지 않습니다.
 
 플랜의 적합성과 효과를 평가하려면 두 LIBERO+ 노트북을 사용합니다.
 
