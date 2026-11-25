@@ -37,6 +37,14 @@ class TeacherSignal:
     plan: str
 
 
+@dataclass(frozen=True)
+class TeacherRepresentation:
+    """Action and temporal hidden slots from one frozen, causal T1 forward."""
+
+    action: torch.Tensor
+    hidden: torch.Tensor
+
+
 def teacher_identity(checkpoint: str | Path, data: EpisodeData) -> tuple[Path, dict]:
     """Verify HF provenance, checkpoint seal, FFT role and normalization before GPU use."""
     from vlade.storage.assets import resolve_input, sha256
@@ -81,6 +89,7 @@ class EpisodeTeacher:
         self.episode = None
         self.samples = []
         self.cursor = -1
+        self.hidden = None
         self.plan_episode = None
         self.plan_samples = []
 
@@ -108,7 +117,7 @@ class EpisodeTeacher:
                                       timestep=self.samples[self.cursor]["timestep"],
                                       replay=self.cursor < index, is_warmup=self.predictions < 2)
                   if self.timings is not None else contextlib.nullcontext()):
-                action, _ = self.teacher.predict(self.samples[self.cursor], self.data)
+                action, self.hidden = self.teacher.predict(self.samples[self.cursor], self.data)
             self.predictions += 1
         return action
 
@@ -258,6 +267,19 @@ class InferenceActions:
     def get(self, sample: dict) -> torch.Tensor:
         return self._action(self._query(sample))
 
+    def get_representation(self, sample: dict, *, dimension: int, layer: int) -> TeacherRepresentation:
+        """Request paired action/hidden with observation, layer and layout checks."""
+        import torch
+
+        result = self._query(sample, signal="action_and_representation")
+        if (result.get("hidden_layer") != layer
+                or result.get("hidden_layout") != "horizon_major_action_dimension_minor"):
+            raise ValueError("T1 representation layer/layout mismatch")
+        hidden = torch.tensor(result["hidden"], dtype=torch.float32)
+        if hidden.shape != (56, dimension) or not torch.isfinite(hidden).all():
+            raise ValueError("T1 must return finite action hidden slots [56,teacher_dim]")
+        return TeacherRepresentation(self._action(result), hidden.detach())
+
     def get_signal(self, sample: dict) -> TeacherSignal:
         if not self.plan_tokens:
             raise ValueError("T1 plan generation is disabled")
@@ -396,14 +418,19 @@ def main() -> None:
                     continue
                 episode, timestep = request["episode_id"], request["timestep"]
                 signal = request.get("signal", "action")
-                if signal not in {"action", "action_and_plan", "plan"} or (signal != "action" and not plan_tokens):
+                if (signal not in {"action", "action_and_plan", "plan", "action_and_representation"}
+                        or (signal in {"action_and_plan", "plan"} and not plan_tokens)):
                     raise ValueError("Unsupported T1 signal request")
                 response = dict(request)
                 with teacher_on_device(policy, args.device, exclusive=args.offload_between_requests):
                     if signal != "plan":
                         action = teacher.get(episode, timestep)
                         response["action"] = action.detach().float().cpu().tolist()
-                    if signal != "action":
+                        if signal == "action_and_representation":
+                            response.update(hidden=teacher.hidden.detach().float().cpu().tolist(),
+                                hidden_layer=signature["temporal_feature_layer"],
+                                hidden_layout="horizon_major_action_dimension_minor")
+                    if signal in {"action_and_plan", "plan"}:
                         split = request["split"] if signal == "plan" else "train"
                         response["plan"] = teacher.plan(episode, timestep, split=split, max_new_tokens=plan_tokens)
                     if memory_path is not None:

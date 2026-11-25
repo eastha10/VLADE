@@ -25,6 +25,12 @@ Vision Encoder 전용 가중치 Fake Quantization과 AVA-aware W4/W8 ablation은
 
 일반 Colab 실행은 [colab_vlade.ipynb](experiments/colab_vlade.ipynb)에서 작업을 선택하며, [설정 기반 연구 명령](docs/environment/research_runs.md)을 사용합니다. 훈련 step·평가 rollout 수는 `configs/research/`에서 제어합니다.
 
+S2의 **T1 중간 표현 + Action Distillation**은 [구현·정렬·실행 안내](docs/environment/s2_representation_distillation.md)와
+[기존 A100 세션용 셀](experiments/colab_s2_representation_kd_existing_session.ipynb)을 사용합니다.
+AVA Llama2/Qwen3.5-0.8B의 액션 슬롯을 학습 전용 projection으로 정렬하며 자연어 Plan 없이 실행합니다.
+기존 환경·HF 캐시를 재사용하고 새 Git commit의 소스는 별도 프로세스에 적재합니다.
+아래 CoT/Plan 노트북은 별도 자연어 Plan 연구 경로로 보존합니다.
+
 QwenVLA S0의 [Action KD](experiments/colab_action_distillation.ipynb)와 [CoT+Action KD](experiments/colab_teacher_plan_kd.ipynb)는
 `scripts/train/run_distillation.py`를 사용합니다. T1·S0, λ, 학습 단계는 [실행 설정](docs/environment/action_level_distillation.md)에서 지정합니다.
 

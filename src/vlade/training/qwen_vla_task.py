@@ -19,6 +19,8 @@ from vlade.data.colab_assets import sha256
 from vlade.data.episode_data import EpisodeData, query_stream, write_json
 from vlade.distillation.action import action_distillation_loss, validate_weights
 from vlade.distillation.teacher_plan import plan_token_budget
+from vlade.distillation.representation import (ActionRepresentationKD, representation_settings,
+    representation_contract, save_representation, load_representation)
 from vlade.models.contracts import masked_action_l1
 from vlade.models.students.backbones.qwen import load_processor, load_saved_processor, prepare_observation
 from vlade.models.students.configuration_qwen_vla import QwenVLAConfig
@@ -62,6 +64,8 @@ def action_loss(model: QwenVLA, data: EpisodeData, processor, config: QwenVLACon
                 plan_teacher: InferenceActions | None = None,
                 plan_log: TextIO | None = None,
                 task_weight: float = 1.0, action_weight: float = 1.0,
+                representation: ActionRepresentationKD | None = None,
+                representation_weight: float = 0.0, representation_layer: int = -2,
                 step_offset: int = 0, loss_terms: list[dict[str, float]] | None = None,
                 timings: RunTimings | None = None, phase: str = "train"):
     """Carry detached state across adjacent queries, reconstruct after a gap or resume."""
@@ -100,11 +104,17 @@ def action_loss(model: QwenVLA, data: EpisodeData, processor, config: QwenVLACon
         nonlocal last, state
         sample, current, previous = batch
         teacher_target = None
+        teacher_hidden = None
         plan_row = None
         # Exclusive residency must finish T1 inference before retaining a Student
         # autograd graph. The loss, causal teacher prefix and query stay identical.
         if teacher is not None:
-            teacher_target = teacher.get(sample)
+            if representation is not None:
+                signal = teacher.get_representation(sample,
+                    dimension=representation.projection.out_features, layer=representation_layer)
+                teacher_target, teacher_hidden = signal.action, signal.hidden
+            else:
+                teacher_target = teacher.get(sample)
         if plan_teacher is not None:
             if plan_log is not None:
                 plan_row = {key: sample[key] for key in ("episode_id", "timestep", "instruction")}
@@ -143,6 +153,11 @@ def action_loss(model: QwenVLA, data: EpisodeData, processor, config: QwenVLACon
                 prediction, target, teacher_target[None].to(device), valid,
                 task_weight=task_weight, action_weight=action_weight,
             )
+            if representation is not None:
+                rep_loss = representation(prediction.recurrent_state,
+                    teacher_hidden[None].to(device), valid)
+                total = total + representation_weight * rep_loss
+                terms["representation_mse"] = float(rep_loss.detach())
             if loss_terms is not None:
                 loss_terms.append(terms)
         else:
@@ -203,6 +218,7 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
     if not 1 <= limit <= target or min(accumulation, settings["save_steps"], settings["validation_queries"]) < 1:
         raise ValueError("Invalid step, accumulation, save or validation budget")
     kd = settings.get("distillation")
+    rep_settings = representation_settings(kd or {})
     plan_tokens = plan_token_budget(kd or {})
     initialization = settings.get("initialization", "student_checkpoint" if kd is not None else "pretrained_backbone")
     if initialization not in {"pretrained_backbone", "student_checkpoint"}:
@@ -254,7 +270,11 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
         teacher = CachedActions(resolve_input(kd["teacher_cache"]), data, episode_limit=episode_limit)
         identity["teacher_cache"] = teacher.signature
     elif teacher_mode == "inference":
-        _, identity["teacher_inference"] = teacher_identity(kd["teacher_checkpoint"], data)
+        teacher_root, identity["teacher_inference"] = teacher_identity(kd["teacher_checkpoint"], data)
+        if rep_settings is not None:
+            identity["representation"] = representation_contract(teacher_root,
+                student_dim=config.hidden_size, student_layer=config.temporal_feature_layer,
+                teacher_layer=identity["teacher_inference"]["temporal_feature_layer"])
         if plan_tokens:
             from vlade.distillation.teacher_plan import require_plan_supervision
             signature = identity["teacher_inference"]
@@ -264,12 +284,15 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
         seal = verify_checkpoint(resume, accumulation=accumulation)
         if json.loads((resume / "identity.json").read_text(encoding="utf-8")) != identity:
             raise ValueError("Checkpoint training identity differs from this run")
+        if rep_settings is not None and "representation.pt" not in seal["files"]:
+            raise ValueError("S2 resume requires its sealed training projection")
         if seal["step"] > target or (not preflight and seal["step"] >= limit):
             raise ValueError("The requested stop must follow the resumed checkpoint")
     if preflight:
         print(json.dumps({"status": "preflight_ok", "counts": data.manifest["counts"],
                           "initial_student_step": s0_step, "teacher_mode": teacher_mode,
                           "teacher_plan_max_new_tokens": plan_tokens,
+                          "representation": identity.get("representation"),
                           "memory_profile": profile, "effective_batch_size": accumulation,
                           "gpu_forward_tested": False,
                           "teacher_inference": identity.get("teacher_inference"),
@@ -294,10 +317,18 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
         processor = load_processor(config, qwen_initial=initial)
     scope_summary = configure_trainable_scope(model, settings, from_s0=from_s0)
     print(json.dumps(scope_summary), flush=True)
-    storage = check_adamw_capacity(model, device, reserve_gib=profile["reserve_gib"] if profile else 0)
+    representation = None
+    if rep_settings is not None:
+        contract = identity["representation"]
+        representation = ActionRepresentationKD(contract["student_dim"], contract["teacher_dim"])
+        if resume is not None:
+            load_representation(representation, resume / "representation.pt", contract)
+    modules = [model] + ([representation] if representation is not None else [])
+    training_modules = torch.nn.ModuleList(modules)
+    storage = check_adamw_capacity(training_modules, device, reserve_gib=profile["reserve_gib"] if profile else 0)
     runtime_summary = configure_qwen_memory(model, settings)
-    model.to(device)
-    optimizer = torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), lr=settings["learning_rate"],
+    training_modules.to(device)
+    optimizer = torch.optim.AdamW((p for p in training_modules.parameters() if p.requires_grad), lr=settings["learning_rate"],
                                   weight_decay=settings["weight_decay"], foreach=False)
     scheduler = make_scheduler(optimizer, target)
     loss_terms: list[dict[str, float]] = []
@@ -343,7 +374,7 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
         def on_step(current, metrics):
             if loss_terms:
                 metrics.update({key: sum(row[key] for row in loss_terms) / len(loss_terms)
-                                for key in ("task_l1", "action_kd_l1")})
+                                for key in loss_terms[0]})
                 loss_terms.clear()
             elif from_s0:
                 metrics["task_l1"] = metrics["loss"]
@@ -362,10 +393,12 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
                         validation, current.step, held_out,
                     )
                 save_started = timings.start()
-                checkpoint_space(output, [model], optimizer)
+                checkpoint_space(output, modules, optimizer)
                 stage = output / f".step-{current.step:07d}-{uuid.uuid4().hex}.incomplete"
                 stage.mkdir()
                 model.save(stage / "model")
+                if representation is not None:
+                    save_representation(representation, stage / "representation.pt", identity["representation"])
                 processor.save_pretrained(stage / "processor")
                 payload = training_state(current, optimizer, scheduler)
                 payload["episode_history"] = get_history()
@@ -392,7 +425,7 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
         try:
             if teacher_mode == "inference":
                 with timings.measure("t1_worker_startup", phase="setup"):
-                    offload = (StudentOffload(model, optimizer, device, timings=timings, memory_path=memory_path)
+                    offload = (StudentOffload(training_modules, optimizer, device, timings=timings, memory_path=memory_path)
                                if kd.get("teacher_residency") == "exclusive" else None)
                     online_teacher = InferenceActions(kd, data, timings=timings, request_context=offload)
                 if online_teacher.signature != identity["teacher_inference"]:
@@ -401,11 +434,14 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
             loss, get_history, set_history = action_loss(
                 model, data, processor, config, device, teacher=None if plan_tokens else teacher,
                 plan_teacher=online_teacher if plan_tokens else None, step_offset=s0_step,
+                representation=representation,
+                representation_weight=rep_settings["weight"] if rep_settings else 0.0,
+                representation_layer=identity.get("representation", {}).get("teacher_layer", -2),
                 plan_log=plan_log, loss_terms=loss_terms, timings=timings, **weights,
             )
             if resume is not None:
                 set_history(history)
-            run_loop(modules=[model], optimizer=optimizer, scheduler=scheduler,
+            run_loop(modules=modules, optimizer=optimizer, scheduler=scheduler,
                      batches=batches(data, processor, config, "train", seed, repeat=True,
                                      skip=state.microsteps, episode_limit=episode_limit, with_plan=bool(plan_tokens)),
                      loss_fn=loss, max_steps=limit, accumulation_steps=accumulation, state=state,

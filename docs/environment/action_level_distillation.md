@@ -4,6 +4,12 @@ QwenVLA schema 2 S0에서 시작해 LIBERO+ 시범 액션과 고정 AVA T1의 Ac
 두 손실은 동일한 정규화 공간의 `[B, 8, 7]` masked L1이며 에피소드 끝의 패딩을 제외합니다.
 기본 손실은 `GT L1 + λ × Teacher L1`입니다.
 
+현재 S2의 **중간 표현 + Action Distillation**은
+[표현 증류 안내](s2_representation_distillation.md)와
+[기존 A100 세션 셀](../../experiments/colab_s2_representation_kd_existing_session.ipynb)을 따릅니다.
+S1과 같은 S0·데이터·액션 조건에서 내부 표현 손실만 추가하고 Plan 생성·입력은 사용하지 않습니다.
+아래 CoT/Plan 실행 안내는 별도 자연어 Plan 연구 경로입니다.
+
 L4 24GB에서 같은 연구 조건으로 새 실행을 준비하려면 [L4 설정·파일럿 안내](colab_l4_training.md)를
 따릅니다. cache가 있으면 검증하여 재사용하고, 온라인 T1은 Student와 번갈아 GPU에 적재합니다.
 

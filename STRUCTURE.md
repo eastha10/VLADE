@@ -185,7 +185,14 @@ vlade/
 - `src/vlade/training/fft.py`: 기존 AVA/OFT의 모델·RLDS·L1·checkpoint 어댑터
 - `docs/decisions/0003-backbone-review.md`: Student 후보 비교와 도입 조건
 
-공통 루프의 loss callback에 향후 action/representation KD를 연결할 수 있습니다.
+S2 표현 증류는 `src/vlade/distillation/representation{,_config}.py`,
+`configs/experiments/qwen_vla_representation_kd.json`과 기존 `qwen_vla_task.py`·`teacher_inference.py`를 사용합니다.
+`experiments/colab_s2_representation_kd_existing_session.ipynb`의 정본은
+`src/vlade/utils/representation_kd_notebook.py`이며 생성 진입점은
+`scripts/prepare/generate_representation_kd_notebook.py`입니다.
+실행·검증 범위는 `docs/environment/s2_representation_distillation.md`를 따릅니다.
+
+공통 루프의 loss callback에 action/representation KD를 연결합니다.
 실제 가중치로 검증된 학습 경로는 아직 없으며 기존 FFT는 GPU 검증 전입니다.
 기존 Qwen Task-only/action KD trainer는 유지하며 별도 QwenVLA 모델의 학습 연결과 구분합니다.
 

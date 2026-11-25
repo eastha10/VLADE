@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 from datetime import datetime, timezone
 import json
 import math
@@ -14,6 +15,7 @@ import sys
 import uuid
 
 from vlade.distillation.teacher_plan import plan_token_budget
+from vlade.distillation.representation_config import representation_settings
 from vlade.runtime.environment import locate, prepare, runtime_environment
 from vlade.storage.assets import REGISTRY_REPO, asset_record, read_registry
 from vlade.utils.source_identity import source_identity
@@ -69,9 +71,9 @@ def job(config: str | Path, *, workspace: str | Path, run_group: str, action: st
             raise
 
 
-def load_settings(config: Path, overrides: dict) -> tuple[dict, dict[str, dict]]:
+def load_settings(config: Path | dict, overrides: dict) -> tuple[dict, dict[str, dict]]:
     """Apply dotted config overrides, then expand the requested experiment variants."""
-    settings = json.loads(config.read_text(encoding="utf-8"))
+    settings = copy.deepcopy(config) if isinstance(config, dict) else json.loads(config.read_text(encoding="utf-8"))
     for key, value in overrides.items():
         target = settings
         *sections, name = key.split(".")
@@ -110,6 +112,7 @@ def load_settings(config: Path, overrides: dict) -> tuple[dict, dict[str, dict]]
         raise ValueError("registry_revision must be an immutable HF commit")
     kd = settings.get("distillation", {})
     if variants != "gt_only":
+        representation_settings(kd)
         tokens = plan_token_budget(kd)
         if kd["teacher_mode"] not in ("inference", "cache"):
             raise ValueError("teacher_mode must be inference or cache")
@@ -161,7 +164,8 @@ def prepare_inputs(workspace: Path, run_root: Path, workflow: dict, variants: di
 
 def _checkpoint_location(name: str, settings: dict, run_group: str) -> tuple[str, str]:
     if name == "gt_kd":
-        return run_group, "S2" if plan_token_budget(settings["distillation"]) else "S1"
+        kd = settings["distillation"]
+        return run_group, "S2" if plan_token_budget(kd) or representation_settings(kd) else "S1"
     if settings.get("initialization") == "pretrained_backbone":
         return run_group, "S0"
     return f"{run_group}-{name}", name
