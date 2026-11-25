@@ -4,7 +4,7 @@ Teacher만 두 GPU로 나누는 AVA/OFT full FFT·T1 cache 실행은
 [Teacher 분할 안내](docs/environment/teacher_two_gpu.md)와 [전용 노트북](experiments/teacher_two_gpu.ipynb)을
 사용합니다. Student는 단일 GPU를 유지하며 T4용 FP16·CPU gradient 경로는 실기기 검증 전입니다.
 
-Colab L4 24GB의 native S0/S1/S2 학습은 [L4 실행 안내](docs/environment/colab_l4_training.md)와
+Colab L4 24GB의 S0/S1 및 legacy Plan 실험은 [L4 실행 안내](docs/environment/colab_l4_training.md)와
 [전용 노트북](experiments/colab_l4_training.ipynb)을 사용합니다. 검증 cache 재사용·온라인 Teacher 순차 적재를
 구분하며 full FFT를 LoRA로 바꾸지 않습니다. 실제 L4 메모리·속도는 파일럿 검증이 필요합니다.
 
@@ -29,21 +29,12 @@ S2의 **T1 중간 표현 + Action Distillation**은 [구현·정렬·실행 안�
 [기존 A100 세션용 셀](experiments/colab_s2_representation_kd_existing_session.ipynb)을 사용합니다.
 AVA Llama2/Qwen3.5-0.8B의 액션 슬롯을 학습 전용 projection으로 정렬하며 자연어 Plan 없이 실행합니다.
 기존 환경·HF 캐시를 재사용하고 새 Git commit의 소스는 별도 프로세스에 적재합니다.
-아래 CoT/Plan 노트북은 별도 자연어 Plan 연구 경로로 보존합니다.
+S1 Action KD는 [전용 노트북](experiments/colab_action_distillation.ipynb)과
+[실행 안내](docs/environment/action_level_distillation.md)를 사용합니다.
 
-QwenVLA S0의 [Action KD](experiments/colab_action_distillation.ipynb)와 [CoT+Action KD](experiments/colab_teacher_plan_kd.ipynb)는
-`scripts/train/run_distillation.py`를 사용합니다. T1·S0, λ, 학습 단계는 [실행 설정](docs/environment/action_level_distillation.md)에서 지정합니다.
-
-설정·T1 probe·저장 검사·재개 메모를 함께 쓰는 S2 실행본은
-[CoT+Action KD 준비 노트북](experiments/colab_cot_action_kd_ready.ipynb)입니다.
-고정 Git commit의 실행기를 사용하며, Plan 지도학습 이력이 있는 T1을 지정해야 합니다.
-
-액션 전용 T1의 잘못된 Plan을 지도 신호로 사용하지 않도록 학습 이력을 검사합니다.
-원인과 선택적 Plan CE·새 학습/재개 절차는 [Teacher Plan 안내](docs/environment/teacher_plan_generation.md)를 따릅니다.
-
-기존 T1에서 Plan 학습을 준비하려면 [전용 노트북](experiments/colab_teacher_plan_training.ipynb)과
-[실행 안내](docs/environment/teacher_plan_training.md)를 사용합니다. Train 주석 준비·검토 후 게시,
-별도 1-step 파일럿·본 학습·검증된 S2용 Teacher pin 출력을 연결합니다.
+자연어 Plan 생성·전달 CoT, Teacher Plan 학습과 관련 평가·진단 자료는
+[legacy/plan_cot](src/vlade/legacy/plan_cot/README.md)에 모았습니다.
+현재 S2와 구분하며 과거 실행 기록·데이터·가중치는 이동하지 않습니다.
 
 새 AVA FFT·Suite-balanced는 [연속 K4 시퀀스 학습](docs/environment/ava_sequence_training.md)을 사용합니다.
 훈련은 시퀀스 시작에, 추론은 Episode 시작에 상태를 초기화합니다. 기존 전처리본과 Episode 분할은 보존합니다.

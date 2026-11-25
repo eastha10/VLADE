@@ -31,7 +31,7 @@ def make_loader(cfg: Any, processor: Any, *, train: bool = True) -> tuple[Any, A
             "The shared prepared-data path requires image_aug=false for explicit common inputs"
         )
     data = EpisodeData(cfg.prepared_data_root)
-    from .teacher_plan_supervision import annotation_loader, attach_plan_batch
+    from vlade.legacy.plan_cot.training.teacher_plan_supervision import annotation_loader, attach_plan_batch
     annotations = annotation_loader(cfg, data, train=train)
     transform = RLDSBatchTransform(
         ActionTokenizer(processor.tokenizer),

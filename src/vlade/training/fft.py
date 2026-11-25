@@ -275,7 +275,7 @@ def preflight(cfg: FFTConfig) -> None:
     cfg = resolve_config_assets(cfg, download=False)
     cfg.validate()
     if cfg.plan_annotations is not None:
-        from vlade.training.teacher_plan_supervision import checkpoint_plan_contract
+        from vlade.legacy.plan_cot.training.teacher_plan_supervision import checkpoint_plan_contract
         checkpoint_plan_contract(cfg, 0)
     source = REPO_ROOT / SOURCES[cfg.model]
     if not source.is_file():
@@ -570,7 +570,7 @@ def compute_loss(
         else:
             loss = torch.nn.functional.l1_loss(prediction.float(), target)
         if model.training and plan_loss_weight:
-            from vlade.training.teacher_plan_supervision import plan_ce_loss
+            from vlade.legacy.plan_cot.training.teacher_plan_supervision import plan_ce_loss
             if "plan_supervision" not in batch or batch["plan_supervision"]["weight"] != plan_loss_weight:
                 raise ValueError("Configured Plan CE is missing from this training batch")
             loss = loss + plan_ce_loss(model, proprio, batch, device)
@@ -701,7 +701,7 @@ def save_checkpoint(
     save_dataset_statistics(dataset.dataset_statistics, path)
     experiment_path = cfg.config_path or REPO_ROOT / "configs/experiments/libero_plus_fft.json"
     experiment = json.loads(experiment_path.read_text(encoding="utf-8"))
-    from vlade.training.teacher_plan_supervision import checkpoint_plan_contract
+    from vlade.legacy.plan_cot.training.teacher_plan_supervision import checkpoint_plan_contract
     (path / "vlade_fft.json").write_text(
         json.dumps(
             {
@@ -782,7 +782,7 @@ def validate_resume(cfg: FFTConfig) -> dict[str, Any]:
     current = asdict(cfg)
     if saved["configuration"].get("teacher_parallel") != cfg.teacher_parallel:
         raise ValueError("Resume Teacher placement/precision/offload configuration mismatch")
-    from vlade.training.teacher_plan_supervision import checkpoint_plan_contract
+    from vlade.legacy.plan_cot.training.teacher_plan_supervision import checkpoint_plan_contract
     if (saved["configuration"].get("plan_annotations") != (
             str(cfg.plan_annotations) if cfg.plan_annotations is not None else None)
             or saved["configuration"].get("plan_loss_weight", 0.0) != cfg.plan_loss_weight
@@ -854,7 +854,7 @@ def train(cfg: FFTConfig) -> None:
     cfg = resolve_config_assets(cfg, download=True)
     cfg.validate()
     if cfg.plan_annotations is not None:
-        from vlade.training.teacher_plan_supervision import checkpoint_plan_contract
+        from vlade.legacy.plan_cot.training.teacher_plan_supervision import checkpoint_plan_contract
         checkpoint_plan_contract(cfg, 0)
     from vlade.training.loop import (
         LoopState,

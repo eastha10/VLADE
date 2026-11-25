@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 from typing import Any
 
-from vlade.distillation.teacher_plan import plan_token_budget
+from vlade.legacy.plan_cot.distillation.teacher_plan import plan_token_budget
 
 TASKS = {"prepare", "fft", "student", "paper", "suite", "cache", "evaluate", "inference", "script"}
 ROOT = Path(__file__).resolve().parents[3]

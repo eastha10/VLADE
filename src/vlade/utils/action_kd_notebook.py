@@ -9,7 +9,9 @@ from vlade.utils.colab_notebooks import ROOT, bootstrap, cell
 
 def write_notebook(path: Path, *, teacher_plan: bool = False, variant: str = "gt_kd") -> Path:
     profile = "qwen_vla_plan_kd" if teacher_plan else "qwen_vla_action_kd"
-    title = ("S2 · Action + CoT Distillation 훈련" if teacher_plan else
+    config = (f"src/vlade/legacy/plan_cot/configs/experiments/{profile}.json" if teacher_plan
+              else f"configs/experiments/{profile}.json")
+    title = ("Legacy · Plan CoT + Action Distillation" if teacher_plan else
              "QwenVLA 백본 학습 범위 비교" if variant == "gt_only" else "S1 · Action-level Distillation 훈련")
     resume_key = "gt_only" if variant == "gt_only" else "S2" if teacher_plan else "S1"
     group = "qwen-vla-scope" if variant == "gt_only" else profile.replace("_", "-")
@@ -28,7 +30,7 @@ def write_notebook(path: Path, *, teacher_plan: bool = False, variant: str = "gt
         cell("code", f"""
             from vlade.research.distillation import new_run_group
 
-            CONFIG = 'configs/experiments/{profile}.json'
+            CONFIG = {config!r}
             WORKSPACE = '/content/vlade_distillation'
             RUN_GROUP = globals().get('RUN_GROUP') or new_run_group({group!r})
             ACTION = "plan"  #@param {json.dumps(actions)}
@@ -47,7 +49,8 @@ def write_notebook(path: Path, *, teacher_plan: bool = False, variant: str = "gt
         "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
         "language_info": {"name": "python"}}, "nbformat": 4, "nbformat_minor": 5}
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(notebook, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(notebook, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+                    newline="\r\n" if teacher_plan else None)
     return path
 
 
@@ -61,9 +64,10 @@ def write_l4_notebook(path: Path) -> Path:
         cell("markdown", """
             # VLADE · Colab L4 24GB 학습
 
-            S0, S1, S2 중 한 작업만 선택합니다. GPU 적합성·메모리·전송 시간은 파일럿에서 확인합니다.
+            S0, S1 또는 legacy Plan 실험 중 한 작업만 선택합니다. GPU 적합성·메모리·속도는 파일럿에서 확인합니다.
             HF_TOKEN Secret을 허용하고 plan → setup → preflight → pilot → train 순서로 실행합니다.
-            S2는 preflight 다음 probe로 감독된 T1의 실제 플랜을 먼저 확인합니다.
+            s2_legacy_plan은 과거 자연어 Plan 경로이며 현재 표현 증류 S2와 다릅니다.
+            legacy Plan은 preflight 다음 probe에서 실제 플랜을 확인합니다.
             검증된 전체 액션 cache가 있으면 s1_cache를 선택합니다. 없으면 s1_online을 사용하거나
             별도 cache_teacher 작업으로 생성·검증·HF 게시합니다. cache를 자동 생성하거나 대체하지 않습니다.
             온라인 Teacher는 Student와 번갈아 GPU에 적재하므로 충분한 CPU RAM과 전송 시간이 필요합니다.
@@ -74,14 +78,14 @@ def write_l4_notebook(path: Path) -> Path:
         cell("code", """
             from vlade.research.distillation import new_run_group
 
-            PROFILE = 's0'  #@param ['s0', 's1_cache', 's1_online', 's2']
+            PROFILE = 's0'  #@param ['s0', 's1_cache', 's1_online', 's2_legacy_plan']
             CONFIGS = {
-                's0': 'qwen_vla_s0_l4.json',
-                's1_cache': 'qwen_vla_action_kd_l4_cache.json',
-                's1_online': 'qwen_vla_action_kd_l4.json',
-                's2': 'qwen_vla_plan_kd_l4.json',
+                's0': 'configs/experiments/qwen_vla_s0_l4.json',
+                's1_cache': 'configs/experiments/qwen_vla_action_kd_l4_cache.json',
+                's1_online': 'configs/experiments/qwen_vla_action_kd_l4.json',
+                's2_legacy_plan': 'src/vlade/legacy/plan_cot/configs/experiments/qwen_vla_plan_kd_l4.json',
             }
-            CONFIG = 'configs/experiments/' + CONFIGS[PROFILE]
+            CONFIG = CONFIGS[PROFILE]
             WORKSPACE = '/content/vlade_l4'
             RUN_GROUP = globals().get('RUN_GROUP') or new_run_group('l4-' + PROFILE)
             ACTION = 'plan'  #@param ['plan', 'setup', 'preflight', 'probe', 'pilot', 'train', 'retry']

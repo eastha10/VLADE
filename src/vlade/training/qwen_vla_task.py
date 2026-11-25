@@ -18,7 +18,7 @@ import torch
 from vlade.data.colab_assets import sha256
 from vlade.data.episode_data import EpisodeData, query_stream, write_json
 from vlade.distillation.action import action_distillation_loss, validate_weights
-from vlade.distillation.teacher_plan import plan_token_budget
+from vlade.legacy.plan_cot.distillation.teacher_plan import plan_token_budget
 from vlade.distillation.representation import (ActionRepresentationKD, representation_settings,
     representation_contract, save_representation, load_representation)
 from vlade.models.contracts import masked_action_l1
@@ -276,9 +276,9 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
                 student_dim=config.hidden_size, student_layer=config.temporal_feature_layer,
                 teacher_layer=identity["teacher_inference"]["temporal_feature_layer"])
         if plan_tokens:
-            from vlade.distillation.teacher_plan import require_plan_supervision
+            from vlade.legacy.plan_cot.distillation.teacher_plan import plan_generation_provenance
             signature = identity["teacher_inference"]
-            require_plan_supervision({"step": signature["step"],
+            plan_generation_provenance({"step": signature["step"],
                                       "plan_supervision": signature.get("plan_supervision")})
     if resume is not None:
         seal = verify_checkpoint(resume, accumulation=accumulation)

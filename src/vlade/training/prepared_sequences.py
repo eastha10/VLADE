@@ -21,7 +21,7 @@ def make_loader(cfg: Any, processor: Any, *, train: bool, suite_map: Any = None)
     if cfg.image_aug:
         raise ValueError("Sequence training requires the shared unaugmented prepared inputs")
     data = EpisodeData(cfg.prepared_data_root)
-    from .teacher_plan_supervision import annotation_loader, attach_plan_batch
+    from vlade.legacy.plan_cot.training.teacher_plan_supervision import annotation_loader, attach_plan_batch
     annotations = annotation_loader(cfg, data, train=train)
     transform = RLDSBatchTransform(
         ActionTokenizer(processor.tokenizer),

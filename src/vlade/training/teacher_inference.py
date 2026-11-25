@@ -15,7 +15,7 @@ import threading
 import traceback
 import uuid
 from typing import TYPE_CHECKING, Callable, ContextManager, Protocol
-from vlade.distillation.teacher_plan import InvalidTeacherPlan, normalize_plan, plan_token_budget, require_plan_supervision
+from vlade.legacy.plan_cot.distillation.teacher_plan import InvalidTeacherPlan, normalize_plan, plan_token_budget, plan_generation_provenance
 from vlade.utils.timing import RunTimings
 
 if TYPE_CHECKING:
@@ -157,7 +157,7 @@ class InferenceActions:
         self.plan_tokens = plan_token_budget(settings)
         root, self.signature = teacher_identity(settings["teacher_checkpoint"], data)
         if self.plan_tokens:
-            require_plan_supervision({"step": self.signature["step"],
+            plan_generation_provenance({"step": self.signature["step"],
                                       "plan_supervision": self.signature.get("plan_supervision")})
         if residency == "exclusive":
             teacher_bytes = sum(path.stat().st_size for path in root.iterdir() if path.is_file()
@@ -246,7 +246,7 @@ class InferenceActions:
             raise ValueError("T1 live reset was not acknowledged")
 
     def observe_live(self, query, *, action: bool, plan: bool) -> tuple[torch.Tensor | None, str | None]:
-        from vlade.evaluation.plan_observations import encode_query
+        from vlade.legacy.plan_cot.evaluation.plan_observations import encode_query
 
         request = {"live": "query", "action": action, "plan": plan, **encode_query(query)}
         result = self._send(request)
@@ -328,6 +328,8 @@ def probe_teacher_plans(settings: dict, data_reference: str, output: Path) -> Pa
         try:
             with contextlib.closing(InferenceActions(settings, data)) as teacher:
                 record({"status": "identity", "teacher": teacher.signature,
+                        "plan_generation": plan_generation_provenance({"step": teacher.signature["step"],
+                            "plan_supervision": teacher.signature.get("plan_supervision")}),
                         "data_manifest_sha256": sha256(data.root / "manifest.json"),
                         "teacher_plan_max_new_tokens": teacher.plan_tokens,
                         "scope": "format_and_action_contract; semantic quality needs review"})
@@ -410,7 +412,7 @@ def main() -> None:
             for line in sys.stdin:
                 request = json.loads(line)
                 if args.live_observations:
-                    from vlade.evaluation.plan_observations import live_response
+                    from vlade.legacy.plan_cot.evaluation.plan_observations import live_response
 
                     with teacher_on_device(policy, args.device, exclusive=args.offload_between_requests):
                         response = live_response(policy, request, plan_tokens)

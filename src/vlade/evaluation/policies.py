@@ -103,7 +103,7 @@ class StudentPolicy:
     """The maintained Qwen task/KD policy with the same causal query history."""
 
     def __init__(self, checkpoint: str, settings: dict):
-        from vlade.distillation.teacher_plan import plan_token_budget
+        from vlade.legacy.plan_cot.distillation.teacher_plan import plan_token_budget
         from vlade.storage.assets import resolve_input
         from vlade.models.students.qwen import QwenStudent, load_processor
 

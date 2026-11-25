@@ -14,7 +14,7 @@ import subprocess
 import sys
 import uuid
 
-from vlade.distillation.teacher_plan import plan_token_budget
+from vlade.legacy.plan_cot.distillation.teacher_plan import plan_token_budget
 from vlade.distillation.representation_config import representation_settings
 from vlade.runtime.environment import locate, prepare, runtime_environment
 from vlade.storage.assets import REGISTRY_REPO, asset_record, read_registry

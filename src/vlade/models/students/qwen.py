@@ -10,7 +10,7 @@ from typing import Any
 import torch
 from torch import nn
 
-from vlade.distillation.teacher_plan import prompt_text
+from vlade.legacy.plan_cot.distillation.teacher_plan import prompt_text
 from vlade.models.contracts import PolicyOutput
 
 

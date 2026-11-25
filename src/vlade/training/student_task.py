@@ -17,7 +17,7 @@ from vlade.data.colab_assets import sha256
 from vlade.data.episode_data import EpisodeData, query_stream, query_count, write_json
 from vlade.models.contracts import masked_action_l1
 from vlade.distillation.action import action_distillation_loss, validate_weights
-from vlade.distillation.teacher_plan import plan_token_budget
+from vlade.legacy.plan_cot.distillation.teacher_plan import plan_token_budget
 from vlade.training.cached_actions import CachedActions
 from vlade.training.student_initialization import initial_checkpoint, saved_processor
 from vlade.training.teacher_inference import InferenceActions, teacher_identity
@@ -81,8 +81,8 @@ def identity(settings: dict, data: EpisodeData, teacher: ActionTargets | None = 
         if settings.get("teacher_mode", "cache") == "inference":
             signature = teacher.signature if teacher else teacher_identity(settings["teacher_checkpoint"], data)[1]
             if plan_token_budget(settings):
-                from vlade.distillation.teacher_plan import require_plan_supervision
-                require_plan_supervision({"step": signature["step"],
+                from vlade.legacy.plan_cot.distillation.teacher_plan import plan_generation_provenance
+                plan_generation_provenance({"step": signature["step"],
                                           "plan_supervision": signature.get("plan_supervision")})
             cache_identity = {"teacher_inference": signature}
         else:

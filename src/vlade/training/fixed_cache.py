@@ -112,11 +112,11 @@ class SequentialTeacher:
     @torch.inference_mode()
     def plan(self, sample: dict, data: EpisodeData, *, max_new_tokens: int) -> str:
         """Use T1's own visual prefix and language decoder for the current observation."""
-        from vlade.distillation.teacher_plan import (
-            InvalidTeacherPlan, decode_plan_tokens, plan_generation_kwargs, plan_prompt, require_plan_supervision,
+        from vlade.legacy.plan_cot.distillation.teacher_plan import (
+            InvalidTeacherPlan, decode_plan_tokens, plan_generation_kwargs, plan_prompt, plan_generation_provenance,
         )
 
-        require_plan_supervision(self.checkpoint_metadata)
+        plan_generation_provenance(self.checkpoint_metadata)
         prompt = plan_prompt(sample["instruction"], sample["timestep"])
         inputs = self._observation_inputs(sample, data, prompt)
         model = self.model

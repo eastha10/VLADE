@@ -44,7 +44,10 @@ offload·분산 경로가 필요합니다. 이는 새 구현·파일럿·재개 
 | `s0` | [qwen_vla_s0_l4.json](../../configs/experiments/qwen_vla_s0_l4.json) |
 | `s1_cache` | [qwen_vla_action_kd_l4_cache.json](../../configs/experiments/qwen_vla_action_kd_l4_cache.json) |
 | `s1_online` | [qwen_vla_action_kd_l4.json](../../configs/experiments/qwen_vla_action_kd_l4.json) |
-| `s2` | [qwen_vla_plan_kd_l4.json](../../configs/experiments/qwen_vla_plan_kd_l4.json) |
+| `s2_legacy_plan` · 과거 Plan CoT | [qwen_vla_plan_kd_l4.json](../../src/vlade/legacy/plan_cot/configs/experiments/qwen_vla_plan_kd_l4.json) |
+
+이 문서의 과거 S2/Plan 설명은 `s2_legacy_plan`에 해당합니다.
+현재 표현·액션 증류 S2는 [전용 안내](s2_representation_distillation.md)를 따릅니다.
 
 원래 seed·학습률·weight decay·loss 가중치·학습 범위·목표 step·검증 query 수를 유지합니다.
 microbatch **1 × accumulation 8 = effective batch 8 queries**입니다.
@@ -105,7 +108,7 @@ Teacher의 최초 CPU 로드와 GPU inference 자체도 별도 여유가 필요�
 
 기존 action cache에는 플랜이 없습니다. S2를 `teacher_mode='cache'`로 바꾸거나
 형식 검사만 통과한 문장으로 플랜을 대체하지 않습니다.
-[Plan 감독 계약](teacher_plan_generation.md)을 갖춘 T1이 없으면 S2는 기존처럼 거절됩니다.
+[Plan 감독 계약](../../src/vlade/legacy/plan_cot/docs/environment/teacher_plan_generation.md)을 갖춘 T1이 없으면 S2는 기존처럼 거절됩니다.
 
 ## 파일럿·측정·재개
 

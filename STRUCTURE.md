@@ -1,14 +1,8 @@
 # Directory Structure
 
-- `src/vlade/training/teacher_plan_supervision.py`: 고정 HF 주석의 Train 전용 Plan CE와 checkpoint 감독 이력.
-- `src/vlade/distillation/teacher_plan.py`: 학습·생성 공통 prompt, 감독 계약, EOS·평문 검증.
-- `docs/environment/teacher_plan_generation.md`: Plan 오류 원인 범위·주석 계약·학습/재개 절차.
-- `experiments/colab_cot_action_kd_ready.ipynb`: 고정 Git 실행기의 S2 설정·T1 probe·checkpoint/Hub 검사·재개·결과 묶음 클라이언트.
-- `src/vlade/data/teacher_plan_annotations.py`, `scripts/data/prepare_teacher_plans.py`: 검증된 Train 관측 참조·빈 Plan 주석 내보내기, 검토 후 검증·비공개 HF 게시.
-- `src/vlade/research/teacher_plan_training.py`, `scripts/train/run_teacher_plan.py`: 기존 FFT를 사용하는 T1 Plan 학습의 주석·파일럿·본 학습·재개·S2 handoff 실행기.
-- `configs/experiments/teacher_plan_training.json`, `experiments/colab_teacher_plan_training.ipynb`: T1 초기화·Plan CE 설정과 Colab 실행 클라이언트.
-- `src/vlade/utils/teacher_plan_training_notebook.py`, `scripts/prepare/generate_teacher_plan_training_notebook.py`: 설정 전용 Plan 학습 노트북 생성.
-- `docs/environment/teacher_plan_training.md`: 실제 주석 준비·저장/재개·S2 연결 절차.
+- `src/vlade/legacy/plan_cot/`: 자연어 Plan 생성·전달 CoT의 전용 코드·CLI·설정·노트북·문서 보존.
+- 현재 S2 표현·액션 증류는 기존 `src/vlade/distillation/representation*.py`와 전용 A100 셀을 사용합니다.
+- 공유 학습·모델 코드의 선택적 Plan 참조는 `vlade.legacy.plan_cot.*`로 연결합니다.
 
 - `src/vlade/quantization/packed/`: ActQuant/QVLA/QuantVLA 보정, bit-packed Linear, NVRTC CUDA kernel, safe-tensor 배포.
 - `configs/quantization/packed_student.json`: 세 방법의 독립 예산·범위·보정 설정.
@@ -58,6 +52,7 @@ vlade/
 │  ├─ data/                 # 입력 스키마, 전처리, 데이터 어댑터
 │  ├─ models/               # Teacher/Student 래퍼와 공통 구성요소
 │  ├─ distillation/         # action/representation KD와 정렬 로직
+│  ├─ legacy/plan_cot/      # 보존한 자연어 Plan CoT 전용 자료
 │  ├─ training/             # 학습 루프와 checkpoint 정책
 │  ├─ evaluation/           # 성공률·일반화·효율 평가
 │  ├─ research/             # 설정·CLI·연구 task 연결
@@ -173,16 +168,16 @@ vlade/
 - `scripts/prepare/generate_teacher_parallel_notebook.py`, `docs/environment/teacher_two_gpu.md`: 노트북 생성 및 분할·정밀도·파일럿·재개 안내.
 
 - `src/vlade/training/memory.py`, `residency.py`: 선택적 L4 메모리 설정·측정과 온라인 Teacher/Student 순차 GPU 적재.
-- `configs/experiments/qwen_vla_*_l4*.json`, `experiments/colab_l4_training.ipynb`: native S0/S1/S2의 L4 전용 설정·실행 클라이언트.
+- `configs/experiments/qwen_vla_*_l4*.json`, `experiments/colab_l4_training.ipynb`: S0/S1의 L4 실행 설정·클라이언트와 명시적인 legacy Plan 선택.
 - `scripts/prepare/generate_l4_notebook.py`: L4 노트북 생성 진입점. 제한·실행 순서는 `docs/environment/colab_l4_training.md`에 둡니다.
 
 - `src/vlade/training/teacher_inference.py`: 별도 AVA 환경의 고정 T1 추론·Episode 상태 복원·액션 전달.
 - `src/vlade/training/student_initialization.py`: HF S0 전체 가중치·학습된 헤드·processor 검증 및 초기화.
 - `src/vlade/storage/checkpoint_inputs.py`: 기존 HF runs checkpoint의 불변 SHA·seal·LFS 검증과 런타임 입력 pin.
-- `scripts/train/run_distillation.py`, `src/vlade/research/distillation.py`: QwenVLA Action KD와 CoT+Action KD 공통 실행 진입점과 실행 관리.
+- `scripts/train/run_distillation.py`, `src/vlade/research/distillation.py`: 현재 Action/Representation KD 실행과 선택적인 legacy Plan 연결.
 - `src/vlade/utils/action_kd_notebook.py`, `scripts/prepare/generate_action_kd_notebook.py`: JSON 설정을 공통 진입점에 전달하는 Colab 노트북 생성 정본.
-- `experiments/colab_teacher_plan_kd.ipynb`, `scripts/prepare/generate_teacher_plan_kd_notebook.py`: CoT+Action KD Colab 실행본과 생성 진입점.
-- `docs/environment/action_level_distillation.md`: T1/S0 HF 선택, 노션 손실 수식, 파일럿·재개 계약.
+- `src/vlade/legacy/plan_cot/experiments/colab_teacher_plan_kd.ipynb`, `src/vlade/legacy/plan_cot/scripts/prepare/generate_teacher_plan_kd_notebook.py`: CoT+Action KD Colab 실행본과 생성 진입점.
+- `docs/environment/action_level_distillation.md`: 현재 T1/S0 HF 선택과 S1·S2 파일럿·재개 계약.
 
 - `src/vlade/training/loop.py`: 모델과 독립적인 optimizer step 루프·검증·학습 상태
 - `src/vlade/training/fft.py`: 기존 AVA/OFT의 모델·RLDS·L1·checkpoint 어댑터

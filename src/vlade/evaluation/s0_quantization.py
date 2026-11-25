@@ -129,7 +129,7 @@ def run(args: argparse.Namespace) -> None:
 
     from vlade.data.colab_assets import sha256
     from vlade.data.episode_data import EpisodeData
-    from vlade.distillation.teacher_plan import plan_token_budget
+    from vlade.legacy.plan_cot.distillation.teacher_plan import plan_token_budget
     from vlade.evaluation.qwen_quantization import calibrate
     from vlade.models.students.backbones.qwen import prepare_observation
     from vlade.models.students.qwen_vla import QwenVLA

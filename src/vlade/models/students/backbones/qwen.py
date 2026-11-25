@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 import torch
 from torch import nn
-from vlade.distillation.teacher_plan import prompt_text
+from vlade.legacy.plan_cot.distillation.teacher_plan import prompt_text
 from vlade.models.students.configuration_qwen_vla import QwenVLAConfig
 
 def verified_initial(config: QwenVLAConfig, directory: str | Path) -> Path:

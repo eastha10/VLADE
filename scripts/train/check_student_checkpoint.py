@@ -7,7 +7,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 import torch
 from vlade.data.episode_data import EpisodeData, write_json
-from vlade.distillation.teacher_plan import plan_token_budget
+from vlade.legacy.plan_cot.distillation.teacher_plan import plan_token_budget
 from vlade.models.students.qwen import QwenStudent
 from vlade.storage.assets import resolve_input
 from vlade.training.student_initialization import saved_processor
