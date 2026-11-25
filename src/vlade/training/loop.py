@@ -1,4 +1,4 @@
-"""Single-device optimizer loop, independent of the Teacher/Student architecture.
+"""Optimizer loop, independent of the Teacher/Student architecture.
 
 Loss callbacks return a scalar mean for equal-sized microbatches. Checkpoints are
 called only at optimizer boundaries, so no partial gradients need serializing.
@@ -114,6 +114,7 @@ def run_loop(
     on_before_step: Callable[[LoopState], None] | None = None,
     on_step: Callable[[LoopState, dict[str, float]], None] | None = None,
     timings: Any | None = None,
+    gradient_manager: Any | None = None,
 ) -> LoopState:
     """Run complete accumulation windows; reject truncated streams and NaN/Inf.
 
@@ -146,7 +147,12 @@ def run_loop(
         step_started = timings.start() if timings is not None else None
         total = 0.0
         try:
-            for micro_index in range(accumulation_steps):
+            if gradient_manager is not None:
+                from vlade.training.gradient_offload import offloaded_window
+                window = [next(iterator) for _ in range(accumulation_steps)]
+                total, norm = offloaded_window(gradient_manager, window, loss_fn, backward_fn,
+                                               state.step, max_grad_norm)
+            for micro_index in range(accumulation_steps if gradient_manager is None else 0):
                 batch = next(iterator)
                 loss = (
                     backward_fn(batch, state.step, 1 / accumulation_steps)
@@ -165,21 +171,29 @@ def run_loop(
             with (timings.measure("s0_optimizer", step=state.step + 1, phase="train")
                   if timings is not None else nullcontext()):
                 # error_if_nonfinite guards gradients even when the scalar loss is finite.
-                norm = torch.nn.utils.clip_grad_norm_(params, max_grad_norm, error_if_nonfinite=True)
+                if gradient_manager is None:
+                    norm = torch.nn.utils.clip_grad_norm_(params, max_grad_norm, error_if_nonfinite=True)
                 if on_before_step is not None:
                     on_before_step(state)
                 lr = optimizer.param_groups[0]["lr"]
-                optimizer.step()
+                if gradient_manager is None:
+                    optimizer.step()
+                else:
+                    gradient_manager.step(optimizer)
                 scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
         except StopIteration as exc:
             optimizer.zero_grad(set_to_none=True)
+            if gradient_manager is not None:
+                gradient_manager.clear()
             if timings is not None:
                 timings.finish(step_started, "s0_training_step", step=state.step + 1,
                                status="failed", error_type="StopIteration", phase="train")
             raise RuntimeError(f"Data stream ended before optimizer step {state.step + 1}") from exc
         except BaseException as error:
             optimizer.zero_grad(set_to_none=True)
+            if gradient_manager is not None:
+                gradient_manager.clear()
             if timings is not None:
                 timings.finish(step_started, "s0_training_step", step=state.step + 1,
                                status="failed", error_type=type(error).__name__, phase="train")
@@ -200,9 +214,9 @@ def run_loop(
     return state
 
 
-def training_state(state: LoopState, optimizer: Any, scheduler: Any) -> dict[str, Any]:
+def training_state(state: LoopState, optimizer: Any, scheduler: Any, *, gradient_manager=None) -> dict[str, Any]:
     """Model/component weights are stored separately by the model adapter."""
-    return {
+    result = {
         "schema_version": 1,
         "loop": asdict(state),
         "optimizer": optimizer.state_dict(),
@@ -210,12 +224,23 @@ def training_state(state: LoopState, optimizer: Any, scheduler: Any) -> dict[str
         "rng": capture_rng(),
         "data_stream_resume": "restart_not_bitwise_exact",
     }
+    if gradient_manager is not None:
+        result["gradient_offload"] = gradient_manager.state_dict()
+    return result
 
 
-def restore_training_state(payload: dict[str, Any], optimizer: Any, scheduler: Any) -> LoopState:
+def restore_training_state(payload: dict[str, Any], optimizer: Any, scheduler: Any, *, gradient_manager=None) -> LoopState:
     if payload.get("schema_version") != 1:
         raise ValueError("Unsupported trainer state schema")
-    optimizer.load_state_dict(payload["optimizer"])
+    if (gradient_manager is None) != ("gradient_offload" not in payload):
+        raise ValueError("Teacher gradient-offload resume contract differs")
+    if gradient_manager is not None:
+        gradient_manager.load_state_dict(payload["gradient_offload"])
+    if gradient_manager is not None and getattr(optimizer, "is_paged", False):
+        from vlade.training.gradient_offload import restore_paged_optimizer
+        restore_paged_optimizer(optimizer, payload["optimizer"])
+    else:
+        optimizer.load_state_dict(payload["optimizer"])
     scheduler.load_state_dict(payload["scheduler"])
     restore_rng(payload["rng"])
     return LoopState(**payload["loop"])

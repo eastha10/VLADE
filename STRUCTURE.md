@@ -3,6 +3,12 @@
 - `src/vlade/training/teacher_plan_supervision.py`: 고정 HF 주석의 Train 전용 Plan CE와 checkpoint 감독 이력.
 - `src/vlade/distillation/teacher_plan.py`: 학습·생성 공통 prompt, 감독 계약, EOS·평문 검증.
 - `docs/environment/teacher_plan_generation.md`: Plan 오류 원인 범위·주석 계약·학습/재개 절차.
+- `experiments/colab_cot_action_kd_ready.ipynb`: 고정 Git 실행기의 S2 설정·T1 probe·checkpoint/Hub 검사·재개·결과 묶음 클라이언트.
+- `src/vlade/data/teacher_plan_annotations.py`, `scripts/data/prepare_teacher_plans.py`: 검증된 Train 관측 참조·빈 Plan 주석 내보내기, 검토 후 검증·비공개 HF 게시.
+- `src/vlade/research/teacher_plan_training.py`, `scripts/train/run_teacher_plan.py`: 기존 FFT를 사용하는 T1 Plan 학습의 주석·파일럿·본 학습·재개·S2 handoff 실행기.
+- `configs/experiments/teacher_plan_training.json`, `experiments/colab_teacher_plan_training.ipynb`: T1 초기화·Plan CE 설정과 Colab 실행 클라이언트.
+- `src/vlade/utils/teacher_plan_training_notebook.py`, `scripts/prepare/generate_teacher_plan_training_notebook.py`: 설정 전용 Plan 학습 노트북 생성.
+- `docs/environment/teacher_plan_training.md`: 실제 주석 준비·저장/재개·S2 연결 절차.
 
 - `src/vlade/quantization/packed/`: ActQuant/QVLA/QuantVLA 보정, bit-packed Linear, NVRTC CUDA kernel, safe-tensor 배포.
 - `configs/quantization/packed_student.json`: 세 방법의 독립 예산·범위·보정 설정.
@@ -158,6 +164,14 @@ vlade/
 검증 전용 Python은 `.harness/v1/2026-11-11-ava-teacher-code/checks/`로 옮겼습니다.
 
 ## 학습 구현
+
+- `src/vlade/training/teacher_parallel.py`, `gradient_offload.py`: Teacher의 두 GPU 층별 배치·CPU gradient 누적·원래 optimizer의 순차 업데이트와 재개.
+- `configs/research/{ava_fft,oft_fft,cache_teacher}_tp2.json`, `experiments/teacher_two_gpu.ipynb`: Student와 분리한 Teacher 전용 실행 설정과 Kaggle/Colab 클라이언트.
+- `scripts/prepare/generate_teacher_parallel_notebook.py`, `docs/environment/teacher_two_gpu.md`: 노트북 생성 및 분할·정밀도·파일럿·재개 안내.
+
+- `src/vlade/training/memory.py`, `residency.py`: 선택적 L4 메모리 설정·측정과 온라인 Teacher/Student 순차 GPU 적재.
+- `configs/experiments/qwen_vla_*_l4*.json`, `experiments/colab_l4_training.ipynb`: native S0/S1/S2의 L4 전용 설정·실행 클라이언트.
+- `scripts/prepare/generate_l4_notebook.py`: L4 노트북 생성 진입점. 제한·실행 순서는 `docs/environment/colab_l4_training.md`에 둡니다.
 
 - `src/vlade/training/teacher_inference.py`: 별도 AVA 환경의 고정 T1 추론·Episode 상태 복원·액션 전달.
 - `src/vlade/training/student_initialization.py`: HF S0 전체 가중치·학습된 헤드·processor 검증 및 초기화.

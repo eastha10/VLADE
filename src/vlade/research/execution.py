@@ -33,6 +33,8 @@ def dispatch(config: dict, code: Path, work: Path, output: Path) -> None:
         base["fft_defaults"].update(
             updates, seed=config["seed"], save_optimizer_state=True, image_aug=False
         )
+        if config.get("teacher_parallel") is not None:
+            base["fft_defaults"]["teacher_parallel"] = config["teacher_parallel"]
         base["fft_runs"][config["model"]]["output_dir"] = str(output)
         for key in (
             "sequence_length",
@@ -182,7 +184,8 @@ def dispatch(config: dict, code: Path, work: Path, output: Path) -> None:
         checkpoint = validate_selection(selection, data)
         result = generate(
             data,
-            SequentialTeacher(checkpoint),
+            SequentialTeacher(checkpoint, **({"teacher_parallel": config["teacher_parallel"]}
+                                            if config.get("teacher_parallel") else {})),
             selection,
             output,
             hidden=config.get("save_hidden", False),

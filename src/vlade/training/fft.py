@@ -77,6 +77,7 @@ class FFTConfig:
     temporal_feature_layer: int = -2
     plan_annotations: Path | None = None
     plan_loss_weight: float = 0.0
+    teacher_parallel: dict | None = None
 
     @classmethod
     def from_json(cls, path: Path, model: str) -> "FFTConfig":
@@ -105,6 +106,13 @@ class FFTConfig:
         return cfg
 
     def validate(self) -> None:
+        from vlade.training.teacher_parallel import validate_parallel
+        validate_parallel(self.teacher_parallel)
+        if self.teacher_parallel is not None:
+            if not self.teacher_parallel["gradient_offload"] or self.optimizer != "paged_adamw_8bit":
+                raise ValueError("Two-GPU Teacher FFT requires gradient offload and the existing paged_adamw_8bit")
+            if self.device != self.teacher_parallel["devices"][0]:
+                raise ValueError("FFT device must be the Teacher prefix device")
         if (type(self.plan_loss_weight) not in (int, float) or not math.isfinite(self.plan_loss_weight)
                 or self.plan_loss_weight < 0 or (self.plan_annotations is None) != (self.plan_loss_weight == 0)):
             raise ValueError("Plan CE requires both plan_annotations and a finite positive plan_loss_weight")
@@ -395,29 +403,35 @@ def _make_model_and_components(cfg: FFTConfig, device: Any) -> tuple[Any, Any, A
     model_config = OpenVLAConfig.from_pretrained(cfg.checkpoint, local_files_only=True)
     if cfg.model == "openvla_oft":
         model_config.extra_attn_weights = {"force_eager_attn": False, "extra_layer_ids": []}
+    dtype = getattr(torch, cfg.teacher_parallel["dtype"]) if cfg.teacher_parallel else torch.bfloat16
     model = OpenVLAForActionPrediction.from_pretrained(
         cfg.checkpoint,
         config=model_config,
-        torch_dtype=torch.bfloat16,
+        torch_dtype=dtype,
         low_cpu_mem_usage=True,
         attn_implementation="eager" if cfg.model == "ava_vla" else "sdpa",
         local_files_only=True,
     )
     model.vision_backbone.set_num_images_in_input(cfg.num_images_in_input)
     if cfg.gradient_checkpointing:
-        model.gradient_checkpointing_enable()
+        if cfg.teacher_parallel:
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        else:
+            model.gradient_checkpointing_enable()
         model.config.use_cache = False
         if hasattr(model, "enable_input_require_grads"):
             model.enable_input_require_grads()
-    model.to(device)
+    if cfg.teacher_parallel is None:
+        model.to(device)
     head = L1RegressionActionHead(
         input_dim=model.llm_dim, hidden_dim=model.llm_dim, action_dim=ACTION_DIM
     )
     proprio = ProprioProjector(llm_dim=model.llm_dim, proprio_dim=PROPRIO_DIM)
     load_component(head, cfg.checkpoint, "action_head")
     load_component(proprio, cfg.checkpoint, "proprio_projector")
-    head.to(device=device, dtype=torch.bfloat16)
-    proprio.to(device=device, dtype=torch.bfloat16)
+    component_device = "cpu" if cfg.teacher_parallel else device
+    head.to(device=component_device, dtype=dtype)
+    proprio.to(device=component_device, dtype=dtype)
     generator = None
     if cfg.model == "ava_vla":
         from vlade.models.teachers.components.attn_weight_generator import AttentionWeightGenerator
@@ -440,7 +454,13 @@ def _make_model_and_components(cfg: FFTConfig, device: Any) -> tuple[Any, Any, A
             sink_weight=1.0,
         )
         load_component(generator, cfg.checkpoint, "vision_attn_weight_generator")
-        generator.to(device=device, dtype=torch.bfloat16)
+        generator.to(device=component_device, dtype=dtype)
+    if cfg.teacher_parallel:
+        from vlade.training.teacher_parallel import TeacherPlacement
+        placement = TeacherPlacement(model, head, proprio, generator, cfg.teacher_parallel)
+        model._vlade_teacher_placement = placement
+        if device.type != "cpu":
+            placement.activate()
     return model, processor, head, proprio, generator
 
 
@@ -486,8 +506,11 @@ def compute_loss(
             f"Expected actions [B, {NUM_ACTIONS_CHUNK}, {ACTION_DIM}], got {target.shape}"
         )
     # Upstream collator squeezes the batch dimension for B=1.
-    state = batch["proprio"].to(device=device, dtype=torch.bfloat16).reshape(batch_size, -1)
-    with torch.autocast(device.type, dtype=torch.bfloat16):
+    placement = getattr(model, "_vlade_teacher_placement", None)
+    dtype = getattr(torch, placement.options["dtype"]) if placement else torch.bfloat16
+    output_device = next(head.parameters()).device if placement else device
+    state = batch["proprio"].to(device=device, dtype=dtype).reshape(batch_size, -1)
+    with torch.autocast(device.type, dtype=dtype):
         kwargs = {}
         if generator is not None:
             # A new window starts from the learned zero buffer. Later queries
@@ -500,7 +523,7 @@ def compute_loss(
         output = model(
             input_ids=batch["input_ids"].to(device),
             attention_mask=batch["attention_mask"].to(device),
-            pixel_values=batch["pixel_values"].to(device=device, dtype=torch.bfloat16),
+            pixel_values=batch["pixel_values"].to(device=device, dtype=dtype),
             labels=labels,
             output_hidden_states=True,
             proprio=state,
@@ -516,10 +539,11 @@ def compute_loss(
             or not (action_mask.sum(dim=1) == expected_tokens).all()
         ):
             raise ValueError("Action token/hidden alignment failed; check truncation and tokenizer")
-        action_hidden = hidden[action_mask].reshape(
+        action_hidden = hidden[action_mask.to(hidden.device)].reshape(
             labels.shape[0], NUM_ACTIONS_CHUNK * ACTION_DIM, -1
         )
-        prediction = head.predict_action(action_hidden.to(torch.bfloat16))
+        prediction = head.predict_action(action_hidden.to(device=output_device, dtype=dtype))
+        target = target.to(prediction.device)
         if prediction.shape != target.shape:
             raise ValueError(
                 f"Prediction/target shape mismatch: {prediction.shape} vs {target.shape}"
@@ -539,7 +563,7 @@ def compute_loss(
                 }
             )
         if "action_valid_mask" in batch:
-            valid = batch["action_valid_mask"].to(device)
+            valid = batch["action_valid_mask"].to(prediction.device)
             if valid.shape != target.shape or valid.dtype != torch.bool or not valid.any():
                 raise ValueError("Invalid action tail mask")
             loss = (prediction.float()[valid] - target[valid]).abs().mean()
@@ -552,13 +576,15 @@ def compute_loss(
             loss = loss + plan_ce_loss(model, proprio, batch, device)
         if return_temporal_state:
             features = output.hidden_states[temporal_feature_layer][:, num_patches:-1]
-            context = features[action_mask].reshape(batch_size, expected_tokens, -1)
+            context = features[action_mask.to(features.device)].reshape(batch_size, expected_tokens, -1)
             return loss, context
         return loss
 
 
 def _make_optimizer(cfg: FFTConfig, params: list[Any]) -> Any:
     if cfg.optimizer == "paged_adamw_8bit":
+        if cfg.teacher_parallel and importlib.metadata.version("bitsandbytes") != "0.43.3":
+            raise ValueError("Teacher parallel paged resume requires pinned bitsandbytes 0.43.3")
         from bitsandbytes.optim import PagedAdamW8bit
 
         return PagedAdamW8bit(params, lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
@@ -638,6 +664,7 @@ def save_checkpoint(
     loop_state: Any = None,
     hub: Any = None,
     metrics: dict | None = None,
+    gradient_manager: Any = None,
 ) -> Path:
     """Save a reloadable full model and separate continuous-action components."""
     import torch
@@ -668,7 +695,7 @@ def save_checkpoint(
         if scheduler is not None and loop_state is not None:
             from vlade.training.loop import training_state
 
-            torch.save(training_state(loop_state, optimizer, scheduler), path / "trainer_state.pt")
+            torch.save(training_state(loop_state, optimizer, scheduler, gradient_manager=gradient_manager), path / "trainer_state.pt")
         else:
             torch.save(optimizer.state_dict(), path / "optimizer.pt")
     save_dataset_statistics(dataset.dataset_statistics, path)
@@ -701,6 +728,10 @@ def save_checkpoint(
                     "vram_bytes": torch.cuda.get_device_properties(
                         torch.device(cfg.device)
                     ).total_memory,
+                    **({"teacher_devices": [{"device": name, "gpu": torch.cuda.get_device_name(name),
+                                              "vram_bytes": torch.cuda.get_device_properties(name).total_memory}
+                                             for name in cfg.teacher_parallel["devices"]]}
+                       if cfg.teacher_parallel else {}),
                 },
                 "ava_temporal_training": (
                     (
@@ -749,6 +780,8 @@ def validate_resume(cfg: FFTConfig) -> dict[str, Any]:
     if sealed["step"] != saved["step"]:
         raise ValueError("Checkpoint seal/metadata step mismatch")
     current = asdict(cfg)
+    if saved["configuration"].get("teacher_parallel") != cfg.teacher_parallel:
+        raise ValueError("Resume Teacher placement/precision/offload configuration mismatch")
     from vlade.training.teacher_plan_supervision import checkpoint_plan_contract
     if (saved["configuration"].get("plan_annotations") != (
             str(cfg.plan_annotations) if cfg.plan_annotations is not None else None)
@@ -813,6 +846,11 @@ def train(cfg: FFTConfig) -> None:
     import torch
     from vlade.training.hub import HubCheckpoints
 
+    if cfg.teacher_parallel:
+        from vlade.training.teacher_parallel import validate_parallel
+        validate_parallel(cfg.teacher_parallel)
+        if any(int(device.split(":")[1]) >= torch.cuda.device_count() for device in cfg.teacher_parallel["devices"]):
+            raise RuntimeError("Two visible CUDA GPUs are required before resolving Teacher inputs")
     cfg = resolve_config_assets(cfg, download=True)
     cfg.validate()
     if cfg.plan_annotations is not None:
@@ -845,7 +883,7 @@ def train(cfg: FFTConfig) -> None:
         raise RuntimeError("FFT requires a CUDA GPU with BF16 support")
     device = torch.device(cfg.device)
     torch.cuda.set_device(device)
-    if not torch.cuda.is_bf16_supported():
+    if cfg.teacher_parallel is None and not torch.cuda.is_bf16_supported():
         raise RuntimeError("FFT requires a CUDA GPU with BF16 support")
     # RLDS preprocessing must not reserve CUDA memory needed by the VLA.
     from vlade.training.run_control import configure_tensorflow_cpu
@@ -921,9 +959,16 @@ def train(cfg: FFTConfig) -> None:
 
     record_manifest()
     state = LoopState()
+    gradient_manager = None
     try:
         load_cfg = replace(cfg, checkpoint=cfg.resume) if cfg.resume else cfg
         model, processor, head, proprio, generator = _make_model_and_components(load_cfg, device)
+        placement = getattr(model, "_vlade_teacher_placement", None)
+        if placement is not None:
+            manifest["teacher_parallel"] = placement.summary()
+            manifest["hardware"]["teacher_devices"] = [
+                {"device": str(d), "gpu": torch.cuda.get_device_name(d),
+                 "vram_bytes": torch.cuda.get_device_properties(d).total_memory} for d in placement.devices]
         loader, dataset = _make_loader(cfg, model, processor)
         manifest["sequence_sampling_statistics"] = getattr(dataset, "sampling_statistics", None)
         validation = _make_loader(cfg, model, processor, train=False)[0] if cfg.eval_steps else None
@@ -935,12 +980,20 @@ def train(cfg: FFTConfig) -> None:
                 )
         params = [p for module in modules for p in module.parameters() if p.requires_grad]
         optimizer = _make_optimizer(cfg, params)
+        if cfg.teacher_parallel:
+            from vlade.training.gradient_offload import OffloadedGradients
+            from vlade.training.residency import require_host_memory
+            require_host_memory(sum(p.numel() * p.element_size() for p in params), purpose="Teacher CPU gradients")
+            gradient_manager = OffloadedGradients(params, loss_scale=cfg.teacher_parallel["loss_scale"],
+                max_retries=cfg.teacher_parallel["max_overflow_retries"])
         scheduler = make_scheduler(optimizer, cfg.max_steps, cfg.warmup_steps, cfg.lr_schedule)
         if cfg.resume:
             payload = torch.load(
-                cfg.resume / "trainer_state.pt", map_location="cpu", weights_only=True
+                cfg.resume / "trainer_state.pt", map_location="cpu", weights_only=True,
+                **({"mmap": True} if cfg.teacher_parallel else {}),
             )
-            state = restore_training_state(payload, optimizer, scheduler)
+            state = restore_training_state(payload, optimizer, scheduler, gradient_manager=gradient_manager)
+            del payload
             saved = validate_resume(cfg)
             if state.step != saved["step"]:
                 raise ValueError("Trainer state step does not match checkpoint metadata")
@@ -950,6 +1003,9 @@ def train(cfg: FFTConfig) -> None:
             )
         num_patches = model.vision_backbone.get_num_patches() * cfg.num_images_in_input + 1
         torch.cuda.reset_peak_memory_stats(device)
+        if placement is not None:
+            for measured_device in placement.devices:
+                torch.cuda.reset_peak_memory_stats(measured_device)
         torch.cuda.synchronize(device)
         manifest["startup_seconds"] = time.monotonic() - started
         step_started = time.monotonic()
@@ -997,7 +1053,8 @@ def train(cfg: FFTConfig) -> None:
                 }
                 if generator is not None:
                     groups["attention_generator"] = generator
-                manifest["gradient_diagnostics"] = gradient_diagnostics(groups)
+                manifest["gradient_diagnostics"] = (gradient_manager.diagnostics(groups) if gradient_manager
+                                                    else gradient_diagnostics(groups))
                 manifest["finite_checks"] = {
                     "predicted_action": True,
                     "scalar_loss": True,
@@ -1018,6 +1075,10 @@ def train(cfg: FFTConfig) -> None:
                 metrics["peak_allocated_bytes"] = torch.cuda.max_memory_allocated(device)
                 metrics["peak_reserved_bytes"] = torch.cuda.max_memory_reserved(device)
                 metrics["peak_process_rss_bytes"] = peak_process_rss_bytes()
+                if placement is not None:
+                    from vlade.training.memory import cuda_memory
+                    metrics["teacher_devices"] = {str(d): cuda_memory(d) for d in placement.devices}
+                    metrics["loss_scale"] = gradient_manager.loss_scale
                 budget_stop = bool(
                     deadline
                     and should_stop(
@@ -1072,6 +1133,7 @@ def train(cfg: FFTConfig) -> None:
                         loop_state=current,
                         hub=hub,
                         metrics=metrics,
+                        gradient_manager=gradient_manager,
                     )
                     hub.publish(saved_path, final=current.step == cfg.max_steps)
                     print(f"Saved {saved_path}", flush=True)
@@ -1128,6 +1190,7 @@ def train(cfg: FFTConfig) -> None:
                 state=state,
                 on_before_step=before_step,
                 on_step=on_step,
+                gradient_manager=gradient_manager,
             )
         manifest["status"] = "completed"
     except BudgetExhausted:
@@ -1142,6 +1205,8 @@ def train(cfg: FFTConfig) -> None:
         )
         raise
     finally:
+        if gradient_manager is not None:
+            gradient_manager.close()
         hub.flush()
         manifest["elapsed_seconds"] = time.monotonic() - started
         record_manifest()

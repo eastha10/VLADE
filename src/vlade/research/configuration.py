@@ -32,6 +32,11 @@ def load(path: Path, overrides: list[str] = ()) -> dict:
 
 
 def validate(value: dict) -> None:
+    if value.get("teacher_parallel") is not None:
+        from vlade.training.teacher_parallel import validate_parallel
+        validate_parallel(value["teacher_parallel"])
+        if value.get("task") not in {"fft", "cache"}:
+            raise ValueError("Top-level teacher_parallel is only supported for Teacher FFT/cache")
     if value.get("schema_version") != 1 or value.get("task") not in TASKS:
         raise ValueError("Unsupported research config")
     if not isinstance(value.get("runtime"), str):

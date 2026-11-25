@@ -1,5 +1,8 @@
 # QwenVLA S0 Task-only
 
+새 L4 24GB 실행은 [L4 전용 설정·노트북](colab_l4_training.md)을 사용합니다.
+아래 A100 실행의 기존 checkpoint는 원래 소스·설정으로 재개합니다.
+
 S0의 이번 설정은 QwenVLA 전체를 LIBERO+ D/seed42 정답 액션으로 학습합니다. BF16 autocast, FP32 파라미터 및 AdamW, 배치 1, 누적 8, seed 42, 총 8,000 optimizer step을 사용합니다. 연속 Query는 동일 에피소드의 상태를 전달하고 각 Query 경계에서 detach합니다. 에피소드가 바뀌면 상태를 초기화합니다. 체크포인트에는 모델, processor, optimizer, scheduler, RNG, query cursor와 현재 상태를 저장합니다.
 
 ## Colab 파일럿

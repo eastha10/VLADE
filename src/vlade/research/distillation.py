@@ -17,6 +17,8 @@ from vlade.distillation.teacher_plan import plan_token_budget
 from vlade.runtime.environment import locate, prepare, runtime_environment
 from vlade.storage.assets import REGISTRY_REPO, asset_record, read_registry
 from vlade.utils.source_identity import source_identity
+from vlade.training.memory import validate_memory_profile
+from vlade.training.residency import validate_teacher_residency
 
 ROOT = Path(__file__).resolve().parents[3]
 CLI = ROOT / "scripts/train/run_distillation.py"
@@ -84,8 +86,11 @@ def load_settings(config: Path, overrides: dict) -> tuple[dict, dict[str, dict]]
     variants = workflow["variant"]
     if variants not in ("gt_only", "gt_kd", "both"):
         raise ValueError("workflow.variant must be gt_only, gt_kd or both")
-    if settings.get("initialization") != "student_checkpoint":
-        raise ValueError("This workflow expects a complete native S0 checkpoint")
+    initialization = settings.get("initialization")
+    if initialization not in {"student_checkpoint", "pretrained_backbone"}:
+        raise ValueError("This workflow expects native S0 or pretrained backbone initialization")
+    if initialization == "pretrained_backbone" and variants != "gt_only":
+        raise ValueError("Action KD requires a complete native S0 checkpoint")
     config_path = ROOT / settings["model_config"]
     if json.loads(config_path.read_text(encoding="utf-8"))["student"]["schema_version"] != 2:
         raise ValueError("This workflow requires a schema 2 QwenVLA model config")
@@ -103,7 +108,7 @@ def load_settings(config: Path, overrides: dict) -> tuple[dict, dict[str, dict]]
     revision = workflow.get("registry_revision")
     if revision is not None and not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("registry_revision must be an immutable HF commit")
-    kd = settings["distillation"]
+    kd = settings.get("distillation", {})
     if variants != "gt_only":
         tokens = plan_token_budget(kd)
         if kd["teacher_mode"] not in ("inference", "cache"):
@@ -116,6 +121,11 @@ def load_settings(config: Path, overrides: dict) -> tuple[dict, dict[str, dict]]
             raise ValueError("action_kd_weight must be positive")
         if tokens and variants == "both":
             raise ValueError("Use separate runs for CoT and GT-only; the input prompts are different")
+    # Validate only selected variants: GT-only carries no online Teacher.
+    validation_settings = settings if variants != "gt_only" else {k: v for k, v in settings.items() if k != "distillation"}
+    validate_memory_profile(validation_settings)
+    if variants != "gt_only":
+        validate_teacher_residency(kd)
     selected = {}
     if variants in ("gt_only", "both"):
         selected["gt_only"] = {key: value for key, value in settings.items() if key != "distillation"}
@@ -152,6 +162,8 @@ def prepare_inputs(workspace: Path, run_root: Path, workflow: dict, variants: di
 def _checkpoint_location(name: str, settings: dict, run_group: str) -> tuple[str, str]:
     if name == "gt_kd":
         return run_group, "S2" if plan_token_budget(settings["distillation"]) else "S1"
+    if settings.get("initialization") == "pretrained_backbone":
+        return run_group, "S0"
     return f"{run_group}-{name}", name
 
 

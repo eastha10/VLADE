@@ -97,7 +97,9 @@ class AttentionWeightGenerator(nn.Module):
             target_attn_weights = attn_weights[0]
 
             attn_sink = target_attn_weights[:, self.sink_ids]
-            mask = (attn_sink < self.sink_weight).bfloat16()
+            # Keep the same binary sink correction in the active Teacher dtype;
+            # BF16 masks would promote FP16 weights before indexed assignment.
+            mask = (attn_sink < self.sink_weight).to(dtype=attn_sink.dtype)
             target_attn_weights[:, self.sink_ids] = attn_sink + mask * (
                 self.sink_weight - attn_sink.detach()
             )

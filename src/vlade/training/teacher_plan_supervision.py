@@ -96,7 +96,9 @@ def plan_ce_loss(model: Any, proprio_projector: Any, batch: dict, device: Any) -
         ids = torch.tensor([prefix + body + [eos]], device=device)
         text_labels = ids.clone()
         text_labels[:, :len(prefix)] = -100
-        images = batch["pixel_values"][index:index + 1].to(device=device, dtype=torch.bfloat16)
+        placement = getattr(model, "_vlade_teacher_placement", None)
+        dtype = getattr(torch, placement.options["dtype"]) if placement else torch.bfloat16
+        images = batch["pixel_values"][index:index + 1].to(device=device, dtype=dtype)
         vision = model._process_vision_features(images)
         state = batch["proprio"].reshape(len(batch["sample_metadata"]), -1)[index:index + 1]
         vision = model._process_proprio_features(vision, state.to(device=device, dtype=vision.dtype), proprio_projector)

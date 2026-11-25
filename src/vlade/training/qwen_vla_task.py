@@ -30,6 +30,9 @@ from vlade.training.loop import LoopState, evaluate, make_scheduler, restore_tra
 from vlade.training.run_control import checkpoint_space, seal_checkpoint, verify_checkpoint
 from vlade.training.teacher_inference import InferenceActions, teacher_identity
 from vlade.training.scopes import configure_trainable_scope
+from vlade.training.memory import (adamw_storage, configure_qwen_memory, cuda_memory,
+                                   record_memory, validate_memory_profile)
+from vlade.training.residency import StudentOffload, validate_teacher_residency
 from vlade.utils.filesystem import publish_directory
 from vlade.utils.source_identity import source_identity
 from vlade.utils.timing import RunTimings
@@ -74,7 +77,10 @@ def action_loss(model: QwenVLA, data: EpisodeData, processor, config: QwenVLACon
                               episode_id=sample["episode_id"], timestep=sample["timestep"],
                               is_warmup=forward_calls < 2, replay=replay)
               if timings is not None else nullcontext()):
-            result = model(inputs, proprio, state, batch_idx=step + step_offset)
+            # Each forward owns its autocast cache. Replay under no_grad must not
+            # retain BF16 parameter casts across a Teacher offload or a grad forward.
+            with torch.autocast("cuda", dtype=torch.bfloat16):
+                result = model(inputs, proprio, state, batch_idx=step + step_offset)
         forward_calls += 1
         return result
 
@@ -95,6 +101,10 @@ def action_loss(model: QwenVLA, data: EpisodeData, processor, config: QwenVLACon
         sample, current, previous = batch
         teacher_target = None
         plan_row = None
+        # Exclusive residency must finish T1 inference before retaining a Student
+        # autograd graph. The loss, causal teacher prefix and query stay identical.
+        if teacher is not None:
+            teacher_target = teacher.get(sample)
         if plan_teacher is not None:
             if plan_log is not None:
                 plan_row = {key: sample[key] for key in ("episode_id", "timestep", "instruction")}
@@ -113,24 +123,21 @@ def action_loss(model: QwenVLA, data: EpisodeData, processor, config: QwenVLACon
             current = observation_inputs(data, processor, config, sample, plan)
             if plan_row is not None:
                 plan_row.update(status="ok", plan=plan)
-        with torch.autocast("cuda", dtype=torch.bfloat16):
-            if previous is None:
-                state = None
-            elif last != (previous["episode_id"], previous["timestep"]):
-                if phase != "validation":
-                    plan = plan_teacher.get_plan(previous, split=phase) if plan_teacher is not None else None
-                    inputs = observation_inputs(data, processor, config, previous, plan)
-                    with torch.no_grad():
-                        state = forward(previous, inputs, None, step, replay=True).recurrent_state
-                else:
-                    state = replay_validation(sample, previous, step)
-            prediction = forward(sample, current, state, step)
+        if previous is None:
+            state = None
+        elif last != (previous["episode_id"], previous["timestep"]):
+            if phase != "validation":
+                plan = plan_teacher.get_plan(previous, split=phase) if plan_teacher is not None else None
+                inputs = observation_inputs(data, processor, config, previous, plan)
+                with torch.no_grad():
+                    state = forward(previous, inputs, None, step, replay=True).recurrent_state
+            else:
+                state = replay_validation(sample, previous, step)
+        prediction = forward(sample, current, state, step)
         last = sample["episode_id"], sample["timestep"]
         state = prediction.recurrent_state.detach()
         target = torch.from_numpy(sample["gt_action"])[None].to(device)
         valid = torch.from_numpy(sample["action_valid_mask"])[None].to(device)
-        if teacher is not None:
-            teacher_target = teacher.get(sample)
         if teacher_target is not None:
             total, terms = action_distillation_loss(
                 prediction, target, teacher_target[None].to(device), valid,
@@ -158,12 +165,14 @@ def action_loss(model: QwenVLA, data: EpisodeData, processor, config: QwenVLACon
     return loss, save_state, load_state
 
 
-def check_adamw_capacity(model: QwenVLA, device: torch.device) -> None:
-    required = sum(parameter.numel() * (16 if parameter.requires_grad else parameter.element_size())
-                   for parameter in model.parameters())
+def check_adamw_capacity(model: QwenVLA, device: torch.device, *, reserve_gib: float = 0) -> dict:
+    storage = adamw_storage(model)
+    required = storage["minimum_training_bytes"]
     free, _ = torch.cuda.mem_get_info(device)
-    if required >= free:
-        raise RuntimeError(f"FP32 AdamW needs at least {required / 1024**3:.2f} GiB before activations; {free / 1024**3:.2f} GiB free")
+    if required + reserve_gib * 1024**3 >= free:
+        raise RuntimeError(f"FP32 AdamW needs at least {required / 1024**3:.2f} GiB plus "
+                           f"{reserve_gib:.2f} GiB activation reserve; {free / 1024**3:.2f} GiB free")
+    return storage
 
 
 def verified_s0(initial: Path, config: QwenVLAConfig, data_sha256: str) -> int:
@@ -190,6 +199,7 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
     target = settings["max_steps"]
     limit = stop_after if stop_after is not None else target
     accumulation = settings["accumulation_steps"]
+    profile = validate_memory_profile(settings)
     if not 1 <= limit <= target or min(accumulation, settings["save_steps"], settings["validation_queries"]) < 1:
         raise ValueError("Invalid step, accumulation, save or validation budget")
     kd = settings.get("distillation")
@@ -205,6 +215,7 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
     episode_limit = 0
     teacher_mode = None
     if kd is not None:
+        validate_teacher_residency(kd)
         validate_weights(kd["task_weight"], kd["action_kd_weight"])
         teacher_mode = kd.get("teacher_mode", "cache")
         if teacher_mode not in {"cache", "inference"}:
@@ -259,6 +270,8 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
         print(json.dumps({"status": "preflight_ok", "counts": data.manifest["counts"],
                           "initial_student_step": s0_step, "teacher_mode": teacher_mode,
                           "teacher_plan_max_new_tokens": plan_tokens,
+                          "memory_profile": profile, "effective_batch_size": accumulation,
+                          "gpu_forward_tested": False,
                           "teacher_inference": identity.get("teacher_inference"),
                           "teacher_cache": identity.get("teacher_cache")}), flush=True)
         return
@@ -281,9 +294,9 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
         processor = load_processor(config, qwen_initial=initial)
     scope_summary = configure_trainable_scope(model, settings, from_s0=from_s0)
     print(json.dumps(scope_summary), flush=True)
-    check_adamw_capacity(model, device)
+    storage = check_adamw_capacity(model, device, reserve_gib=profile["reserve_gib"] if profile else 0)
+    runtime_summary = configure_qwen_memory(model, settings)
     model.to(device)
-    model.backbone.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     optimizer = torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), lr=settings["learning_rate"],
                                   weight_decay=settings["weight_decay"], foreach=False)
     scheduler = make_scheduler(optimizer, target)
@@ -303,12 +316,17 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
     hub = HubCheckpoints(output, resume=resume, metric="validation_l1")
     started = time.monotonic()
     invocation_id = uuid.uuid4().hex[:12]
+    memory_path = output / f"memory-{invocation_id}.jsonl" if profile else None
+    if memory_path is not None:
+        record_memory(memory_path, device, "student_ready", **storage, **runtime_summary)
     plan_log_path = output / f"teacher-plans-{invocation_id}.jsonl"
     write_json(output / f"invocation-{invocation_id}.json", {
         "identity": identity, "stop_after": limit, "resume_step": state.step,
         "gpu": torch.cuda.get_device_name(), "cuda": torch.version.cuda,
         "dtype": "fp32_parameters_bf16_autocast", "batch_size": 1,
         **scope_summary,
+        **runtime_summary, "storage_estimate": storage,
+        "memory_log": memory_path.name if memory_path else None,
         "normalization_sha256": data.manifest["normalization_sha256"],
         **({"teacher_plan_log": plan_log_path.name} if plan_tokens else {}),
     })
@@ -318,7 +336,7 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
         "batch_size": 1, "action_chunk_size": 8, "seed": seed,
         "torch": str(torch.__version__), "cuda": torch.version.cuda,
         "initial_sha256": identity["initial_sha256"], "data_sha256": data_sha256,
-        **scope_summary,
+        **scope_summary, **runtime_summary,
           }) as timings,
           (output / f"metrics-{invocation_id}.jsonl").open("x", encoding="utf-8") as log,
           (plan_log_path.open("x", encoding="utf-8") if plan_tokens else nullcontext()) as plan_log):
@@ -330,7 +348,7 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
             elif from_s0:
                 metrics["task_l1"] = metrics["loss"]
             metrics.update(step=current.step, gpu=torch.cuda.get_device_name(),
-                           peak_allocated_bytes=torch.cuda.max_memory_allocated(),
+                           **cuda_memory(device),
                            elapsed_seconds=time.monotonic() - started)
             if current.step % settings["save_steps"] == 0 or current.step == limit:
                 held_out = settings["validation_queries"]
@@ -362,6 +380,10 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
                 hub.publish(checkpoint, final=current.step == target)
                 metrics["checkpoint_save_seconds"] = timings.finish(
                     save_started, "s0_checkpoint_save", step=current.step, phase="save")
+            if memory_path is not None:
+                record_memory(memory_path, device, "optimizer_boundary", step=current.step,
+                              validation_and_save=current.step % settings["save_steps"] == 0 or current.step == limit)
+                metrics.update(cuda_memory(device))
             log.write(json.dumps(metrics) + "\n")
             log.flush()
             print(json.dumps(metrics), flush=True)
@@ -370,7 +392,9 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
         try:
             if teacher_mode == "inference":
                 with timings.measure("t1_worker_startup", phase="setup"):
-                    online_teacher = InferenceActions(kd, data, timings=timings)
+                    offload = (StudentOffload(model, optimizer, device, timings=timings, memory_path=memory_path)
+                               if kd.get("teacher_residency") == "exclusive" else None)
+                    online_teacher = InferenceActions(kd, data, timings=timings, request_context=offload)
                 if online_teacher.signature != identity["teacher_inference"]:
                     raise ValueError("T1 identity changed before training")
                 teacher = online_teacher
@@ -386,6 +410,10 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
                                      skip=state.microsteps, episode_limit=episode_limit, with_plan=bool(plan_tokens)),
                      loss_fn=loss, max_steps=limit, accumulation_steps=accumulation, state=state,
                      on_step=on_step, timings=timings)
+        except torch.cuda.OutOfMemoryError:
+            if memory_path is not None:
+                record_memory(memory_path, device, "cuda_out_of_memory", step=state.step)
+            raise
         finally:
             try:
                 if online_teacher is not None:

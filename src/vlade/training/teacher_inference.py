@@ -14,7 +14,7 @@ import sys
 import threading
 import traceback
 import uuid
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Callable, ContextManager, Protocol
 from vlade.distillation.teacher_plan import InvalidTeacherPlan, normalize_plan, plan_token_budget, require_plan_supervision
 from vlade.utils.timing import RunTimings
 
@@ -134,13 +134,30 @@ class InferenceActions:
     """JSON pipes isolate incompatible AVA and Qwen Transformers environments."""
 
     def __init__(self, settings: dict, data: EpisodeData,
-                 timings: RunTimings | None = None, *, live: bool = False) -> None:
+                 timings: RunTimings | None = None, *, live: bool = False,
+                 request_context: Callable[[], ContextManager[None]] | None = None) -> None:
+        from vlade.training.residency import require_host_memory, validate_teacher_residency
+
+        residency = validate_teacher_residency(settings)
+        from vlade.training.teacher_parallel import validate_parallel
+        validate_parallel(settings.get("teacher_parallel"))
+        if settings.get("teacher_parallel") is not None and settings.get("teacher_device", "cuda:0") != settings["teacher_parallel"]["devices"][0]:
+            raise ValueError("Teacher device must match the parallel prefix device")
+        self.request_context = request_context
         self.timings = timings
         self.plan_tokens = plan_token_budget(settings)
         root, self.signature = teacher_identity(settings["teacher_checkpoint"], data)
         if self.plan_tokens:
             require_plan_supervision({"step": self.signature["step"],
                                       "plan_supervision": self.signature.get("plan_supervision")})
+        if residency == "exclusive":
+            teacher_bytes = sum(path.stat().st_size for path in root.iterdir() if path.is_file()
+                                and (path.name.startswith("model") and path.suffix == ".safetensors"
+                                     or path.name.startswith(("action_head--", "proprio_projector--",
+                                                              "vision_attn_weight_generator--"))))
+            budget = getattr(request_context, "host_budget_bytes", lambda: 0)
+            student_bytes = budget()
+            require_host_memory(teacher_bytes + student_bytes, purpose="T1 CPU load and Student offload")
         python = Path(settings["teacher_python"])
         if not python.is_file():
             raise FileNotFoundError("Set up the AVA inference runtime before Action KD")
@@ -154,9 +171,13 @@ class InferenceActions:
                        if timings is not None else [])
         plan_args = ["--plan-max-new-tokens", str(self.plan_tokens)] if self.plan_tokens else []
         live_args = ["--live-observations"] if live else []
+        residency_args = ["--offload-between-requests"] if residency == "exclusive" else []
+        if settings.get("teacher_parallel") is not None:
+            residency_args += ["--teacher-parallel", json.dumps(settings["teacher_parallel"])]
         self.process = subprocess.Popen([str(python), "-B", "-m", "vlade.training.teacher_inference",
             "--checkpoint", str(root), "--data", str(data.root),
-            "--device", settings.get("teacher_device", "cuda:0"), *timing_args, *plan_args, *live_args], cwd=code, env=env,
+            "--device", settings.get("teacher_device", "cuda:0"), *timing_args, *plan_args,
+            *live_args, *residency_args], cwd=code, env=env,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding="utf-8", bufsize=1)
         self.replies = queue.Queue()
 
@@ -200,9 +221,16 @@ class InferenceActions:
         return result
 
     def _send(self, request: dict) -> dict:
-        self.process.stdin.write(json.dumps(request) + "\n")
-        self.process.stdin.flush()
-        return self._receive()
+        with (self.request_context() if self.request_context else contextlib.nullcontext()):
+            try:
+                self.process.stdin.write(json.dumps(request) + "\n")
+                self.process.stdin.flush()
+                return self._receive()
+            except BaseException:
+                # A timeout does not imply T1 released CUDA. Stop it before the
+                # context restores the Student and its accumulated gradients.
+                self.close()
+                raise
 
     def reset_live(self) -> None:
         if self._send({"live": "reset"}) != {"live": "reset"}:
@@ -316,6 +344,8 @@ def main() -> None:
     parser.add_argument("--timing-session")
     parser.add_argument("--plan-max-new-tokens", type=int, default=0)
     parser.add_argument("--live-observations", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--offload-between-requests", action="store_true")
+    parser.add_argument("--teacher-parallel", type=json.loads)
     args = parser.parse_args()
     plan_tokens = plan_token_budget({"teacher_mode": "inference", "teacher_plan_max_new_tokens": args.plan_max_new_tokens})
     wire = sys.stdout
@@ -330,6 +360,7 @@ def main() -> None:
             from vlade.storage.assets import resolve_input
             from vlade.data.episode_data import EpisodeData
             from vlade.training.fixed_cache import SequentialTeacher
+            from vlade.training.residency import teacher_on_device
             import torch
 
             data = EpisodeData(resolve_input(args.data))
@@ -337,33 +368,55 @@ def main() -> None:
             timings = (stack.enter_context(RunTimings(args.timing_dir, role="t1", device=args.device,
                 session_id=args.timing_session, metadata={
                     "gpu": torch.cuda.get_device_name(args.device) if args.device.startswith("cuda") else "cpu",
-                    "dtype": "bfloat16", "batch_size": 1, "action_chunk_size": 8,
+                    "dtype": args.teacher_parallel["dtype"] if args.teacher_parallel else "bfloat16",
+                    "batch_size": 1, "action_chunk_size": 8,
                     "torch": str(torch.__version__), "cuda": torch.version.cuda,
                     "checkpoint_manifest_sha256": signature["checkpoint_manifest_sha256"],
                 })) if args.timing_dir is not None else None)
             with (timings.measure("t1_model_load") if timings is not None else contextlib.nullcontext()):
-                policy = SequentialTeacher(root, device=args.device,
-                    temporal_feature_layer=signature["temporal_feature_layer"], timings=timings)
+                policy = SequentialTeacher(root, device="cpu" if args.offload_between_requests else args.device,
+                    temporal_feature_layer=signature["temporal_feature_layer"], timings=timings,
+                    **({"teacher_parallel": args.teacher_parallel} if args.teacher_parallel else {}))
             teacher = EpisodeTeacher(policy, data, timings=timings)
+            memory_path = None
+            if args.offload_between_requests and args.timing_dir is not None:
+                from vlade.training.memory import record_memory
+                memory_path = args.timing_dir / f"memory-t1-{uuid.uuid4().hex[:12]}.jsonl"
+                torch.cuda.reset_peak_memory_stats(args.device)
+                record_memory(memory_path, args.device, "teacher_cpu_ready")
             reply({"ready": signature})
             for line in sys.stdin:
                 request = json.loads(line)
                 if args.live_observations:
                     from vlade.evaluation.plan_observations import live_response
 
-                    reply(live_response(policy, request, plan_tokens))
+                    with teacher_on_device(policy, args.device, exclusive=args.offload_between_requests):
+                        response = live_response(policy, request, plan_tokens)
+                    reply(response)
                     continue
                 episode, timestep = request["episode_id"], request["timestep"]
                 signal = request.get("signal", "action")
                 if signal not in {"action", "action_and_plan", "plan"} or (signal != "action" and not plan_tokens):
                     raise ValueError("Unsupported T1 signal request")
                 response = dict(request)
-                if signal != "plan":
-                    action = teacher.get(episode, timestep)
-                    response["action"] = action.detach().float().cpu().tolist()
-                if signal != "action":
-                    split = request["split"] if signal == "plan" else "train"
-                    response["plan"] = teacher.plan(episode, timestep, split=split, max_new_tokens=plan_tokens)
+                with teacher_on_device(policy, args.device, exclusive=args.offload_between_requests):
+                    if signal != "plan":
+                        action = teacher.get(episode, timestep)
+                        response["action"] = action.detach().float().cpu().tolist()
+                    if signal != "action":
+                        split = request["split"] if signal == "plan" else "train"
+                        response["plan"] = teacher.plan(episode, timestep, split=split, max_new_tokens=plan_tokens)
+                    if memory_path is not None:
+                        placement = getattr(policy.model, "_vlade_teacher_placement", None)
+                        devices = placement.devices if placement is not None else [args.device]
+                        for measured_device in devices:
+                            record_memory(memory_path, measured_device, "teacher_query_complete",
+                                          measured_device=str(measured_device), **request)
+                if memory_path is not None:
+                    for measured_device in devices:
+                        record_memory(memory_path, measured_device, "teacher_offloaded",
+                                      measured_device=str(measured_device), **request)
+                # GPU eviction must finish before the Student may be restored.
                 reply(response)
         except Exception as error:
             traceback.print_exc(file=sys.stderr)

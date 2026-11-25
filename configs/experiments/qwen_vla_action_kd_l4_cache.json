@@ -1,0 +1,37 @@
+{
+  "model_config": "configs/models/student/qwen_vla_0_8b.json",
+  "initialization": "student_checkpoint",
+  "initial_checkpoint": "hfasset://S0",
+  "data": "hfasset://prepared_d_seed42",
+  "seed": 42,
+  "max_steps": 100,
+  "accumulation_steps": 8,
+  "learning_rate": 0.00002,
+  "weight_decay": 0.01,
+  "save_steps": 25,
+  "validation_queries": 32,
+  "trainable_scope": "full",
+  "top_layer_count": 0,
+  "memory_profile": {
+    "name": "colab_l4_24gb",
+    "parameter_dtype": "float32",
+    "autocast_dtype": "bfloat16",
+    "attention_backend": "sdpa",
+    "gradient_checkpointing": true,
+    "microbatch_size": 1,
+    "effective_batch_size": 8,
+    "reserve_gib": 2
+  },
+  "workflow": {
+    "variant": "gt_kd",
+    "registry_revision": "195d32e54c7f48960411c32963d91746183de488",
+    "checkpoint_pins": {}
+  },
+  "distillation": {
+    "teacher_mode": "cache",
+    "teacher_cache": "hfasset://teacher_cache_t1",
+    "teacher_plan_max_new_tokens": 0,
+    "task_weight": 1.0,
+    "action_kd_weight": 1.0
+  }
+}

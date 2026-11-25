@@ -1,5 +1,8 @@
 # AVA Teacher Plan 생성과 지도학습
 
+기존 T1의 Plan 학습을 실행할 준비는 [전용 노트북](../../experiments/colab_teacher_plan_training.ipynb)과
+[주석·파일럿·본 학습 안내](teacher_plan_training.md)를 따릅니다. 아래는 생성 경계와 학습 계약의 설명입니다.
+
 ## `ouch` / `imas`의 원인 범위
 
 2026-11-24 사용자 로그는 Train t=0/8의 `ouch`, Validation t=0/8의 `imas`입니다.

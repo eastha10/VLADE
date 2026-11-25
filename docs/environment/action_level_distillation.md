@@ -4,10 +4,35 @@ QwenVLA schema 2 S0에서 시작해 LIBERO+ 시범 액션과 고정 AVA T1의 Ac
 두 손실은 동일한 정규화 공간의 `[B, 8, 7]` masked L1이며 에피소드 끝의 패딩을 제외합니다.
 기본 손실은 `GT L1 + λ × Teacher L1`입니다.
 
+L4 24GB에서 같은 연구 조건으로 새 실행을 준비하려면 [L4 설정·파일럿 안내](colab_l4_training.md)를
+따릅니다. cache가 있으면 검증하여 재사용하고, 온라인 T1은 Student와 번갈아 GPU에 적재합니다.
+
 | 실험 | JSON 설정 | Colab |
 |---|---|---|
 | S1 Action-only 훈련 | [qwen_vla_action_kd.json](../../configs/experiments/qwen_vla_action_kd.json) | [Action KD](../../experiments/colab_action_distillation.ipynb) |
 | S2 Action+CoT 훈련 | [qwen_vla_plan_kd.json](../../configs/experiments/qwen_vla_plan_kd.json) | [CoT+Action KD](../../experiments/colab_teacher_plan_kd.ipynb) |
+
+## S2 준비 노트북
+
+[CoT+Action KD 준비 노트북](../../experiments/colab_cot_action_kd_ready.ipynb)은 설정·재개 메모,
+T1 probe, checkpoint/Hub metadata 검사와 작은 결과 ZIP을 포함합니다. 실행 소스는
+`4b24ece9dbdc5cb690a1bab189c121af85d95967`로 고정되어 있으며 현재 로컬의 미커밋 변경은 사용하지 않습니다.
+
+1. Colab의 BF16 GPU 런타임과 비공개 저장소 읽기·쓰기 권한이 있는 Secrets `HF_TOKEN`을 준비합니다.
+   기본 실행은 A100급에서 메모리를 확인합니다. 이 노트북은 L4 전용 설정을 선택하지 않습니다.
+2. Plan 지도학습 이력이 있는 게시된 T1을 `TEACHER_CHECKPOINT_PIN`의 `repo_id`, 불변 `revision`,
+   `prefix`로 지정합니다. 빈 설정은 고정 registry의 T1을 검사하며, Action-only T1이면 중단합니다.
+   준비 노트북 자체가 새 Teacher를 학습하거나 Plan 주석을 만들지는 않습니다.
+3. 설정 → 소스 → 계획/재개 메모 → setup → preflight → probe 순서로 실행합니다.
+   probe는 Train·Validation 양쪽의 플랜과 Train의 `[8, 7]` 액션 형태를 검사합니다.
+4. probe 원문을 확인한 뒤 `RUN_PILOT=True`로 1-step 파일럿을 실행합니다.
+   로컬 봉인·손실 항·gradient와 HF의 고정 revision에 있는 pointer·완료 표시·manifest를 대조합니다.
+   원격 가중치 전체를 재다운로드해 검사하는 것은 아닙니다.
+5. 파일럿 검사 통과 후 `RUN_TRAIN=True`로 같은 run의 목표 step까지 이어갑니다.
+   재개 메모와 최종 `CHECKPOINT_PINS`를 보관합니다. 업로드 실패는 원본을 보존하고 retry 셀로 복구합니다.
+
+`RUN_PILOT`과 `RUN_TRAIN`은 기본 False입니다. 노트북의 CPU 검사 통과는 실제 GPU 학습이나
+T1 플랜의 의미 품질을 입증하지 않습니다. 아래 CoT 조건과 별도 rollout 평가를 함께 확인하십시오.
 
 ## 실행 및 재개
 
@@ -50,6 +75,8 @@ CLI에서는 같은 JSON을 `--resume-revisions`에 전달합니다. `last`에�
 현재 액션 L1로 학습한 T1은 Plan 지도학습이 확인된 체크포인트가 아닙니다. CoT 실행은
 호환되는 봉인 `plan_supervision`이 없으면 중단합니다. 원인 범위, 선택적 Plan CE·주석 입력과
 새 학습/재개 절차는 [Teacher Plan 안내](teacher_plan_generation.md)를 따릅니다.
+기존 T1에서 새 Plan-supervised Teacher를 준비하는 실행본은
+[T1 Plan 학습 노트북](../../experiments/colab_teacher_plan_training.ipynb)과 [학습 안내](teacher_plan_training.md)입니다.
 
 T1은 같은 시점의 관측에서 Action Chunk와 짧은 접근 플랜을 제공합니다. Student는 플랜 문자열을 입력으로 받고
 액션 L1 손실로 학습합니다. `teacher_plan_max_new_tokens`의 기본값은 Action-only에서 0, CoT+Action에서 48입니다.

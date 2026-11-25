@@ -71,7 +71,7 @@ def validate_selection(selection: dict, data: EpisodeData) -> Path:
 
 class SequentialTeacher:
     def __init__(self, checkpoint: Path, *, device: str = "cuda:0", temporal_feature_layer: int = -2,
-                 timings=None):
+                 timings=None, teacher_parallel: dict | None = None):
         from vlade.storage.assets import resolve_path
         checkpoint = resolve_path(checkpoint)
         metadata_path = checkpoint / "vlade_fft.json"
@@ -79,12 +79,16 @@ class SequentialTeacher:
         from vlade.training.fft import FFTConfig, _activate_upstream, _make_model_and_components
         configure_tensorflow_cpu()
         _activate_upstream("ava_vla")
-        cfg = FFTConfig("ava_vla", checkpoint, Path("."), Path("."), gradient_checkpointing=False)
+        cfg = FFTConfig("ava_vla", checkpoint, Path("."), Path("."), gradient_checkpointing=False,
+                        teacher_parallel=teacher_parallel)
         self.device = torch.device(device)
         self.timings = timings
         self._timing_predictions = 0
         self.temporal_feature_layer = temporal_feature_layer
         self.model, self.processor, self.head, self.proprio, self.generator = _make_model_and_components(cfg, self.device)
+        self.dtype = getattr(torch, teacher_parallel["dtype"]) if teacher_parallel else torch.bfloat16
+        if teacher_parallel:
+            self.execution_identity = self.model._vlade_teacher_placement.summary()
         for module in (self.model, self.head, self.proprio, self.generator):
             module.eval()
             module.requires_grad_(False)
@@ -102,7 +106,7 @@ class SequentialTeacher:
         inputs = self.processor(prompt, data.image(sample, "primary"), return_tensors="pt")
         wrist = self.processor(prompt, data.image(sample, "wrist"), return_tensors="pt")
         inputs["pixel_values"] = torch.cat((inputs["pixel_values"], wrist["pixel_values"]), dim=1)
-        return {key: value.to(self.device, dtype=torch.bfloat16 if value.is_floating_point() else value.dtype)
+        return {key: value.to(self.device, dtype=getattr(self, "dtype", torch.bfloat16) if value.is_floating_point() else value.dtype)
                 for key, value in inputs.items()}
 
     @torch.inference_mode()
@@ -126,9 +130,11 @@ class SequentialTeacher:
         with (self.timings.measure("t1_plan_generation", phase="inference",
                                   episode_id=sample["episode_id"], timestep=sample["timestep"])
               if self.timings is not None else nullcontext()):
-            generated = model.language_model.generate(
-                inputs_embeds=prefix, attention_mask=mask, **generation,
-            )
+            from vlade.training.teacher_parallel import generation_outputs
+            with generation_outputs(model, prefix.device):
+                generated = model.language_model.generate(
+                    inputs_embeds=prefix, attention_mask=mask, **generation,
+                )
         token_ids = generated[0].tolist()
         try:
             return decode_plan_tokens(token_ids, tokenizer)
@@ -175,6 +181,8 @@ def generate(data: EpisodeData, teacher: Any, selection: dict, output: Path, *, 
                     Path(__file__).with_name("run_control.py"), Path(__file__).parents[1] / "data/episode_data.py",
                     Path(__file__).parents[1] / "data/teacher_records.py"]),
                 "software": {"torch": str(torch.__version__), "transformers": importlib.metadata.version("transformers")}}
+    if getattr(teacher, "execution_identity", None) is not None:
+        identity["teacher_execution"] = teacher.execution_identity
     output.mkdir(parents=True, exist_ok=True)
     config_path = output / "cache_config.json"
     if config_path.exists():
@@ -264,6 +272,11 @@ def generate(data: EpisodeData, teacher: Any, selection: dict, output: Path, *, 
               "replay_scope": "up_to_three_uniformly_spaced_complete_episodes_all_queries",
               "replayed_episodes": replayed,
               "teacher_training_temporal_policy": selection.get("training_temporal_policy", "unknown")}
+    placement = getattr(getattr(teacher, "model", None), "_vlade_teacher_placement", None)
+    if placement is not None:
+        from vlade.training.memory import cuda_memory
+        result["teacher_execution"] = placement.summary()
+        result["teacher_devices"] = {str(device): cuda_memory(device) for device in placement.devices}
     write_json(output / "cache_manifest.json", result)
     (output / "COMPLETE").write_text("ok\n", encoding="utf-8")
     return result
