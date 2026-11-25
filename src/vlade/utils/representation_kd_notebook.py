@@ -23,6 +23,7 @@ S2_RUN_GROUP = globals().get('S2_RUN_GROUP') or (
 S1_RUN_CONTRACT = ""
 REPRESENTATION_WEIGHT = 1.0  # 초기 실험값이며 검증된 최적값이 아닙니다.
 S2_RESUME_REVISIONS = {}  # 재개 예: {'S2': '40자리 HF commit SHA'}
+S2_RECOVER_PREFLIGHT_FROM = ''  # 학습 전 실패한 run의 소스 전환에만 이전 commit을 지정합니다.
 ACTION = 'plan'  # plan → preflight → pilot → train, 전송 실패 시 retry
 '''
 
@@ -52,11 +53,15 @@ from vlade.research.distillation import main, load_settings
 from vlade.runtime.environment import locate
 from vlade.utils.source_identity import source_identity
 
-code, work, commit, group, action, s1_contract, weight, revisions = sys.argv[1:]
+code, work, commit, group, action, s1_contract, weight, revisions = sys.argv[1:9]
+recover_from = sys.argv[9] if len(sys.argv) > 9 else ''
 code, work = Path(code), Path(work)
 if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}', group):
     raise ValueError('S2_RUN_GROUP은 영문·숫자·밑줄·하이픈으로 지정하십시오.')
-assert source_identity(code, require_clean=True)['git_commit'] == commit
+if source_identity(code, require_clean=True)['git_commit'] != commit:
+    raise ValueError('S2_CODE와 S2_SOURCE_COMMIT이 일치하지 않습니다.')
+folder = work / 'runs' / group
+config = folder / 'representation-config.json'
 base = json.loads((code / 'configs/experiments/qwen_vla_representation_kd.json').read_text())
 if s1_contract:
     contract = json.loads(Path(s1_contract).read_text())
@@ -70,6 +75,9 @@ if s1_contract:
     base['workflow'] = copy.deepcopy(contract['workflow'])
     base['distillation']['representation'] = rep
     print('S1 조건 상속:', s1_contract, flush=True)
+elif config.is_file():
+    base = json.loads(config.read_text())
+    print('기존 S2 설정·입력 pin 재사용:', config, flush=True)
 else:
     print('비교 기준: 저장소 S1 기본 설정. 실제 S1 override/pin은 S1_RUN_CONTRACT로 상속하십시오.', flush=True)
 base['distillation']['representation']['weight'] = float(weight)
@@ -78,7 +86,6 @@ if action != 'plan':
     locate(code, work, 'student')
     locate(code, work, 'ava')
 # 실행 설정은 현재 run 디렉터리에만 두고, 원래 S1 파일을 수정하지 않습니다.
-folder = work / 'runs' / group
 if action == 'plan':
     workflow, variants = load_settings(base, {})
     print(json.dumps({'workflow': workflow, 'variants': variants, 'run_group':group,
@@ -86,11 +93,15 @@ if action == 'plan':
         'hub_runs':{'S2':'runs/' + group + '/S2'}}, indent=2), flush=True)
 else:
     folder.mkdir(parents=True, exist_ok=True)
-    config = folder / 'representation-config.json'
     content = json.dumps(base, indent=2) + '\n'
     if config.exists() and config.read_text() != content:
         raise ValueError('S2 설정이 변경되었습니다. 새 S2_RUN_GROUP을 지정하십시오.')
     config.write_text(content)
+    if recover_from:
+        if action != 'preflight' or json.loads(revisions):
+            raise ValueError('소스 복구는 학습 전 preflight에서만 실행합니다.')
+        from vlade.research.representation_recovery import recover_preflight_source
+        recover_preflight_source(code, work, group, recover_from)
     main(['--config', str(config), '--workspace', str(work), '--run-group', group,
           '--action', action, '--resume-revisions', revisions])
 """
@@ -119,9 +130,64 @@ def stream_s2(command, *, cwd, env):
 
 stream_s2([sys.executable, '-B', '-u', '-c', CLIENT, str(S2_CODE), str(S2_WORKSPACE),
            S2_SOURCE_COMMIT, S2_RUN_GROUP, ACTION, str(S1_RUN_CONTRACT),
-           str(REPRESENTATION_WEIGHT), json.dumps(S2_RESUME_REVISIONS)],
+           str(REPRESENTATION_WEIGHT), json.dumps(S2_RESUME_REVISIONS),
+           str(globals().get('S2_RECOVER_PREFLIGHT_FROM', ''))],
           cwd=S2_CODE, env=env)
+S2_RECOVER_PREFLIGHT_FROM = ''
 print('S2 source:', S2_SOURCE_COMMIT, '| run:', S2_RUN_GROUP)
+'''
+
+
+RECOVERY_CELL = r'''
+# 아래 셀 하나를 기존 Colab 세션에 복사합니다. 기존 두 셀을 다시 실행할 필요가 없습니다.
+import json, re, subprocess
+from pathlib import Path
+
+S2_FIX_COMMIT = ''  # 원격 게시된 수정 소스의 40자리 commit을 지정합니다.
+if not re.fullmatch(r'[0-9a-f]{40}', S2_FIX_COMMIT):
+    raise ValueError('S2_FIX_COMMIT에 수정 소스의 불변 commit을 지정하십시오.')
+_s2_old_commit = '49a3ec6b07a18b761d32670c2c05cd165e08cdc7'
+_s2_group = 's2-repr-20261125T081316Z-88f7798e'
+_s2_work = Path(globals().get('S2_WORKSPACE', '/content/vlade_distillation')).resolve()
+if _s2_work != Path('/content/vlade_distillation'):
+    raise ValueError('실패한 실행의 기존 S2_WORKSPACE가 아닙니다.')
+if globals().get('S2_RUN_GROUP', _s2_group) != _s2_group:
+    raise ValueError('다른 S2_RUN_GROUP이 활성화되어 있습니다.')
+if globals().get('S2_SOURCE_COMMIT', _s2_old_commit) not in {_s2_old_commit, S2_FIX_COMMIT}:
+    raise ValueError('기존 S2_SOURCE_COMMIT을 확인하십시오.')
+if globals().get('S2_RESUME_REVISIONS', {}):
+    raise ValueError('이 셀은 checkpoint 재개용이 아니라 실패한 preflight 복구용입니다.')
+_s2_config = json.loads((_s2_work / 'runs' / _s2_group / 'representation-config.json').read_text())
+_s2_inputs = json.loads((_s2_work / 'runs' / _s2_group / 'inputs.json').read_text())
+for _key, _revision in {
+    'S0': '380f8fb1bd828d42e7f396d6979d699b0b7d0cff',
+    'T1': '1fdc672416f2129624b22022e6977345a3b429e3',
+    'prepared_d_seed42': '6d2542577647a9e291554524af4e1dd0928e9df6',
+}.items():
+    if _s2_inputs['assets'][_key]['revision'] != _revision:
+        raise ValueError('기존 HF 입력 pin이 다릅니다: ' + _key)
+_s2_code = Path('/content/vlade_sources') / S2_FIX_COMMIT
+if not _s2_code.exists():
+    subprocess.run(['git', 'clone', '--no-checkout', '--filter=blob:none',
+                    'https://github.com/eastha10/VLADE.git', str(_s2_code)], check=True)
+    subprocess.run(['git', '-C', str(_s2_code), 'fetch', '--depth', '1', 'origin', S2_FIX_COMMIT], check=True)
+    subprocess.run(['git', '-C', str(_s2_code), 'checkout', '--detach', S2_FIX_COMMIT], check=True)
+if subprocess.check_output(['git', '-C', str(_s2_code), 'rev-parse', 'HEAD'], text=True).strip() != S2_FIX_COMMIT:
+    raise ValueError('수정 소스 경로의 commit이 다릅니다.')
+_s2_notebook = json.loads((_s2_code / 'experiments/colab_s2_representation_kd_existing_session.ipynb').read_text())
+_s2_run_cell = ''.join(next(c for c in _s2_notebook['cells'] if c['id'] == 'run')['source'])
+# 새 실행 셀이 CLIENT까지 다시 정의하므로 옛 CLIENT와 새 경로가 섞이지 않습니다.
+# 커널의 CODE/SOURCE_COMMIT 및 기존 환경·cache는 유지합니다.
+S2_SOURCE_COMMIT, S2_CODE = S2_FIX_COMMIT, _s2_code
+S2_WORKSPACE, S2_RUN_GROUP = _s2_work, _s2_group
+S1_RUN_CONTRACT = ''  # 저장된 S2 설정에 이미 반영된 S1 조건을 그대로 사용합니다.
+REPRESENTATION_WEIGHT = _s2_config['distillation']['representation']['weight']
+S2_RESUME_REVISIONS = {}
+S2_RECOVER_PREFLIGHT_FROM = _s2_old_commit
+ACTION = 'preflight'
+exec(compile(_s2_run_cell, str(_s2_code / 's2-existing-session-run'), 'exec'), globals())
+# 성공 후 다음 별도 셀: ACTION = 'pilot'; exec(_s2_run_cell, globals())
+# pilot의 저장·HF 게시 성공을 확인한 뒤: ACTION = 'train'; exec(_s2_run_cell, globals())
 '''
 
 
@@ -150,7 +216,17 @@ def write_notebook(path: Path) -> Path:
         Qwen→Llama2 학습 가능 projection을 적용합니다. 차원·층은 실제 config로 확인합니다.
         validation/best는 S1과 동일한 plan-free GT L1이며 projection은 추론에 필요 없습니다.
         실제 A100 메모리·학습 성공·rollout 성능은 pilot/평가로 확인해야 합니다.
-    """, "purpose"), cell("code", CONFIG_CELL, "config"), cell("code", RUN_CELL, "run")]
+    """, "purpose"), cell("code", CONFIG_CELL, "config"), cell("code", RUN_CELL, "run"),
+        cell("markdown", """
+        ## 2026-11-25 preflight 실패 실행 복구
+
+        `49a3ec6...`의 text config 오류로 중단한 `s2-repr-20261125T081316Z-88f7798e`만
+        아래 셀 하나로 복구합니다. 위 설정/실행 셀을 먼저 실행하지 마십시오.
+        수정 commit을 지정하면 기존 workspace·run group·세 HF 입력 pin·effective settings를
+        유지하고 새 경로의 실행 셀과 CLIENT를 함께 적재합니다. 설치나 A100 재연결은 없습니다.
+        로컬/원격 학습 결과가 있으면 소스 전환을 거절하며, 이전 preflight 계약 원문을 보존합니다.
+        이 셀은 preflight까지만 실행합니다. 실제 GPU pilot과 HF 저장 성공은 별도로 확인하십시오.
+        """, "recovery-purpose"), cell("code", RECOVERY_CELL, "recover-preflight")]
     value = {"cells": cells, "metadata": {"accelerator": "GPU", "colab": {"gpuType": "A100"},
         "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"}},
         "nbformat": 4, "nbformat_minor": 5}

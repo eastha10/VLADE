@@ -274,7 +274,8 @@ def run(settings: dict, output: Path, *, resume: Path | None = None, stop_after:
         if rep_settings is not None:
             identity["representation"] = representation_contract(teacher_root,
                 student_dim=config.hidden_size, student_layer=config.temporal_feature_layer,
-                teacher_layer=identity["teacher_inference"]["temporal_feature_layer"])
+                teacher_layer=identity["teacher_inference"]["temporal_feature_layer"],
+                teacher_python=Path(kd["teacher_python"]))
         if plan_tokens:
             from vlade.legacy.plan_cot.distillation.teacher_plan import plan_generation_provenance
             signature = identity["teacher_inference"]

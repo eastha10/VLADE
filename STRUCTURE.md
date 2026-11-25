@@ -188,6 +188,8 @@ S2 표현 증류는 `src/vlade/distillation/representation{,_config}.py`,
 `experiments/colab_s2_representation_kd_existing_session.ipynb`의 정본은
 `src/vlade/utils/representation_kd_notebook.py`이며 생성 진입점은
 `scripts/prepare/generate_representation_kd_notebook.py`입니다.
+`src/vlade/research/representation_recovery.py`는 학습 전 실패한 S2 preflight의
+입력·설정을 보존하고 이전 계약을 기록한 뒤 소스 commit만 전환합니다.
 실행·검증 범위는 `docs/environment/s2_representation_distillation.md`를 따릅니다.
 
 공통 루프의 loss callback에 action/representation KD를 연결합니다.

@@ -21,7 +21,9 @@ LM head는 동일했습니다. 이 관측을 자연어 생성의 모든 가능�
   기존 AVA 에피소드 상태·쿼리 재생·Student TBPTT 경계를 유지합니다.
 - Qwen `[B,56,1024]`에 학습 가능한 bias 없는 Linear를 적용해 Llama2 `[B,56,4096]`로 보냅니다.
   이 숫자는 기본 config의 값이며 실행 시 **검증된 T1 config와 Student config에서 차원을 읽어**
-  provenance에 저장합니다. AVA Llama2가 아닌 Teacher config는 거절합니다.
+  provenance에 저장합니다. AVA Llama2가 아닌 Teacher config는 거절합니다. HF의 diff 직렬화가
+  기본 차원·층 수를 생략할 수 있으므로, 기존 AVA Python의 프로젝트 `OpenVLAConfig`로
+  유효 설정을 복원합니다. 가중치·tokenizer 로딩이나 환경 설치는 하지 않습니다.
 - 각 유효 벡터에 affine 없는 LayerNorm을 적용한 뒤 FP32 MSE를 계산합니다.
   Teacher는 eval/frozen이며 목표를 detach합니다. Projection과 Student 모두 gradient를 받습니다.
   Projection 초기화는 Student RNG를 진행시키지 않습니다.
@@ -53,8 +55,8 @@ representation 설정만 추가합니다. 비교 기준 S1은 온라인 Action-o
 [generate_representation_kd_notebook.py](../../scripts/prepare/generate_representation_kd_notebook.py)입니다.
 
 1. `S2_SOURCE_COMMIT`에 **이 구현이 포함되고 원격에서 읽을 수 있는 40자리 Git commit**을 지정합니다.
-   현재 작업은 commit/push/Drive 배포를 수행하지 않습니다. 로컬 미커밋 변경은 Colab에서 받을 수
-   없으므로, 소스 게시 전에는 셀을 실행해 학습할 수 없습니다. 기존 소스 identity 검사를 완화하지 않습니다.
+   로컬 미커밋 변경은 Colab에서 받을 수 없으므로 원격에 게시된 소스가 필요합니다.
+   기존 소스 identity 검사를 유지합니다. Drive 배포는 별도 요청이 필요합니다.
 2. `S2_WORKSPACE=Path(WORKSPACE)`로 현재 설치된 Student/AVA 환경과 HF cache를 재사용합니다.
    실제 S1의 `run-contract.json`이 있다면 지정하고 새 `S2_RUN_GROUP`을 기록합니다.
    `locate(..., 'student')`에서 환경이 없다고 나오면
@@ -77,6 +79,36 @@ representation 설정만 추가합니다. 비교 기준 S1은 온라인 Action-o
 6. `pilot`은 기존 목표 schedule·누적 8을 유지하는 **1 optimizer step**입니다.
    `representation_mse`, `task_l1`, `action_kd_l1`, `grad_norm`의 유한값과 저장·Hub 게시를 확인한 뒤
    `train`으로 목표 step까지 재개합니다. A100 실제 메모리·속도·학습 성공은 여기에서 확인해야 합니다.
+
+### 2026-11-25 T1 설정 오류 복구
+
+T1 revision `1fdc672416f2129624b22022e6977345a3b429e3`의
+`assets/T1/files/config.json`은 61,603 bytes이며 SHA256은
+`ad44d42ca864f5322f001d192e5f14300d8c5674636d869a5b9ac3c3f5e1a47b`입니다.
+`llm_backbone_id='llama2-7b-pure'`, `text_config.model_type='llama'`이지만
+`hidden_size`·`num_hidden_layers`는 JSON에 없습니다. `OpenVLAConfig`의 Llama 설정 복원으로
+4096차원·32층이 됩니다. 소스 `49a3ec6...`의 preflight는 생략된 두 필드를 오류로 처리했습니다.
+T1 자체를 수정하거나 다시 학습할 필요가 없습니다.
+
+전용 노트북의 `recover-preflight` 셀은 이 오류로 중단한
+`s2-repr-20261125T081316Z-88f7798e`를 위한 완전한 복구 셀입니다.
+수정 소스의 불변 commit만 입력하고 **이 셀 하나를 기존 세션에서 실행**합니다.
+`S2_WORKSPACE`, 저장된 `representation-config.json`·`inputs.json`·학습 조건을 재사용하며
+S0/T1/prepared pin을 각각 `380f8fb...`, `1fdc672...`, `6d25425...`로 확인합니다.
+`S2_CODE`·`S2_SOURCE_COMMIT`·`CLIENT`는 모두 같은 새 소스를 사용합니다.
+기존 커널의 `CODE`·`SOURCE_COMMIT`과 기존 소스 경로·환경·캐시를 교체하지 않습니다.
+
+`src/vlade/research/representation_recovery.py`는 저장된 설정과 run 계약의 일치,
+입력 registry 불변, 비공개 Hub 및 해당 group의 원격 결과 부재를 확인합니다.
+로컬 `S2/`·checkpoint·metrics·pending 등 학습 출력이나 알 수 없는 파일이 있으면 거절합니다.
+이전 계약 원문은 같은 run의 `preflight-source-<이전 commit>.json`에 보존하고 현재 계약의
+`git_commit`만 새 값으로 전환합니다. 일반 checkpoint 재개의 소스 검사는 완화하지 않습니다.
+
+복구 셀은 `preflight`까지만 실행합니다. 성공 후 같은 세션에서
+`ACTION='pilot'; exec(_s2_run_cell, globals())`를 실행하고,
+실제 1 step·checkpoint·HF 게시 성공을 확인한 다음
+`ACTION='train'; exec(_s2_run_cell, globals())`로 같은 run을 재개합니다.
+같은 group/output에 다른 프로세스를 동시에 실행하지 마십시오.
 
 저장소 기본 조건을 CLI로 조회할 때는 다음을 사용합니다. `plan`은 모델 다운로드나 GPU 사용을 하지 않습니다.
 

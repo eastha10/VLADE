@@ -29,6 +29,8 @@ S2의 **T1 중간 표현 + Action Distillation**은 [구현·정렬·실행 안�
 [기존 A100 세션용 셀](experiments/colab_s2_representation_kd_existing_session.ipynb)을 사용합니다.
 AVA Llama2/Qwen3.5-0.8B의 액션 슬롯을 학습 전용 projection으로 정렬하며 자연어 Plan 없이 실행합니다.
 기존 환경·HF 캐시를 재사용하고 새 Git commit의 소스는 별도 프로세스에 적재합니다.
+T1의 생략된 설정 기본값은 기존 AVA 환경에서 복원하며, 전용 노트북에 학습 전 preflight
+실패 run의 입력·설정을 유지하는 소스 복구 셀이 있습니다.
 S1 Action KD는 [전용 노트북](experiments/colab_action_distillation.ipynb)과
 [실행 안내](docs/environment/action_level_distillation.md)를 사용합니다.
 
