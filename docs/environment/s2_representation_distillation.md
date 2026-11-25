@@ -57,6 +57,12 @@ representation 설정만 추가합니다. 비교 기준 S1은 온라인 Action-o
    없으므로, 소스 게시 전에는 셀을 실행해 학습할 수 없습니다. 기존 소스 identity 검사를 완화하지 않습니다.
 2. `S2_WORKSPACE=Path(WORKSPACE)`로 현재 설치된 Student/AVA 환경과 HF cache를 재사용합니다.
    실제 S1의 `run-contract.json`이 있다면 지정하고 새 `S2_RUN_GROUP`을 기록합니다.
+   `locate(..., 'student')`에서 환경이 없다고 나오면
+   `python -B -m vlade.runtime.existing --workspace <기존 workspace>`로 `/content`의 직접 하위
+   workspace에서 같은 설정의 완료 환경을 확인·재연결할 수 있습니다. 기존 cache/output은
+   이동하지 않습니다. 기본값은 설치하지 않으며, 일치하는 Student가 없을 때만
+   `--allow-student-setup`을 명시하면 Student 전용 분리 환경을 준비합니다. 패키지 다운로드가
+   발생할 수 있으며 호스트·AVA 환경을 재설치하지 않습니다. AVA가 없으면 먼저 중단합니다.
 3. 새 소스를 `/content/vlade_sources/<commit>`에 별도 checkout하고, **별도 자식 프로세스**로
    실행합니다. 현재 커널의 `vlade` import·기존 CODE/SOURCE_COMMIT·학습 출력은 교체하지 않습니다.
    이미 import된 소스 때문에 커널을 재시작할 필요가 없습니다. `locate`로 기존 환경 규격을 확인하며

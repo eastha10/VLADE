@@ -127,3 +127,27 @@ SHA가 같은 값임을 확인했습니다. 별도 Plan 변경은 작업 트리�
 artifact 검사는 소스 7개 compile·notebook 스키마/생성 일치·JSON·링크를 통과했습니다.
 실제 Colab 실패 원인 확인과 A100 실행은 미완료이며, 사용자에게 기존 CLIENT를
 preflight로 재실행해 실제 로그를 표시하는 셀을 제공합니다.
+
+로그 수정은 `dc16c9cef9ed3da528e8b3565a16bd9c39fe0057`로 main에 게시했고
+원격 main SHA의 일치를 확인했습니다. 현재 사용자 세션의 실패 원인은 아직 관측되지 않았습니다.
+
+## Student 환경 경로 오류 확인과 복구 도구
+
+사용자가 추가로 제공한 로그에서 `locate(code, work, 'student')`가 FileNotFoundError로
+중단한 것을 확인했습니다. 지정 workspace의 현재 설정에 해당하는 Python/완료 metadata가
+없다는 범위까지만 확인되며, Colab 전체에 Student가 없다는 뜻은 아닙니다. A100 학습 진입 전입니다.
+
+`src/vlade/runtime/existing.py`는 로컬 `/content`의 직접 하위 workspace에서 같은 설정·완료
+metadata의 Student/AVA 환경만 조회하고 기존 workspace에 directory alias로 연결합니다.
+캐시·run output·기존 환경을 이동/삭제/덮어쓰기하지 않습니다. 후보가 여러 개거나 기존 대상이
+불완전하면 중단합니다. 기본값은 설치하지 않으며 `--allow-student-setup`을 명시한 경우에만
+누락된 Student를 기존 `prepare`로 분리 설치합니다. AVA 존재·기존 patch 검증이 먼저 필요합니다.
+호스트/AVA 재설치·커널 재시작·데이터 다운로드·HF 검사 완화는 포함하지 않습니다.
+STRUCTURE와 S2 실행 안내를 맞췄습니다.
+
+`test_existing_runtime.py`를 고유 `scratch/pytest-runtime-recovery`에서
+`python -B -X utf8 -m pytest -q -x -p no:cacheprovider --basetemp=...`로 실행해
+**9 passed, 0.31초**였습니다. 기존 재사용·누락·다른 spec·중복 후보·불완전 대상 보존·
+명시적 Student 전용 setup·AVA 누락 시 설치 거절·Drive 경계·cache 보존을 확인했습니다.
+Windows의 native symlink 권한과 실제 Colab runtime은 사용하지 않았으며, alias 호출은
+작은 합성 fixture로 대체했습니다. 실제 사용자 Colab의 후보 환경/설치 여부는 아직 미관측입니다.

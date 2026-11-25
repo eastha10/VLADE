@@ -30,6 +30,9 @@
 
 현재 실행 기준은 [Git 소스·HF 입력 안내](docs/environment/hf_inputs_and_git_source.md)입니다. `src/vlade/utils/source.py`는 불변 Git checkout을, `src/vlade/storage/assets.py`는 외부 입력의 HF 출처와 캐시 검증을 담당합니다. Drive 배포는 별도 사용자 명령이 필요합니다.
 
+`src/vlade/runtime/existing.py`는 기존 Colab workspace의 같은 설정 환경을 재연결합니다.
+기본은 설치하지 않으며, 명시한 경우에만 누락된 Student 분리 환경을 준비합니다.
+
 `src/vlade/data/sequences.py`는 Episode 내부 연속 query 구간을 선택하고,
 `src/vlade/training/prepared_sequences.py`는 시퀀스 단위 loader를 구성합니다.
 `src/vlade/training/temporal.py`는 FFT·논문 학습의 상태 전달과 분할 backward를 담당합니다.
