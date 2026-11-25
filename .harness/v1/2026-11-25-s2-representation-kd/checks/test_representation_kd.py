@@ -296,7 +296,8 @@ def test_existing_session_cells_compile_and_keep_old_kernel_source():
                   and any(isinstance(x,ast.Name) and x.id == 'CLIENT' for x in node.targets))
     compile(script,'client','exec')
     assert 'prepare(' not in script and "locate(code, work, 'ava')" in script
-    assert "sys.path" not in RUN_CELL and 'kill' not in RUN_CELL
+    assert "sys.path" not in RUN_CELL and 'pkill' not in RUN_CELL
+    assert 'os.killpg(process.pid, signal.SIGINT)' in RUN_CELL
 
 
 def test_native_trainer_pilot_and_resume_save_projection_with_optimizer(tmp_path, monkeypatch):

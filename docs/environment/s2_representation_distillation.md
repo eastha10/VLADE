@@ -64,6 +64,8 @@ representation 설정만 추가합니다. 비교 기준 S1은 온라인 Action-o
 4. 다른 학습·진단의 GPU 프로세스가 종료된 상태에서 `plan → preflight → pilot → train` 순서로
    같은 실행 셀의 ACTION만 바꿉니다. 런타임을 끊거나 다시 시작하지 않습니다. 다른 프로세스를
    자동 강제 종료하지 않습니다. 기존 환경이 없거나 규격이 다르면 오류로 중단합니다.
+   자식 프로세스 stdout/stderr는 셀에 실시간으로 표시합니다. 실패하면 바로 위 traceback이
+   원인 근거입니다. `CalledProcessError`의 긴 명령 문자열만으로 실패 원인을 판정하지 않습니다.
 5. `preflight`는 S0/T1·입력·표현 차원·Hub 비공개 접근을 확인합니다. GPU forward와 쓰기 성공은
    이후 파일럿에서 확인합니다. 자연어 Plan probe는 필요하지 않습니다.
 6. `pilot`은 기존 목표 schedule·누적 8을 유지하는 **1 optimizer step**입니다.

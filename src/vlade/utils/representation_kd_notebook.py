@@ -27,7 +27,7 @@ ACTION = 'plan'  # plan → preflight → pilot → train, 전송 실패 시 ret
 '''
 
 RUN_CELL = r'''
-import json, os, re, subprocess, sys
+import json, os, re, signal, subprocess, sys
 from pathlib import Path
 from google.colab import userdata
 
@@ -94,10 +94,33 @@ else:
     main(['--config', str(config), '--workspace', str(work), '--run-group', group,
           '--action', action, '--resume-revisions', revisions])
 """
-subprocess.run([sys.executable, '-B', '-c', CLIENT, str(S2_CODE), str(S2_WORKSPACE),
-                S2_SOURCE_COMMIT, S2_RUN_GROUP, ACTION, str(S1_RUN_CONTRACT),
-                str(REPRESENTATION_WEIGHT), json.dumps(S2_RESUME_REVISIONS)],
-               cwd=S2_CODE, env=env, check=True)
+def stream_s2(command, *, cwd, env):
+    # Notebook kernels need a PIPE and explicit print; inherited file descriptors
+    # can hide the real child traceback and leave only CalledProcessError.
+    process = subprocess.Popen(command, cwd=cwd,
+        env={**env, 'PYTHONUNBUFFERED':'1'}, stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace',
+        bufsize=1, start_new_session=True)
+    try:
+        for line in process.stdout:
+            print(line, end='', flush=True)
+        status = process.wait()
+    except KeyboardInterrupt:
+        try:
+            os.killpg(process.pid, signal.SIGINT)  # only this launch's process group
+        except ProcessLookupError:
+            pass
+        process.wait()
+        raise
+    finally:
+        process.stdout.close()
+    if status:
+        raise RuntimeError(f'S2 {ACTION} 실패 (exit {status}). 바로 위 자식 프로세스 로그를 확인하십시오.')
+
+stream_s2([sys.executable, '-B', '-u', '-c', CLIENT, str(S2_CODE), str(S2_WORKSPACE),
+           S2_SOURCE_COMMIT, S2_RUN_GROUP, ACTION, str(S1_RUN_CONTRACT),
+           str(REPRESENTATION_WEIGHT), json.dumps(S2_RESUME_REVISIONS)],
+          cwd=S2_CODE, env=env)
 print('S2 source:', S2_SOURCE_COMMIT, '| run:', S2_RUN_GROUP)
 '''
 

@@ -98,3 +98,32 @@ S0/T1 호출·1024→4096 차원·Plan 비활성·출력 미생성을 확인했�
 
 `git apply --cached --check`와 `git diff --cached --check`도 통과했습니다.
 이 절은 커밋 전 관측이며 실제 commit/push 결과는 이후 관측 기록과 구분합니다.
+
+## Git 게시 관측
+
+후속 요청에 따라 `49a3ec6b07a18b761d32670c2c05cd165e08cdc7`
+(`feat: add plan-free S2 representation and action distillation`)을 현재 main에 커밋했습니다.
+`git push origin HEAD:refs/heads/main`이 성공했고 `git ls-remote origin refs/heads/main`의
+SHA가 같은 값임을 확인했습니다. 별도 Plan 변경은 작업 트리에 보존했으며 Drive 배포와
+실제 A100 실행·HF checkpoint 게시는 수행하지 않았습니다.
+사용자에게 제공하는 셀은 이 불변 commit의 notebook 실행 셀을 읽어 기존 WORKSPACE로 실행합니다.
+이 관측 추가는 로컬 하네스 기록이며 실행 소스를 바꾸지 않습니다.
+
+## Colab 자식 로그 누락 후속 수정
+
+사용자가 제공한 전체 출력은 시스템 Python 3.13에서 실행한 CLIENT의 CalledProcessError뿐이며
+실제 자식 stderr는 없었습니다. 이 출력만으로 Python 버전·환경 누락·HF 입력 실패 등
+구체적인 preflight 실패 원인은 확정할 수 없습니다.
+
+`representation_kd_notebook.py`의 실행을 stdout PIPE/stderr 병합·비버퍼링·명시적 print로
+바꿨습니다. 종료 실패는 긴 CLIENT 명령 대신 짧은 RuntimeError로 표시합니다.
+사용자 중단은 이번 실행에서 새로 만든 process group에만 SIGINT를 전달하고 기다립니다.
+모델·학습·HF 입력 검증·설치 환경 선택이나 기존 실행 소스는 변경하지 않았습니다.
+생성 노트북과 실행 안내를 맞췄습니다.
+
+`test_colab_stream.py`는 실제 작은 자식 프로세스의 stdout/stderr/traceback 출력과 짧은 오류,
+성공 출력 및 자체 process group에 한정한 중단을 확인합니다. 기존 셀 compile·S1 상속 검사와
+함께 `scratch/pytest-colab-stream`에서 실행해 **5 passed, 3.25초**였습니다.
+artifact 검사는 소스 7개 compile·notebook 스키마/생성 일치·JSON·링크를 통과했습니다.
+실제 Colab 실패 원인 확인과 A100 실행은 미완료이며, 사용자에게 기존 CLIENT를
+preflight로 재실행해 실제 로그를 표시하는 셀을 제공합니다.
